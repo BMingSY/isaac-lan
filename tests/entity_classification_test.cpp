@@ -1,5 +1,5 @@
 // Production Lua binding, actual MSVC RTTI and private x86 objects only.
-#include "engine/versions/j511/entity_fields.cpp"
+#include "engine/versions/repentance_plus/entity_fields.cpp"
 #include "engine/versions/common/entity_fields.cpp"
 #include "support/native_entity_types.h"
 #include <array>
@@ -13,7 +13,7 @@ bool replica() {
 
 namespace {
 namespace adapter = isaac::entity_fields;
-namespace native = isaac::engine::j511;
+namespace native = isaac::engine::repentance_plus;
 using Address = std::uintptr_t;
 struct Fixture {
     void* image = VirtualAlloc(nullptr, native::rtti::npc + 128, MEM_COMMIT | MEM_RESERVE,

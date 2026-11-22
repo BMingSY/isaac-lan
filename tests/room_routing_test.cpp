@@ -1,14 +1,14 @@
 // Exercise the production x86 boundaries without starting the game.
 #include "test_support.h"
 #include "engine/versions/common/room_routing.cpp"
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/entrypoints.h"
-namespace backend = isaac::engine::j835;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/entrypoints.h"
+namespace backend = isaac::engine::repentance;
 constexpr unsigned roomOffset = 0x18194, dimensionOffset = 0x1819c, doorOffset = 0x181ac;
 constexpr unsigned seedCursesOffset = 0x1c3170, redirectOffset = 0xf;
 #else
-#include "engine/versions/j511/entrypoints.h"
-namespace backend = isaac::engine::j511;
+#include "engine/versions/repentance_plus/entrypoints.h"
+namespace backend = isaac::engine::repentance_plus;
 constexpr unsigned roomOffset = 0x18304, dimensionOffset = 0x1830c, doorOffset = 0x1831c;
 constexpr unsigned seedCursesOffset = 0x26560, redirectOffset = 0xb;
 #endif
@@ -56,7 +56,7 @@ __attribute__((naked)) int invokeMazeBoundary() {
 }
 namespace {
 unsigned addedCalls = 0, removedCalls = 0;
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 unsigned imagePreparationCalls = 0;
 bool failImagePreparation = false;
 void __cdecl prepareImages() {
@@ -114,7 +114,7 @@ int main() {
         patch(fakeImage, backend::entry::levelMazeBranchEnd, roomBoundaryResident);
         patch(fakeImage, backend::entry::gameAddedSeedCurses, addedCurses);
         patch(fakeImage, backend::entry::gameRemovedSeedCurses, removedCurses);
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
         patch(fakeImage, backend::entry::roomPrepareRenderImages, prepareImages);
 #endif
         FlushInstructionCache(GetCurrentProcess(), fakeImage, imageSize);
@@ -149,7 +149,7 @@ int main() {
                 "Missing Game reached native seed queries");
         gamePointer = reinterpret_cast<std::uintptr_t>(fakeGame.data());
         require(invokeRoomBoundary() == 17, "Unmanaged native room entry was intercepted");
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
         require(imagePreparationCalls == 0, "Unmanaged entry allocated scheduler surfaces");
 #endif
         unsigned prepared = 0;
@@ -158,7 +158,7 @@ int main() {
               std::pair{false, true}, std::pair{true, false}}) {
             roomBoundaryFrame[redirectOffset] = redirected;
             const auto calls = roomBoundaryVisits;
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
             const auto allocations = imagePreparationCalls;
 #endif
             withResolvedRoomEntry(
@@ -183,7 +183,7 @@ int main() {
             preserved(control);
             require(roomBoundaryVisits == calls + (fresh ? 1 : 0),
                     "Native destination initialized more than once");
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
             require(imagePreparationCalls == allocations + (fresh ? 1 : 0) &&
                         (!fresh || roomBoundaryImage == 0x1234),
                     "Fresh entry consumed empty surfaces or resident entry allocated them");
@@ -191,7 +191,7 @@ int main() {
             require(!pending, "Native entry retained a borrowed callback");
         }
         require(prepared == 5, "Room callback was repeated or lost");
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
         failImagePreparation = true;
         const auto visits = roomBoundaryVisits;
         bool allocationFailed = false;

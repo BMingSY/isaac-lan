@@ -1,9 +1,9 @@
 #include "test_support.h"
 #include "engine/versions/common/audio.cpp"
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/entrypoints.h"
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/entrypoints.h"
 #else
-#include "engine/versions/j511/entrypoints.h"
+#include "engine/versions/repentance_plus/entrypoints.h"
 #endif
 #include <limits>
 
@@ -16,12 +16,12 @@ struct lua_State {
 namespace {
 namespace audio = isaac::audio;
 namespace lan = isaac::lan;
-#ifdef ISAAC_LAN_TEST_J835
-namespace backend = isaac::engine::j835;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+namespace backend = isaac::engine::repentance;
 constexpr unsigned roomOffset = 0x18190, indexOffset = 0x18194, dimensionOffset = 0x1819c;
 constexpr unsigned musicOffset = 0x29a78, volumeOffset = 0x29e10;
 #else
-namespace backend = isaac::engine::j511;
+namespace backend = isaac::engine::repentance_plus;
 constexpr unsigned roomOffset = 0x18300, indexOffset = 0x18304, dimensionOffset = 0x1830c;
 constexpr unsigned musicOffset = 0x2a104, volumeOffset = 0x2a624;
 #endif

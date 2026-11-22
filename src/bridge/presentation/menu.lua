@@ -594,7 +594,7 @@ function _IsaacLanMenuRender(
             centered(message(errorText), 240, 250, 10, messageColor, 430)
         end
     end
-    -- J835 queues font quads. Draw its heading after the cursor and cards
+    -- Repentance queues font quads. Draw its heading after the cursor and cards
     -- so their native sprite submissions cannot overwrite its glyph vertices.
     if not resources.native_lobby then
         centered(heading, 110 + shift, 58, 16, nil, 146)

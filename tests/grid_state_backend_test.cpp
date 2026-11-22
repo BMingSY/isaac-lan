@@ -4,14 +4,15 @@
 #include <array>
 #include <cstring>
 #include <iostream>
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 constexpr unsigned gameGlobal = 0x7fd65c, gameRoom = 0x18190, railOffset = 0x7350;
 constexpr unsigned extraSprite = 0x164, removeEntry = 0x3d9b00, makeEntry = 0x3ad410;
 #else
-#include "engine/versions/j511/entrypoints.h"
-constexpr unsigned gameGlobal = isaac::engine::j511::globals::game, gameRoom = 0x18300;
+#include "engine/versions/repentance_plus/entrypoints.h"
+constexpr unsigned gameGlobal = isaac::engine::repentance_plus::globals::game, gameRoom = 0x18300;
 constexpr unsigned railOffset = 0x7484, extraSprite = 0x27c;
-constexpr unsigned removeEntry = isaac::engine::j511::entry::roomRemoveGridEntityImmediate;
+constexpr unsigned removeEntry =
+    isaac::engine::repentance_plus::entry::roomRemoveGridEntityImmediate;
 constexpr unsigned makeEntry = 0x3f6e50;
 #endif
 struct lua_State {

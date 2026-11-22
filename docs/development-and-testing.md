@@ -6,25 +6,25 @@ BUG 修复、需求新增和日常重构按影响范围执行离线回归与必�
 
 构建命令见[项目 README](https://github.com/BMingSY/isaac-lan/blob/main/README.md#源码构建)：C++20、Windows x86 工具链，以及指定版本的 Dear ImGui／MinHook 源码。CMake 默认启用 `BUILD_TESTING`，只构建产物可设为 `OFF`。
 
-原生后端在配置时通过 `-DISAAC_LAN_BACKEND=j511`（默认，忏悔＋ `1.9.7.19.J511`）或 `-DISAAC_LAN_BACKEND=j835`（忏悔 `1.7.9b.J835`）选择；未知标识和仅有元数据的未完成后端立即失败。两个版本使用独立构建目录，两端使用同一游戏版本和扩展构建，不能混联。原版的能力、资源与调用边界见 [J835 参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md)。
+原生后端在配置时通过 `-DISAAC_LAN_BACKEND=repentance_plus`（默认，忏悔＋）或 `-DISAAC_LAN_BACKEND=repentance`（忏悔）选择；未知标识和仅有元数据的未完成后端立即失败。两个版本使用独立构建目录，两端使用同一游戏版本和扩展构建，不能混联。原版的能力、资源与调用边界见 [忏悔参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-repentance.md)。
 
-后端自己的 `sources.cmake` 登记版本适配，通用实现由 [common/sources.cmake](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/sources.cmake) 统一登记。可移植后端检查位于 [common/tests-portable.cmake](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/tests-portable.cmake)；Windows 同时构建 [J511 专项夹具](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j511/tests-native.cmake)和 [NativeBackendTests.cmake](https://github.com/BMingSY/isaac-lan/blob/main/cmake/NativeBackendTests.cmake) 中的双版本组件夹具。夹具使用私有映像，不加载游戏程序；组件可独立检查，不以生成完整 DLL 代替原生行为验收。`common` 不能作为游戏版本选择。
+后端自己的 `sources.cmake` 登记版本适配，通用实现由 [common/sources.cmake](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/sources.cmake) 统一登记。可移植后端检查位于 [common/tests-portable.cmake](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/tests-portable.cmake)；Windows 同时构建 [忏悔＋专项夹具](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance_plus/tests-native.cmake)和 [NativeBackendTests.cmake](https://github.com/BMingSY/isaac-lan/blob/main/cmake/NativeBackendTests.cmake) 中的双版本组件夹具。夹具使用私有映像，不加载游戏程序；组件可独立检查，不以生成完整 DLL 代替原生行为验收。`common` 不能作为游戏版本选择。
 
-实机工具通过所选构建的 `game-profile.json` 核对资料目录、Lua 模块及存档格式。J835 的原生存档有 638 个成就和 496 个计数器，J511 有 642 个成就和 523 个计数器。路线夹具在隔离存档中写入各自的校验值，选择存档后再通过游戏内进度接口核对。无需预置解锁的场景可直接运行 [run_network_engine.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_network_engine.py)。
+实机工具通过所选构建的 `game-profile.json` 核对资料目录、Lua 模块及存档格式。忏悔的原生存档有 638 个成就和 496 个计数器，忏悔＋有 642 个成就和 523 个计数器。路线夹具在隔离存档中写入各自的校验值，选择存档后再通过游戏内进度接口核对。无需预置解锁的场景可直接运行 [run_network_engine.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_network_engine.py)。
 
 | 定向检查 | 离线范围 |
 | --- | --- |
-| `native.save-j511`／`native.save-j835` | 调用约定、原始编码字节、重复解码、流失败、大小限制及文件名／流字段恢复 |
-| `native.character-catalog`／`native.character-catalog-j835` | 目录、解锁、里角色与 Mod 角色 |
+| `native.save-repentance_plus`／`native.save-repentance` | 调用约定、原始编码字节、重复解码、流失败、大小限制及文件名／流字段恢复 |
+| `native.character-catalog`／`native.character-catalog-repentance` | 目录、解锁、里角色与 Mod 角色 |
 | `native.progress-layouts` | 两版进度数组边界和网络字段补零 |
-| `native.session-j511`／`native.session-j835` | Hook 失败回滚、回调拦截、开局传值 ABI、继续／重开、进度持久化及控制台捕获清理 |
-| `native.input-queries-j835` | 查询参数、x87 模拟量返回、物理旁路、Hook 冲突后的清理与重试 |
-| `native.input-devices-j511`／`native.input-devices-j835` | 设备布局、重复分配／恢复、断开清理、安装失败，以及扫描、轮询和更新之间的互斥与重入 |
-| `native.mouse-j835` | 内联边界的寄存器／栈、SSE／x87 保持、物理旁路与嵌套、像素／世界坐标换算及安装回滚 |
-| `native.pause-backend-j511`／`native.pause-backend-j835` | 原生调用与选项保存顺序、版本选项编号、借用名单和无效条目边界 |
-| `native.pause-menu` | J511 暂停菜单与输入路由的集成行为 |
+| `native.session-repentance_plus`／`native.session-repentance` | Hook 失败回滚、回调拦截、开局传值 ABI、继续／重开、进度持久化及控制台捕获清理 |
+| `native.input-queries-repentance` | 查询参数、x87 模拟量返回、物理旁路、Hook 冲突后的清理与重试 |
+| `native.input-devices-repentance_plus`／`native.input-devices-repentance` | 设备布局、重复分配／恢复、断开清理、安装失败，以及扫描、轮询和更新之间的互斥与重入 |
+| `native.mouse-repentance` | 内联边界的寄存器／栈、SSE／x87 保持、物理旁路与嵌套、像素／世界坐标换算及安装回滚 |
+| `native.pause-backend-repentance_plus`／`native.pause-backend-repentance` | 原生调用与选项保存顺序、版本选项编号、借用名单和无效条目边界 |
+| `native.pause-menu` | 忏悔＋暂停菜单与输入路由的集成行为 |
 
-配置阶段需要 Python 3.10+。[版本生成器](https://github.com/BMingSY/isaac-lan/blob/main/tools/generate_game_profile.py) 将后端的版本描述、入口和签名生成 C++ 描述符及构建目录内的 `game-profile.json`。打包使用该构建快照，缺失时要求重新配置；不从源码默认版本补造元数据。安装包的游戏版本、后端标识、检查器和描述文件必须对应同一个构建。
+配置阶段需要 Python 3.10+。[版本生成器](https://github.com/BMingSY/isaac-lan/blob/main/tools/generate_game_profile.py) 将后端的版本描述、入口和签名生成 C++ 描述符及构建目录内的 `game-profile.json`。打包使用构建快照。通用包要求两个后端的完整构建号和版本标记地址与共享加载器的 `loader-versions.json` 一致。安装包的游戏版本、后端标识、检查器和描述文件必须对应同一个构建。
 
 | 产物 | 用途 |
 | --- | --- |
@@ -34,7 +34,7 @@ BUG 修复、需求新增和日常重构按影响范围执行离线回归与必�
 | `isaac_lan_net_test.exe` | 无需游戏的真实 Winsock 测试 |
 | `isaac_lan_lab.exe` | 隔离实例启动与验收 |
 
-[`tools/build_package.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/build_package.py) 打包前三项、安装脚本、README、FAQ 和许可证；本地测试包保留原始二进制。[`tools/build_release.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/build_release.py) 通过两次 `--build` 接收忏悔和忏悔＋的构建目录，将共享加载器放在 ZIP 根目录，并将各自的主体 DLL、检查器和游戏配置分别放入 `backends/j835/` 和 `backends/j511/`。Windows 与 Proton 安装器都校验所选游戏程序并同时安装两套主体，启动时由共享加载器匹配游戏版本。打包时从各构建目录的 `CMakeCache.txt` 读取 `CMAKE_STRIP`，只剥离发布副本的调试信息和符号表，再生成文件哈希与 ZIP。运行代码、数据、导入／导出与重定位不裁剪；原始构建保留在构建目录，并由 CI 作为 `windows-x86-symbols` 附件保存 7 天供排障。CI 使用 `check_release.py --require-stripped` 检查发布包，工坊更新直接复用包中的主体 DLL。
+[`tools/build_package.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/build_package.py) 打包前三项、安装脚本、README、FAQ 和许可证；本地测试包保留原始二进制。[`tools/build_release.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/build_release.py) 通过两次 `--build` 接收忏悔和忏悔＋的构建目录，将共享加载器放在 ZIP 根目录，并将各自的主体 DLL、检查器和游戏配置分别放入 `backends/repentance/` 和 `backends/repentance_plus/`。Windows 与 Proton 安装器都校验所选游戏程序并同时安装两套主体，启动时由共享加载器匹配游戏版本。打包时从各构建目录的 `CMakeCache.txt` 读取 `CMAKE_STRIP`，只剥离发布副本的调试信息和符号表，再生成文件哈希与 ZIP。运行代码、数据、导入／导出与重定位不裁剪；原始构建保留在构建目录，并由 CI 作为 `windows-x86-symbols` 附件保存 7 天供排障。CI 使用 `check_release.py --require-stripped` 检查发布包，工坊更新直接复用包中的主体 DLL。
 
 游戏文件、存档、测试产物与构建目录不提交。加载器在扩展初始化后恢复游戏入口，游戏对象和 Lua 在主线程处理，网络收发由独立线程负责。原生改动须核对调用约定、布局、签名和所有权，见[分层约定](https://github.com/BMingSY/isaac-lan/blob/main/docs/layers-and-compatibility.md)。
 
@@ -94,35 +94,35 @@ ctest --test-dir build-core --output-on-failure
 | Windows 传输 | IPv4／IPv6 UDP、双栈域名与回退、输入事件、积压、重连、事务顺序及 UDP 丢包／乱序 | 不启动游戏 |
 | 隔离实机／正常操作 | 原生机制、入口与连续画面 | 结果限定于所用版本、夹具和采样范围 |
 
-版本资源的离线检查为 `presentation.fonts`、`presentation.chat-render`、`presentation.chat-repentance`、`bridge.challenge_menu` 和 `bridge.menu-repentance`，覆盖字体选择和宽度、菜单操作和各版本的入口与返回路径。`native.frontend-menu-j835` 检查原生确认分派、循环边界、转场坐标、鼠标命中和绘制后图层复原。实机核对中英文主菜单、切页期间文字与纸张的相对位置，以及键盘、鼠标进入与返回局域网的操作。
+版本资源的离线检查为 `presentation.fonts`、`presentation.chat-render`、`presentation.chat-repentance`、`bridge.challenge_menu` 和 `bridge.menu-repentance`，覆盖字体选择和宽度、菜单操作和各版本的入口与返回路径。`native.frontend-menu-repentance` 检查原生确认分派、循环边界、转场坐标、鼠标命中和绘制后图层复原。实机核对中英文主菜单、切页期间文字与纸张的相对位置，以及键盘、鼠标进入与返回局域网的操作。
 
-沙漏原生适配的离线检查为 `native.rewind-home-j511`、`native.rewind-home-j835`，由[同一夹具](https://github.com/BMingSY/isaac-lan/blob/main/tests/rewind_home_test.cpp) 分别链接两版绑定，覆盖检查点字节、原生计数边界、Home／普通转场、各版贪婪选择、客机结果回放、跨房来源、重复请求、清理与 Hook 冲突。夹具只执行扩展和合成原生入口；真实 GameState 副作用、完整房间恢复及画面仍属于实机范围。
+沙漏原生适配的离线检查为 `native.rewind-home-repentance_plus`、`native.rewind-home-repentance`，由[同一夹具](https://github.com/BMingSY/isaac-lan/blob/main/tests/rewind_home_test.cpp) 分别链接两版绑定，覆盖检查点字节、原生计数边界、Home／普通转场、各版贪婪选择、客机结果回放、跨房来源、重复请求、清理与 Hook 冲突。夹具只执行扩展和合成原生入口；真实 GameState 副作用、完整房间恢复及画面仍属于实机范围。
 
-NPC 命中适配使用 `native.combat-feedback-j511`、`native.combat-feedback-j835` 和 `presentation.hit-events`：原生夹具覆盖 Hook 调用栈、颜色来源、队列结算、嵌套命中、来源移除、身份替换、房间观看者、固定编码与临时颜色恢复，Lua 检查消费和本机演出顺序。原生夹具不运行游戏伤害逻辑或绘制资源，实机画面与真实回调另行验证。
+NPC 命中适配使用 `native.combat-feedback-repentance_plus`、`native.combat-feedback-repentance` 和 `presentation.hit-events`：原生夹具覆盖 Hook 调用栈、颜色来源、队列结算、嵌套命中、来源移除、身份替换、房间观看者、固定编码与临时颜色恢复，Lua 检查消费和本机演出顺序。原生夹具不运行游戏伤害逻辑或绘制资源，实机画面与真实回调另行验证。
 
-挑战目标 HUD 的离线检查为 `native.challenge-hud-j511`、`native.challenge-hud-j835`，配合 `core.challenge-rules`、`bridge.challenges` 和 `bridge.challenge_menu`。原生夹具执行实际边界 thunk 和 MinHook 跳板，检查各版字段、普通／联机目标切换、原生对象不变、短分支搬移、寄存器与浮点状态，以及冲突清理和重试；游戏资源和实际绘制画面仍需实机验证。
+挑战目标 HUD 的离线检查为 `native.challenge-hud-repentance_plus`、`native.challenge-hud-repentance`，配合 `core.challenge-rules`、`bridge.challenges` 和 `bridge.challenge_menu`。原生夹具执行实际边界 thunk 和 MinHook 跳板，检查各版字段、普通／联机目标切换、原生对象不变、短分支搬移、寄存器与浮点状态，以及冲突清理和重试；游戏资源和实际绘制画面仍需实机验证。
 
-百宝袋 HUD 使用 `native.crafting-hud-j511`、`native.crafting-hud-j835`，同一夹具分别链接两版后端和共享绘制组件。检查真实 Hook 跳板、2–4 人栏位顺序、各主动槽、幽灵及目标缺失、普通会话、分辨率／HUD 偏移、J835 镜像与伴生身体对齐、透明度、所有 SSE 寄存器、栈参数和对象不变性，以及安装冲突清理。材料纹理、配方预览和实际屏幕位置仍属于实机画面验收。
+百宝袋 HUD 使用 `native.crafting-hud-repentance_plus`、`native.crafting-hud-repentance`，同一夹具分别链接两版后端和共享绘制组件。检查真实 Hook 跳板、2–4 人栏位顺序、各主动槽、幽灵及目标缺失、普通会话、分辨率／HUD 偏移、忏悔镜像与伴生身体对齐、透明度、所有 SSE 寄存器、栈参数和对象不变性，以及安装冲突清理。材料纹理、配方预览和实际屏幕位置仍属于实机画面验收。
 
-`presentation.player-hud` 可在 Linux 和 Windows 离线运行，覆盖两版的 HUD 可见性、身份、边界及无效视口；J511 使用模拟原生布局／位置调用，J835 使用原版心形坐标的固定预期。`bridge.ping_hud`、`bridge.battle-royale-hud` 检查坐标消费者。测试不验证真实 HUD 绘制和字体位置。
+`presentation.player-hud` 可在 Linux 和 Windows 离线运行，覆盖两版的 HUD 可见性、身份、边界及无效视口；忏悔＋使用模拟原生布局／位置调用，忏悔使用原版心形坐标的固定预期。`bridge.ping_hud`、`bridge.battle-royale-hud` 检查坐标消费者。测试不验证真实 HUD 绘制和字体位置。
 
-胜利圈提示使用 `native.victory-prompt-j511`、`native.victory-prompt-j835`，配合 `bridge.special-menu`、`bridge.challenges`。原生夹具执行实际 Hook，检查主客机权限、普通提示透传、已消费输入、Idle／隐藏阶段、挑战拒绝、两版字段与相邻对象不变、Game 替换、thiscall 栈及寄存器，以及安装冲突清理。实际动画和胜利圈换层需要另行实机验证。
+胜利圈提示使用 `native.victory-prompt-repentance_plus`、`native.victory-prompt-repentance`，配合 `bridge.special-menu`、`bridge.challenges`。原生夹具执行实际 Hook，检查主客机权限、普通提示透传、已消费输入、Idle／隐藏阶段、挑战拒绝、两版字段与相邻对象不变、Game 替换、thiscall 栈及寄存器，以及安装冲突清理。实际动画和胜利圈换层需要另行实机验证。
 
-入场与视图适配使用 `native.presentation-j511`、`native.presentation-j835`、`core.intro-barrier` 和 `bridge.presentation`。原生夹具检查 Hook 冲突、普通／主客机入口、后台房间、终局集合、控制恢复的房间与结束边界、嵌套推进／暂停／异常清理、固定事件字节与去重、过期和断线、实体引用登记、HUD 桥接及小夜灯调用者隔离。夹具模拟原生方法，不验证实际 versus 美术、角色移除过程或房间调度；这些随受影响实机场景集中检查。
+入场与视图适配使用 `native.presentation-repentance_plus`、`native.presentation-repentance`、`core.intro-barrier` 和 `bridge.presentation`。原生夹具检查 Hook 冲突、普通／主客机入口、后台房间、终局集合、控制恢复的房间与结束边界、嵌套推进／暂停／异常清理、固定事件字节与去重、过期和断线、实体引用登记、HUD 桥接及小夜灯调用者隔离。夹具模拟原生方法，不验证实际 versus 美术、角色移除过程或房间调度；这些随受影响实机场景集中检查。
 
-Home 原生更新门控使用 `native.scene-update-j511`、`native.scene-update-j835`。夹具执行实际 Hook，检查普通／客机／结束状态的重复切换、thiscall receiver、内联块继续位置、原生对象不变、栈平衡、GPR／标志／SSE／x87／控制字及 Hook 冲突清理；J835 夹具包含真实边界的字段读取指令。实际路线标记与 Home 结局仍属于实机范围。
+Home 原生更新门控使用 `native.scene-update-repentance_plus`、`native.scene-update-repentance`。夹具执行实际 Hook，检查普通／客机／结束状态的重复切换、thiscall receiver、内联块继续位置、原生对象不变、栈平衡、GPR／标志／SSE／x87／控制字及 Hook 冲突清理；忏悔夹具包含真实边界的字段读取指令。实际路线标记与 Home 结局仍属于实机范围。
 
-道具演出使用 `native.item-presentation-j511`、`native.item-presentation-j835`，配合 `core.compatibility-targets`、`core.localized-text` 和 `bridge.presentation`。同一夹具检查实际 Hook 的调用栈和寄存器、原生构造／析构顺序、配置失败、Mega Mush 动画所有权、文字显示标志与本地化、J835 规则提示索引边界、整批事件校验、固定编码与去重、屏幕嵌套／异常／重置、Game 失效、Home 集合与借用 Sprite。夹具不加载游戏美术，不执行真实治疗、路线推进或实体引用释放；这些仍属于对应实机场景。
+道具演出使用 `native.item-presentation-repentance_plus`、`native.item-presentation-repentance`，配合 `core.compatibility-targets`、`core.localized-text` 和 `bridge.presentation`。同一夹具检查实际 Hook 的调用栈和寄存器、原生构造／析构顺序、配置失败、Mega Mush 动画所有权、文字显示标志与本地化、忏悔规则提示索引边界、整批事件校验、固定编码与去重、屏幕嵌套／异常／重置、Game 失效、Home 集合与借用 Sprite。夹具不加载游戏美术，不执行真实治疗、路线推进或实体引用释放；这些仍属于对应实机场景。
 
-精灵状态使用 `native.sprite-state-j511`、`native.sprite-state-j835`，配合 `core.animation-pose`、`bridge.entity-codec`、`presentation.attachments`、`presentation.actor-walking` 和 `bridge.presentation`。两版夹具检查固定编码、借用／自有包装、图层步长与资源边界、重复姿态、逐字节截断和非法值的写入前拒绝、图层／挂点重排、缺失游标、贴图请求及原生 Reset 的 ABI 和数组释放边界。夹具不执行真实纹理加载、动画资源析构或画面绘制。
+精灵状态使用 `native.sprite-state-repentance_plus`、`native.sprite-state-repentance`，配合 `core.animation-pose`、`bridge.entity-codec`、`presentation.attachments`、`presentation.actor-walking` 和 `bridge.presentation`。两版夹具检查固定编码、借用／自有包装、图层步长与资源边界、重复姿态、逐字节截断和非法值的写入前拒绝、图层／挂点重排、缺失游标、贴图请求及原生 Reset 的 ABI 和数组释放边界。夹具不执行真实纹理加载、动画资源析构或画面绘制。
 
-角色姿态与阴影使用 `native.entity-pose-j511`、`native.entity-pose-j835`，配合 `core.occurrence-mapping`、`bridge.actor-costumes`、`bridge.actor-forms`、`presentation.actor-walking`、`presentation.attacks` 和 `bridge.entity-codec`。夹具检查两版固定编码、五槽武器与 x87 返回、缺失／类型不符槽、重复服装与基础层回退、逐字节截断和非法值的写入前拒绝、玩家替换及资源相邻字段；不执行原生武器 AI、服装加载或实际阴影绘制。
+角色姿态与阴影使用 `native.entity-pose-repentance_plus`、`native.entity-pose-repentance`，配合 `core.occurrence-mapping`、`bridge.actor-costumes`、`bridge.actor-forms`、`presentation.actor-walking`、`presentation.attacks` 和 `bridge.entity-codec`。夹具检查两版固定编码、五槽武器与 x87 返回、缺失／类型不符槽、重复服装与基础层回退、逐字节截断和非法值的写入前拒绝、玩家替换及资源相邻字段；不执行原生武器 AI、服装加载或实际阴影绘制。
 
-网格与轨道使用 `native.grid-state-j511`、`native.grid-state-j835`、`native.rails-j511`、`native.rails-j835`，配合 `bridge.grids`、`bridge.room-capture` 和 `presentation.doors`。夹具检查 448 字节轨道、值域与所属房间、跨房／空状态、附加 Sprite 借用包装、门槽登记与重复恢复、立即删除后替换、失败目标回滚、版本字段和 thiscall 栈／寄存器。夹具不验证真实网格构造／析构、特殊门玩法或轨道美术。
+网格与轨道使用 `native.grid-state-repentance_plus`、`native.grid-state-repentance`、`native.rails-repentance_plus`、`native.rails-repentance`，配合 `bridge.grids`、`bridge.room-capture` 和 `presentation.doors`。夹具检查 448 字节轨道、值域与所属房间、跨房／空状态、附加 Sprite 借用包装、门槽登记与重复恢复、立即删除后替换、失败目标回滚、版本字段和 thiscall 栈／寄存器。夹具不验证真实网格构造／析构、特殊门玩法或轨道美术。
 
 实体引用使用两版 `native.references-*`、`native.entity-links-*` 与 `native.held-bombs-*`，配合 `bridge.hornfel` 和 `bridge.entity_links`。Lua 入口夹具和容器夹具检查权限、包装大小、原生 fastcall 赋值、thiscall resize、重复／替换／清空、目标移除通知、环绕块索引、空快照初始化及非法末项的写入前拒绝。实际矿车玩法、原生实体析构和 Boss 动作仍需实机检查。
 
-跟班视图使用 `native.entity-visuals-j511`、`native.entity-visuals-j835`，配合 `bridge.special-visuals`、`presentation.tethers` 和 `bridge.entity-codec`。检查身体图层固定字节、五个借用 Sprite、非法末项的写入前拒绝、绳索 deque 环绕与空状态、坐标有限性、重复绘制、组件替换／移除、原生调用 ABI、异常指针恢复及 Needle 权限。夹具不加载纹理、不执行真实原生渲染或 NPC AI；游戏画面仍需另行验收。
+跟班视图使用 `native.entity-visuals-repentance_plus`、`native.entity-visuals-repentance`，配合 `bridge.special-visuals`、`presentation.tethers` 和 `bridge.entity-codec`。检查身体图层固定字节、五个借用 Sprite、非法末项的写入前拒绝、绳索 deque 环绕与空状态、坐标有限性、重复绘制、组件替换／移除、原生调用 ABI、异常指针恢复及 Needle 权限。夹具不加载纹理、不执行真实原生渲染或 NPC AI；游戏画面仍需另行验收。
 
 原生入口的只读检查使用 [inspect_engine.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/inspect_engine.py)，传入游戏程序、明确选择的参考源码和新报告路径：
 
@@ -159,7 +159,7 @@ Linux 的 `bridge.native-codec` 在真实 Lua 5.3 中加载生产 C++ 绑定，�
 
 [state_feedback_regressions.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_feedback_regressions.lua) 使用同一组进程检查地下室集合落点、原生梯子返回、再次传送进入、持有血田时分房／重聚及远端角色失去飞行的属性重算、生命逆转阴影恢复／翻转／清理和换层。运行 `run_teleport.py --feedback-regressions`，隔离目录、构建、端口和证据参数与上述入口相同；分别检查双端断言和阴影画面。
 
-玩家轮廓的 Windows 离线检查为 `native.player-outlines`（J511）和 `native.player-outlines-j835`，覆盖三条原生分支的寄存器／栈保护、四槽位配色、名单重排、全息分身／非主绘制限制、断开与嵌套／异常清理。J835 另查颜色栈临时值边界、幽灵四方向绘制、已有颜色及原生扩容保留、屏幕坐标恢复、x87／MXCSR／SSE 保存及逐 Hook 冲突回滚。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case player-outlines --case guest-visuals`，在同一组受保护主客机进程中检查装扮／缩放、重叠、染色、受击闪烁、双角色、幽灵、分房与换层；使用独立端口以及 `--heap-check --record`，对照双端画面。夹具断言与画面审阅分别记录，不能仅凭脚本完成判定描边可见。
+玩家轮廓的 Windows 离线检查为 `native.player-outlines`（忏悔＋）和 `native.player-outlines-repentance`，覆盖三条原生分支的寄存器／栈保护、四槽位配色、名单重排、全息分身／非主绘制限制、断开与嵌套／异常清理。忏悔另查颜色栈临时值边界、幽灵四方向绘制、已有颜色及原生扩容保留、屏幕坐标恢复、x87／MXCSR／SSE 保存及逐 Hook 冲突回滚。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case player-outlines --case guest-visuals`，在同一组受保护主客机进程中检查装扮／缩放、重叠、染色、受击闪烁、双角色、幽灵、分房与换层；使用独立端口以及 `--heap-check --record`，对照双端画面。夹具断言与画面审阅分别记录，不能仅凭脚本完成判定描边可见。
 
 Boss 出场共享的定向检查为 `core.intro-barrier`、`native.intro-completion` 与 `run_special_routes.py --case shared-intro`；实机在同一连接中交换先进入 Boss 房间的玩家，错开 40 tick 入场，检查后来进入者的画面、首位观看者结束后截断剩余动画、画面期间的 Boss 位置与攻击、战斗恢复及异房隔离。可与 `--case input-response` 合并，配合 `--latency-ms 40 --heap-check --record` 核对副机纠偏速度和输入响应；移动离线检查为 `bridge.prediction`，覆盖不同绘制频率、重复确认、碰撞和传送。
 
@@ -237,7 +237,7 @@ python tools/engine_test.py run special-routes -- \
 
 发现过程不导入执行器或执行 Lua。`plan` 只显示选中入口和命令；`run` 才调用该入口，路径、参数和准备条件由入口校验。文件被发现不代表它能与其他场景组合，也不代表已执行或通过。场景选择、顺序与完成条件在所属执行器／构建器中维护；进程复用与焦点安排见下方验证约定。
 
-[隔离目录准备工具](https://github.com/BMingSY/isaac-lan/blob/main/tools/prepare_lab.py) 将构建的 `game-profile.json` 写入所属实验目录；日志、配置和启动检查通过 [game_profiles.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/game_profiles.py) 读取资料目录和启动条件。双端执行前核对实验目录与构建版本。已有且没有描述文件的旧实验目录按 J511 解释；显式存在但无效的描述文件直接失败。进度夹具按版本资格选择，未提供适配时拒绝写入，不能用 J511 的存档偏移处理另一版本。
+[隔离目录准备工具](https://github.com/BMingSY/isaac-lan/blob/main/tools/prepare_lab.py) 将构建的 `game-profile.json` 写入所属实验目录；日志、配置和启动检查通过 [game_profiles.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/game_profiles.py) 读取资料目录和启动条件。双端执行前核对实验目录与构建版本。已有且没有描述文件的旧实验目录按忏悔＋解释；显式存在但无效的描述文件直接失败。进度夹具按版本资格选择，未提供适配时拒绝写入，不能用忏悔＋的存档偏移处理另一版本。
 
 公共实现位于 [`tools/testing/`](https://github.com/BMingSY/isaac-lan/tree/main/tools/testing)：启动命令和子进程收尾由 `engine.py` 管理，原生资料准备函数放在 `profiles.py`，报告由 `results.py` 写入。具体入口保留场景选择、必要准备与效果断言，调用公共模块，不从其他执行入口导入共享实现。原有 `run_*.py` 命令可直接使用。
 
@@ -318,7 +318,7 @@ Boss 整组时限按用例数量预留加载与转场时间，单项进度断言
 
 以下入口用于开发修复时的定向回归，不属于每次发版固定必跑范围；大版本可按变更影响从中选定必要专项。只选择受改动影响、需要排查或用户明确要求的场景，记录具体用例，不自动运行整个专项目录。
 
-玩家不透明度的离线检查为 `presentation.player-opacity`、`bridge.chat`、`bridge.resume`、`diagnostics.defaults`／`validation`／`preservation` 及 Windows `native.player-opacity`／`native.player-opacity-j835`／`native.player-outlines`。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case player-opacity --heap-check --record`，复用一组隔离主客机检查指定槽位、其他玩家、0% 与重置、装扮、受击染色、双子、遗骸、幽灵、分房及换层。配置默认值和非法值回退由离线配置测试覆盖；实机收尾恢复资料并核对哈希，同时核对双端画面中的身体、描边、泪弹、科技激光、硫磺火、科技 X 环及激光地面层，并以敌方弹幕作为不受影响的对照，不能只凭命令回执判定画面通过。夹具检查角色精灵颜色在绘制期间仍保持游戏值、泪弹颜色在原版绘制后恢复，并要求双端均观察到各类攻击。
+玩家不透明度的离线检查为 `presentation.player-opacity`、`bridge.chat`、`bridge.resume`、`diagnostics.defaults`／`validation`／`preservation` 及 Windows `native.player-opacity`／`native.player-opacity-repentance`／`native.player-outlines`。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case player-opacity --heap-check --record`，复用一组隔离主客机检查指定槽位、其他玩家、0% 与重置、装扮、受击染色、双子、遗骸、幽灵、分房及换层。配置默认值和非法值回退由离线配置测试覆盖；实机收尾恢复资料并核对哈希，同时核对双端画面中的身体、描边、泪弹、科技激光、硫磺火、科技 X 环及激光地面层，并以敌方弹幕作为不受影响的对照，不能只凭命令回执判定画面通过。夹具检查角色精灵颜色在绘制期间仍保持游戏值、泪弹颜色在原版绘制后恢复，并要求双端均观察到各类攻击。
 
 | 领域 | 入口与范围 |
 | --- | --- |
@@ -333,7 +333,7 @@ Boss 整组时限按用例数量预留加载与转场时间，单项进度断言
 | 混乱诅咒走门 | [state_maze_routing.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_maze_routing.lua) 配合 `run_network_engine.py --frontend --menu-start --completion "LAN_NETWORK MAZE PASS"`，使用独立端口、`--latency-ms 75 --heap-check --native-record-both`。固定种子保留未清理的普通房间作为原生候选，终局房间的全队汇合按路线另行验收；以正常方向输入重复走门，检查原生随机落点、大房间子格归属、双端一致性、进入队友房间后的实体保留、幽灵随队及换层清理；不替换原生随机数或目的地选择。执行前后用 `ProtectedLabs` 保护并恢复资料 |
 | EID、举袋与水流 | [run_client_scenes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_client_scenes.py)，需要完整举放检查时加 `--include-bag-transitions --record-view` |
 | 道具与角色 | [run_item_issues.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_item_issues.py) 或 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的相关场景；按实际改动选择持有者、房间和生命周期条件。`--tm-triggers-only` 用固定错误道具检查随机事件的权威执行、重复库存与快照、同房／分房、移除、换层和保存／续玩 |
-| TNT 与吞饰品 | `run_special_routes.py --case tnt-smelter --latency-ms 40 --heap-check --record`：同一组进程检查 TNT 爆炸及分房／双方离房后返回的渲染姿态，熔炉重复吞普通／金饰品、手持槽独立、玩家隔离及楼层重建。离线检查为 `bridge.smelted-trinkets`、`bridge.state-layers` 和 Windows `native.smelted-trinkets-j511`／`native.smelted-trinkets-j835`，覆盖反复恢复、回退、幽灵及非法状态的原子拒绝 |
+| TNT 与吞饰品 | `run_special_routes.py --case tnt-smelter --latency-ms 40 --heap-check --record`：同一组进程检查 TNT 爆炸及分房／双方离房后返回的渲染姿态，熔炉重复吞普通／金饰品、手持槽独立、玩家隔离及楼层重建。离线检查为 `bridge.smelted-trinkets`、`bridge.state-layers` 和 Windows `native.smelted-trinkets-repentance_plus`／`native.smelted-trinkets-repentance`，覆盖反复恢复、回退、幽灵及非法状态的原子拒绝 |
 | 道具状态与 EID | [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `feedback-eid`、`feedback-puppy`、`feedback-flies`、`feedback-esau` 可复用同一组进程，分别检查分房道具说明与隐藏道具、喂养后的两种狂暴血狗跨房及换层、别西卜友方目标与后方敌人的命中表现、同一个小红罐的转交与库存切回。EID 用例必须通过 `--mod` 加载未修改的 EID；使用 `--heap-check --record --frame-ms 33` 保留双端短暂演出证据 |
 | 反馈上传 | [run_feedback.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_feedback.py)：指定 `--host`、`--client`、`--output`，可加 `--heap-check`；同一组主客机经聊天各提交一次 `/feedback`，由内置本地接收端核对请求头、zip 与清单、上一次启动日志和主客机身份，并确认 `/c feedback` 不上传、连续提交受限。夹具通过 `run_network_engine.py --feedback-endpoint` 写入隔离配置，不连接正式服务器；离线对应 `core.feedback-*`、`bridge.feedback` 与 `bridge.chat` |
 | 客机房间与演出 | [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 可连续选择 `split-render`（五胞胎、圣剑、命运之矛的分房归属及换层）、`mirror-route`（白火、原生镜子门、镜像方向、气泡及死神名册奖励）、`ambush-audio`（挑战战斗、结束与后来进入）、`mother-controls`／`mother-guest`／`mother-together`（三种入场方式、两阶段横穿房间、关闭聊天及控制冷却恢复）、`reconnect-motion`（重连后普通输入横穿房间）、`dice-floor`（原生踩踏、变暗与震动、再次入房不重播）、`room-followers`（跟班重复进入已有房间）、`chain-traps`（真实陵墓刺球锚点及锁链画面）、`secret-exit-doors`（正常走水层入口、汇合与返回门方向）。同一组进程复用连接；第三方组合通过 `--mod`、`--host-mod`、`--client-mod` 指定，资料由工具保护并恢复。`mirror-camera` 和 `room-entry` 分别检查大房间／镜面移动与已加载房间的返回入口；`client-room-entry` 检查客机通过 `StartRoomTransition`／`ChangeRoom` 返回常驻房间的入口，并跨层重复 |

@@ -1,12 +1,12 @@
 # 原版错误道具挑战环境
 
-[联机挑战45](https://github.com/BMingSY/isaac-lan/blob/main/docs/lan-challenges.md#当前规则1006-挑战45)使用 J511 原生 DELETE THIS 的房间外观和路线判断。挑战目录与运行层持有规则身份，后端只接收布尔启用回调；不修改普通单人挑战或联机选角。
+[联机挑战45](https://github.com/BMingSY/isaac-lan/blob/main/docs/lan-challenges.md#当前规则1006-挑战45)使用忏悔＋原生 DELETE THIS 的房间外观和路线判断。挑战目录与运行层持有规则身份，后端只接收布尔启用回调；不修改普通单人挑战或联机选角。
 
-## J511 接口与校验
+## 忏悔＋接口与校验
 
 适用游戏 SHA-256：`024ed7300fbed8b65afa1fdd1e36f20b446ede65dcdda0c8375d0423aa9f078d`。
 
-入口与签名分别注册在 [entrypoints.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j511/entrypoints.h) 和 [signatures.inc](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j511/signatures.inc)，仅对通过版本及指令校验的映像安装。[generated_challenge.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j511/generated_challenge.cpp)在以下五处原生 `Game.Challenge == 45` 比较中选择相等分支，后续随机选择仍使用原生逻辑和楼层种子：
+入口与签名分别注册在 [entrypoints.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance_plus/entrypoints.h) 和 [signatures.inc](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance_plus/signatures.inc)，仅对通过版本及指令校验的映像安装。[generated_challenge.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance_plus/generated_challenge.cpp)在以下五处原生 `Game.Challenge == 45` 比较中选择相等分支，后续随机选择仍使用原生逻辑和楼层种子：
 
 | 能力 | RVA | 游戏指针寄存器 |
 | --- | --- | --- |

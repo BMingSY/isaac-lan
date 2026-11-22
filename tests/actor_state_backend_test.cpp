@@ -4,7 +4,7 @@
 #include <cstring>
 #include <iostream>
 #include <memory>
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 constexpr unsigned gameGlobal = 0x7fd65c, getHudEntry = 0x127c0, spriteOffset = 0x3c;
 constexpr unsigned typeOffset = 0x130c, costumesOffset = 0x1170, chargesOffset = 0x6a8;
 constexpr unsigned pocketsOffset = 0x16c8, bagOffset = 0x1e44, previewOffset = 0x1e4c;

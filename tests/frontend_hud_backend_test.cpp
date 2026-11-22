@@ -4,7 +4,7 @@
 #include <cstring>
 #include <iostream>
 #include <vector>
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 constexpr unsigned gameGlobal = 0x7fd65c, playersOffset = 0x1ba50, historyOffset = 0xc45c4;
 constexpr unsigned controllerOffset = 0x154c, indexOffset = 0x1550, twinOffset = 0x1d80,
                    kindOffset = 0x130c, parentOffset = 0x314, activeOffset = 0x16a;

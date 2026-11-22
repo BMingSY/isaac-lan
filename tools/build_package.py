@@ -11,10 +11,22 @@ import subprocess
 
 if __package__:
     from .extension_package import LOADER_ABI
-    from .game_profiles import DEFAULT_BACKEND, RELEASE_BACKENDS, build_profile, source_profile
+    from .game_profiles import (
+        DEFAULT_BACKEND,
+        RELEASE_BACKENDS,
+        build_profile,
+        loader_versions,
+        source_profile,
+    )
 else:
     from extension_package import LOADER_ABI
-    from game_profiles import DEFAULT_BACKEND, RELEASE_BACKENDS, build_profile, source_profile
+    from game_profiles import (
+        DEFAULT_BACKEND,
+        RELEASE_BACKENDS,
+        build_profile,
+        loader_versions,
+        source_profile,
+    )
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -93,10 +105,15 @@ def build_bundle(build_directories, output, *, strip_binaries=False):
         builds[backend] = (directory, profile)
     if builds.keys() != set(RELEASE_BACKENDS):
         raise ValueError(f"Release requires builds for {', '.join(RELEASE_BACKENDS)}")
+    loader_build = builds[DEFAULT_BACKEND][0]
+    expected = loader_versions(profile for _, profile in builds.values())
+    registry = loader_build / "loader-versions.json"
+    if not registry.is_file() or json.loads(registry.read_text()) != expected:
+        raise ValueError(
+            "Rebuild the shared loader for the selected game builds and version markers"
+        )
     write_installer(output)
-    shared_loader = stage_binary(
-        builds[DEFAULT_BACKEND][0], "winmm.dll", output / "winmm.dll", strip_binaries
-    )
+    shared_loader = stage_binary(loader_build, "winmm.dll", output / "winmm.dll", strip_binaries)
     for backend in RELEASE_BACKENDS:
         directory, profile = builds[backend]
         target = output / "backends" / backend

@@ -12,8 +12,8 @@ function(isaac_add_backend_test name backend)
     if(FIXTURE_LIBRARIES)
         target_link_libraries(${target} PRIVATE ${FIXTURE_LIBRARIES})
     endif()
-    if(backend STREQUAL "j835")
-        target_compile_definitions(${target} PRIVATE ISAAC_LAN_TEST_J835)
+    if(backend STREQUAL "repentance")
+        target_compile_definitions(${target} PRIVATE ISAAC_LAN_TEST_REPENTANCE)
     endif()
     if(MINGW)
         target_link_options(${target} PRIVATE -static-libgcc -static-libstdc++)
@@ -26,17 +26,17 @@ endfunction()
 
 isaac_add_backend_test(
     mouse
-    j835
+    repentance
     SOURCES
-    tests/mouse_j835_test.cpp
-    src/engine/versions/j835/mouse_input.cpp
+    tests/mouse_repentance_test.cpp
+    src/engine/versions/repentance/mouse_input.cpp
     LIBRARIES
     minhook)
 isaac_add_backend_test(
     player-outlines
-    j835
+    repentance
     SOURCES
-    tests/player_outlines_j835_test.cpp
+    tests/player_outlines_repentance_test.cpp
     tests/native_call.cpp
     src/engine/versions/common/player_outlines.cpp
     LIBRARIES
@@ -45,13 +45,13 @@ isaac_add_backend_test(
     -msse2)
 isaac_add_backend_test(
     input-queries
-    j835
+    repentance
     SOURCES
-    tests/input_queries_j835_test.cpp
-    src/engine/versions/j835/input_queries.cpp
+    tests/input_queries_repentance_test.cpp
+    src/engine/versions/repentance/input_queries.cpp
     LIBRARIES
     minhook)
-foreach(backend j511 j835)
+foreach(backend repentance_plus repentance)
     isaac_add_backend_test(smelted-trinkets ${backend} SOURCES tests/smelted_trinkets_test.cpp)
     isaac_add_backend_test(room-data ${backend} SOURCES tests/room_data_backend_test.cpp
                            tests/native_call.cpp src/engine/versions/${backend}/room_data.cpp)
@@ -61,9 +61,9 @@ foreach(backend j511 j835)
                            tests/native_call.cpp src/engine/versions/${backend}/actor_state.cpp)
     isaac_add_backend_test(frontend-menu ${backend} SOURCES tests/frontend_menu_test.cpp
                            src/engine/versions/${backend}/frontend.cpp)
-    if(backend STREQUAL "j835")
-        target_sources(isaac_lan_frontend_menu_j835_test
-                       PRIVATE src/engine/versions/j835/menu_navigation.cpp)
+    if(backend STREQUAL "repentance")
+        target_sources(isaac_lan_frontend_menu_repentance_test
+                       PRIVATE src/engine/versions/repentance/menu_navigation.cpp)
     endif()
     isaac_add_backend_test(
         minimap
@@ -249,11 +249,11 @@ foreach(backend j511 j835)
         src/engine/versions/${backend}/pause_menu.cpp
         LIBRARIES
         minhook)
-    if(backend STREQUAL "j835")
+    if(backend STREQUAL "repentance")
         target_sources(
             isaac_lan_input_backend_${backend}_test
-            PRIVATE src/engine/versions/j835/input_queries.cpp
-                    src/engine/versions/j835/mouse_input.cpp)
+            PRIVATE src/engine/versions/repentance/input_queries.cpp
+                    src/engine/versions/repentance/mouse_input.cpp)
     endif()
     isaac_add_backend_test(
         player-input ${backend} SOURCES tests/player_input_backend_test.cpp
@@ -308,7 +308,7 @@ foreach(backend j511 j835)
         src/engine/versions/${backend}/rooms.cpp
         LIBRARIES
         minhook)
-    if(backend STREQUAL "j835")
+    if(backend STREQUAL "repentance")
         isaac_add_backend_test(stage-transition-binding ${backend} SOURCES
                                tests/stage_transition_binding_test.cpp LIBRARIES minhook)
     endif()
@@ -348,15 +348,16 @@ foreach(backend j511 j835)
                            src/engine/versions/${backend}/save.cpp)
 endforeach()
 isaac_add_backend_test(
-    character-catalog j835 SOURCES tests/character_catalog_test.cpp
-    src/engine/versions/j835/characters.cpp src/engine/versions/common/character_catalogue.cpp)
-isaac_add_backend_test(forgotten-form j835 SOURCES tests/forgotten_form_test.cpp)
+    character-catalog repentance SOURCES tests/character_catalog_test.cpp
+    src/engine/versions/repentance/characters.cpp
+    src/engine/versions/common/character_catalogue.cpp)
+isaac_add_backend_test(forgotten-form repentance SOURCES tests/forgotten_form_test.cpp)
 
 isaac_add_backend_test(
     player-opacity
-    j835
+    repentance
     SOURCES
-    tests/player_opacity_j835_test.cpp
+    tests/player_opacity_repentance_test.cpp
     tests/native_branch.cpp
     LIBRARIES
     minhook

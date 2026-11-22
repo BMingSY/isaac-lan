@@ -4,7 +4,7 @@
 #include <cstring>
 #include <iostream>
 #include <limits>
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 constexpr unsigned spriteOffset = 0x3c, costumeBegin = 0x1170, costumeEnd = 0x1174;
 constexpr unsigned layerBegin = 0x117c, flagFirst = 0x12e8, flagSecond = 0x12ea;
 constexpr unsigned blinkTime = 0x1288, damageCooldown = 0x1308, nightAngle = 0x1a04;

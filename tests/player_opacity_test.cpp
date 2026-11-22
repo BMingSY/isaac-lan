@@ -1,6 +1,6 @@
 // Exercise the production x86 color boundary with private players and stack frames.
 #include "test_support.h"
-#include "engine/versions/j511/player_opacity.cpp"
+#include "engine/versions/repentance_plus/player_opacity.cpp"
 #include "engine/versions/common/player_opacity.cpp"
 #include <climits>
 #include <cmath>
@@ -9,7 +9,7 @@
 #include <vector>
 
 namespace opacity = isaac::presentation::player_opacity;
-namespace layout = isaac::engine::j511::layout;
+namespace layout = isaac::engine::repentance_plus::layout;
 using Address = std::uintptr_t;
 extern "C" {
 unsigned char opacityFrame[512]{};

@@ -1,0 +1,51 @@
+{
+    "format": 1,
+    "backend": "repentance_plus",
+    "game_build": "1.9.7.19.J511",
+    "game_name": "Repentance+",
+    "documents_directory": "Binding of Isaac Repentance+",
+    "lua_module": "Lua5.3.3r.dll",
+    "version_rva": 7990092,
+    "minimum_image_size": 9182196,
+    "sections": [
+        {
+            "start": 4096,
+            "size": 7571540,
+            "flags": 1610612736
+        },
+        {
+            "start": 7577600,
+            "size": 936272,
+            "flags": 1073741824
+        },
+        {
+            "start": 8515584,
+            "size": 666612,
+            "flags": 3221225472
+        }
+    ],
+    "capabilities": {
+        "native_emotes": true
+    },
+    "presentation": {
+        "native_lobby": true,
+        "fonts": {
+            "small": {
+                "path": "font/TeamMeatEx/TeamMeatEx10.fnt",
+                "scale": 1
+            },
+            "normal": {
+                "path": "font/TeamMeatEx/TeamMeatEx12.fnt",
+                "scale": 1
+            },
+            "heading": {
+                "path": "font/TeamMeatEx/TeamMeatEx16.fnt",
+                "scale": 1
+            }
+        }
+    },
+    "testing": {
+        "progress_fixture": "repentance_plus",
+        "accepted_beta_option": null
+    }
+}

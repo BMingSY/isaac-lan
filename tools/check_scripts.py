@@ -48,7 +48,7 @@ def main():
         build_scene_suite(scenes)
         subprocess.run([LUAC, "-p", str(scenes)], check=True)
         release = Path(temporary) / "release.lua"
-        for backend in ("j835", "j511"):
+        for backend in ("repentance", "repentance_plus"):
             build_release(release, "C:/owned-lab/coordination", backend=backend)
             subprocess.run([LUAC, "-p", str(release)], check=True)
         special = Path(temporary) / "special.lua"

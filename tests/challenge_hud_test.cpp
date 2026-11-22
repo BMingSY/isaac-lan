@@ -4,14 +4,14 @@
 #include "engine/versions/common/challenge_hud.cpp"
 #include <windows.h>
 #include <cstring>
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/entrypoints.h"
-namespace backend = isaac::engine::j835;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/entrypoints.h"
+namespace backend = isaac::engine::repentance;
 constexpr unsigned presenceRegister = 5, parameterRegister = 6, noUnlocksDistance = 0x99;
 constexpr unsigned parameterBoundary = backend::entry::hUDChallengeParamsRead;
 #else
-#include "engine/versions/j511/entrypoints.h"
-namespace backend = isaac::engine::j511;
+#include "engine/versions/repentance_plus/entrypoints.h"
+namespace backend = isaac::engine::repentance_plus;
 constexpr unsigned presenceRegister = 6, parameterRegister = 7, noUnlocksDistance = 0xa2;
 constexpr unsigned parameterBoundary = backend::entry::hUDChallengeParamsReturn;
 #endif
@@ -67,7 +67,7 @@ unsigned word(const unsigned char* data, unsigned offset) {
 void checkParameters(const void* pointer, std::array<int, 2> goal) {
     std::array<unsigned char, 0xa4> expected{};
     std::memcpy(expected.data() + 0x40, &goal[0], sizeof(int));
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
     expected[0x6d] = goal[1] == 1;
     expected[0x88] = goal[1] == 2;
 #else
@@ -154,7 +154,7 @@ int main() {
         // Match the real boundary's CMP + short JE. Exercise MinHook's relocated
         // branch both ways; the original Game/DailyChallenge view stays borrowed.
         parameters[0] = 0x80;
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
         parameters[1] = 0x79; // [ECX+0x74]
 #else
         parameters[1] = 0x78; // [EAX+0x74]

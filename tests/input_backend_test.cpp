@@ -2,10 +2,10 @@
 // capture. No game executable or native code copied from it is loaded.
 #include "test_support.h"
 #include "engine/versions/common/input.cpp"
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/entrypoints.h"
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/entrypoints.h"
 #else
-#include "engine/versions/j511/entrypoints.h"
+#include "engine/versions/repentance_plus/entrypoints.h"
 #endif
 #include <MinHook.h>
 #include <array>
@@ -49,13 +49,13 @@ namespace {
 namespace input = isaac::input;
 namespace lan = isaac::lan;
 namespace mouse = isaac::engine::native_mouse;
-#ifdef ISAAC_LAN_TEST_J835
-namespace backend = isaac::engine::j835;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+namespace backend = isaac::engine::repentance;
 constexpr unsigned rosterOffset = 0x1ba50, controllerOffset = 0x154c, pauseOffset = 0x10203c;
 constexpr unsigned frameOffset = 0x4a264, xOffset = 0x294, yOffset = 0x298;
 constexpr int keyboardDevice = 0, restartAction = 16, resumeSelection = 1;
 #else
-namespace backend = isaac::engine::j511;
+namespace backend = isaac::engine::repentance_plus;
 constexpr unsigned rosterOffset = 0x1baa8, controllerOffset = 0x161c, pauseOffset = 0x23a7c;
 constexpr unsigned frameOffset = 0x4ae8c, xOffset = 0x33c, yOffset = 0x340;
 constexpr int keyboardDevice = -2, restartAction = 18, resumeSelection = 0;
@@ -66,7 +66,7 @@ unsigned char* image;
 std::vector<unsigned char> game(0x190000), manager(frameOffset + sizeof(unsigned));
 std::array<std::array<unsigned char, 0x2200>, 4> players{};
 std::array<Address, 4> roster;
-#ifndef ISAAC_LAN_TEST_J835
+#ifndef ISAAC_LAN_TEST_REPENTANCE
 std::array<Address, 64> vtable{};
 #endif
 std::array<std::array<float, 33>, 5> values{};
@@ -107,7 +107,7 @@ float readPhysical(void* object, int action, int controller, int* source, bool e
     }
     return result;
 }
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 bool __attribute__((thiscall)) pressed(void* object, int action, int controller, int* source) {
     return readPhysical(object, action, controller, source, false) != 0;
 }
@@ -129,7 +129,7 @@ bool __attribute__((thiscall)) query(void* object, int controller, void* callbac
 }
 #endif
 float read(int controller, int action, unsigned kind, int* source = nullptr) {
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
     if (kind == backend::entry::inputValue) {
         using Value = float(__attribute__((thiscall))*)(void*, int, int, int*);
         return reinterpret_cast<Value>(image + kind)(receiver(), action, controller, source);
@@ -165,7 +165,7 @@ void setup() {
     image = static_cast<unsigned char*>(
         VirtualAlloc(nullptr, imageSize, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
     require(image && MH_Initialize() == MH_OK, "Prepare native input image");
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
     patch(backend::entry::inputPressed, pressed);
     patch(backend::entry::inputTriggered, triggered);
     patch(backend::entry::inputValue, value);
@@ -200,7 +200,7 @@ void mouseRouting() {
     mouse::Vector result;
     require(input::mouseAim(players[1].data(), &result) == mouse::Result::passthrough,
             "Single-player mouse did not select the native path");
-#ifndef ISAAC_LAN_TEST_J835
+#ifndef ISAAC_LAN_TEST_REPENTANCE
     require(input::hookMouseAim(), "Install Plus mouse ABI adapter");
     const auto call = reinterpret_cast<mouse::Aim>(image + backend::entry::playerMouseAim);
     field<int>(players[1].data(), controllerOffset) = keyboardDevice;
@@ -218,7 +218,7 @@ void mouseRouting() {
     require(input::mouseAim(players[1].data(), &result) == mouse::Result::active &&
                 result.x == 40 && result.y == -20,
             "Shared mouse replay did not use the connected player's world target");
-#ifndef ISAAC_LAN_TEST_J835
+#ifndef ISAAC_LAN_TEST_REPENTANCE
     require(call(players[1].data(), &result, false) && result.x == 40 && result.y == -20,
             "Plus native mouse hook did not route accepted input");
 #endif
@@ -366,7 +366,7 @@ void versionActionsAndCleanup() {
     require(input::menuTriggered(input::action::menuBack, true), "Menu ignored the first gamepad");
     edges = {};
     values = {};
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
     values[0][18] = 1; // Original mute occupies Plus's restart number.
     require(!input::restartHeld(), "Original mute was mistaken for a restart request");
     const auto before = physicalCalls;

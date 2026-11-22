@@ -3,7 +3,7 @@
 #include "engine/versions/common/laser_state.cpp"
 #include <iostream>
 #include <map>
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 constexpr unsigned allocateEntry = 0x5eacf8, deleteEntry = 0x5eb08e, spriteOffset = 0x3c;
 constexpr unsigned sampleStateOffset = 0x3ad, samplesOffset = 0x3cc;
 constexpr std::array<unsigned, 6> valueOffsets{0x3b8, 0x3bc, 0x3c0, 0x3c4, 0x3c8, 0x430};

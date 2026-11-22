@@ -104,7 +104,7 @@ text_color = E8DFCB
 将 `ISAAC_IMGUI_SOURCE` 和 `ISAAC_MINHOOK_SOURCE` 设为对应依赖源码位置后执行：
 
 ```sh
-for backend in j835 j511
+for backend in repentance repentance_plus
 do
   cmake -S . -B "build-$backend" -G Ninja \
     -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-x86.cmake \
@@ -113,8 +113,8 @@ do
     -DMINHOOK_SOURCE_DIR="$ISAAC_MINHOOK_SOURCE"
   cmake --build "build-$backend" --target isaac_lan_probe isaac_lan_check
 done
-cmake --build build-j511 --target isaac_lan_loader
-python3 tools/build_package.py --build build-j835 --build build-j511 --output dist/Isaac-LAN
+cmake --build build-repentance_plus --target isaac_lan_loader
+python3 tools/build_package.py --build build-repentance --build build-repentance_plus --output dist/Isaac-LAN
 ```
 
 ## 问题与建议

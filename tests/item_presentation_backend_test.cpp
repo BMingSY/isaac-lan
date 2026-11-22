@@ -5,9 +5,9 @@
 #include <map>
 #include <set>
 #include <iostream>
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/entrypoints.h"
-namespace backend = isaac::engine::j835;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/entrypoints.h"
+namespace backend = isaac::engine::repentance;
 constexpr unsigned overlayOffset = 0x1bcc0, overlayBytes = 0x1260, configs = 47;
 constexpr unsigned megaOffset = 0x114c, delayOffset = 0x1144, sceneOffset = 0x1cf20;
 constexpr unsigned playersOffset = 0x1ba50, controllerOffset = 0x154c, controlsOffset = 0x360;
@@ -15,8 +15,8 @@ constexpr unsigned hudOffset = 0x3da4c, pauseOffset = 0x10203c, nightmareOffset 
 constexpr unsigned tableOffset = 0x4a234, pixelsOffset = 0x24363c, dizzyOffset = 0x283c04;
 constexpr unsigned bloomOffset = 0x1c3148;
 #else
-#include "engine/versions/j511/entrypoints.h"
-namespace backend = isaac::engine::j511;
+#include "engine/versions/repentance_plus/entrypoints.h"
+namespace backend = isaac::engine::repentance_plus;
 constexpr unsigned overlayOffset = 0x1c034, overlayBytes = 0x12b8, configs = 48;
 constexpr unsigned megaOffset = 0x11a4, delayOffset = 0x119c, sceneOffset = 0x1d2ec;
 constexpr unsigned playersOffset = 0x1baa8, controllerOffset = 0x161c, controlsOffset = 0x410;
@@ -176,7 +176,7 @@ void recordText(void* object, void* player, const char* title, const char* subti
     subtitleObserved = subtitle;
     styleObserved = style;
 }
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 void __attribute__((fastcall)) showText(void* object, void*, const char* title,
                                         const char* subtitle, bool sticky, bool curse) {
     recordText(object, nullptr, title, subtitle, (sticky ? 1 : 0) | (curse ? 2 : 0));
@@ -188,13 +188,13 @@ void __attribute__((fastcall)) showText(void* object, void*, void* player, const
 }
 #endif
 void customText(void* player, const char* title, const char* subtitle, unsigned style = 1) {
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
     items::withActor(player, [&] {
         call(backend::entry::hUDShowItemTextCustomUTF8, hud(),
              {word(title), word(subtitle), style & 1, (style >> 1) & 1});
     });
 #else
-    require(style == 1, "J511 fixture received an unsupported text style");
+    require(style == 1, "Repentance+ fixture received an unsupported text style");
     call(backend::entry::hUDShowItemTextCustomUTF8, hud(),
          {word(player), word(title), word(subtitle)});
 #endif
@@ -576,11 +576,12 @@ int main() {
                     subtitleObserved == "description" && styleObserved == 1 &&
                     objectObserved == hud(),
                 "Custom text did not survive its native ABI and wire round trip");
-#ifndef ISAAC_LAN_TEST_J835
-        require(playerObserved == players[1].data(), "J511 custom text lost its actor parameter");
+#ifndef ISAAC_LAN_TEST_REPENTANCE
+        require(playerObserved == players[1].data(),
+                "Repentance+ custom text lost its actor parameter");
 #endif
         for (unsigned style : {0u, 1u, 2u, 3u}) {
-#ifndef ISAAC_LAN_TEST_J835
+#ifndef ISAAC_LAN_TEST_REPENTANCE
             if (style != 1)
                 continue;
 #endif
@@ -599,7 +600,7 @@ int main() {
                         styleObserved == style,
                     "Localized item text lost its original display flags");
         }
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
         auto invalidStyle = textPacket;
         invalidStyle.back() = 4;
         items::reset();
@@ -652,12 +653,12 @@ int main() {
         require(apply(fortunePacket) && fortunes == 1 && indexedCalls == 2 &&
                     fortuneObserved == "local first|local second|",
                 "Fortune localization or its borrowed replay list changed");
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
         require(binding::bindings.indexedTextInRange(word(table()), "FORTUNES", 1) &&
                     !binding::bindings.indexedTextInRange(word(table()), "Fortunes", 2) &&
                     !binding::bindings.indexedTextInRange(word(table()), "absent", 0) &&
                     !binding::bindings.indexedTextInRange(word(table()), "Fortunes", -1),
-                "J835 fortune bounds do not match its native category map");
+                "Repentance fortune bounds do not match its native category map");
         strings[1] = 1;
         items::reset();
         require(apply(fortunePacket) && fortunes == 2 && indexedCalls == 2 &&

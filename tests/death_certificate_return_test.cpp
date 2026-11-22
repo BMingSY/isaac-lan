@@ -2,14 +2,14 @@
 #include "native_branch.h"
 #include "engine/rooms.h"
 #include "engine/versions/common/death_certificate_return.h"
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/entrypoints.h"
-#include "engine/versions/j835/layout.h"
-namespace backend = isaac::engine::j835;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/entrypoints.h"
+#include "engine/versions/repentance/layout.h"
+namespace backend = isaac::engine::repentance;
 #else
-#include "engine/versions/j511/entrypoints.h"
-#include "engine/versions/j511/layout.h"
-namespace backend = isaac::engine::j511;
+#include "engine/versions/repentance_plus/entrypoints.h"
+#include "engine/versions/repentance_plus/layout.h"
+namespace backend = isaac::engine::repentance_plus;
 #endif
 #include <windows.h>
 #include <MinHook.h>
@@ -112,10 +112,10 @@ void behavior() {
                         0,
                 "Repeated split-dimension return did not finish its countdown");
     }
-    // Native signed dimensions must be extended, and J835's special room
+    // Native signed dimensions must be extended, and Repentance's special room
     // resets its dimension before invoking the scoped transition.
     expectedRoom = -2;
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
     expectedDimension = 0;
 #else
     expectedDimension = -1;

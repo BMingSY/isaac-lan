@@ -1,11 +1,11 @@
 #include "test_support.h"
 #include "engine/versions/common/entity_fields.cpp"
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/entrypoints.h"
-namespace backend = isaac::engine::j835;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/entrypoints.h"
+namespace backend = isaac::engine::repentance;
 #else
-#include "engine/versions/j511/entrypoints.h"
-namespace backend = isaac::engine::j511;
+#include "engine/versions/repentance_plus/entrypoints.h"
+namespace backend = isaac::engine::repentance_plus;
 #endif
 #include "support/native_entity_types.h"
 #include "engine/versions/common/entity_size.h"
@@ -173,7 +173,7 @@ Value plan(unsigned type, const Value& fields) {
 template <class T> T& at(void* object, unsigned offset) {
     return *reinterpret_cast<T*>(static_cast<unsigned char*>(object) + offset);
 }
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 constexpr unsigned spriteOffset = 0x3c, activeOffset = 0x16a, frameOffset = 0x1a30dc;
 constexpr unsigned sizeOffset = 0x2c8, colorOffset = 0x1b0, damageOffset = 0x2e0;
 constexpr unsigned heightOffset = 0x360, scaleOffset = 0x370, priceOffset = 0x480;
@@ -274,7 +274,7 @@ struct ExpectedField {
 };
 // Independent offsets from the audited native getters and Lua registrations.
 // Each row exercises the named public plan through capture and restoration.
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 constexpr ExpectedField commonFields[]{{"Type", 0x28, Sample::type},
                                        {"Variant", 0x2c, Sample::integer},
                                        {"SubType", 0x30, Sample::integer},
@@ -536,7 +536,7 @@ void checkOrderAndFailures() {
     const auto shop = plan(5, names({"Price", "ShopItemId"}));
     for (int id : {INT32_MIN, -100, -2, 7, 100, INT32_MAX}) {
         call(adapter::run<2>, {entitySprite(), shop, Value::list({Value::i(-5), Value::i(id)})});
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
         const int expected = id;
 #else
         const int expected = std::clamp(id, -2, 7);

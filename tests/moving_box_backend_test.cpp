@@ -1,13 +1,13 @@
 #include "test_support.h"
 #include "native_branch.h"
 #include "engine/moving_box.h"
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/entrypoints.h"
-namespace backend = isaac::engine::j835;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/entrypoints.h"
+namespace backend = isaac::engine::repentance;
 constexpr unsigned seedOffset = 0x344, beginOffset = 0x1c9c, endOffset = 0x1ca0, playerRegister = 0;
 #else
-#include "engine/versions/j511/entrypoints.h"
-namespace backend = isaac::engine::j511;
+#include "engine/versions/repentance_plus/entrypoints.h"
+namespace backend = isaac::engine::repentance_plus;
 constexpr unsigned seedOffset = 0x3ec, beginOffset = 0x1d7c, endOffset = 0x1d80, playerRegister = 6;
 #endif
 #include <windows.h>

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import os
 import struct
 import tempfile
-from game_profiles import lab_profile, profile_directory, source_profile
+from game_profiles import backend_metadata, lab_profile, profile_directory, source_profile
 
 
 @dataclass(frozen=True)
@@ -18,10 +18,10 @@ class ProgressLayout:
 
 
 LAYOUTS = {
-    "j835": ProgressLayout(b"ISAACNGSAVE09R  ", 638, 496, 637, 495),
-    "j511": ProgressLayout(b"ISAACNGSAVE10R  ", 642, 523, 640, 522),
+    "repentance": ProgressLayout(b"ISAACNGSAVE09R  ", 638, 496, 637, 495),
+    "repentance_plus": ProgressLayout(b"ISAACNGSAVE10R  ", 642, 523, 640, 522),
 }
-MAGIC = LAYOUTS["j511"].magic
+MAGIC = LAYOUTS["repentance_plus"].magic
 PROFILE = Path("profile/Documents/My Games") / source_profile()["documents_directory"]
 WOMB_ACHIEVEMENT = 4
 TAINTED_LAZARUS_ACHIEVEMENT = 482
@@ -120,7 +120,11 @@ def prepare(lab, **options):
         raise ValueError("An owned isolated progress file is required")
     profile = lab_profile(lab)
     backend = profile["backend"]
-    if backend not in LAYOUTS or profile.get("testing", {}).get("progress_fixture") != backend:
+    if (
+        backend not in LAYOUTS
+        or profile.get("testing", {}).get("progress_fixture") != backend
+        or profile["game_build"] != backend_metadata(backend)["game_build"]
+    ):
         raise ValueError("No audited progress fixture for this game backend")
     data = patch(path.read_bytes(), backend=backend, **options)
     temporary = None

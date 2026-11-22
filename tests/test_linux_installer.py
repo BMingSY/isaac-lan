@@ -9,6 +9,7 @@ import sys
 import pytest
 
 from tools.build_package import build_bundle, game_profile
+from tools.game_profiles import DEFAULT_BACKEND, loader_versions
 from tools.testing.installer import game_image
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -137,7 +138,7 @@ def installed_files(game):
 def universal_bundle(tmp_path):
     builds = []
     profiles = {}
-    for backend in ("j511", "j835"):
+    for backend in ("repentance_plus", "repentance"):
         build = tmp_path / backend
         build.mkdir()
         profiles[backend] = game_profile(ROOT, backend)
@@ -145,6 +146,9 @@ def universal_bundle(tmp_path):
         for name in (*installer.OWNED, "isaac_lan_check.exe"):
             (build / name).write_bytes(f"{backend}/{name}".encode())
         builds.append(build)
+    (tmp_path / DEFAULT_BACKEND / "loader-versions.json").write_text(
+        json.dumps(loader_versions(profiles.values()))
+    )
     bundle = tmp_path / "universal"
     build_bundle(builds, bundle)
     return bundle, profiles
@@ -204,43 +208,51 @@ def test_bundle_repair_and_rollback_both_named_probes(package_game, universal_bu
             installer.install(bundle, game)
     assert json.loads(record.read_text()) == installed
     assert {n: (game / n).read_bytes() for n in originals} == originals
-    (game / installer.backend_file("j835")).unlink()
+    (game / installer.backend_file("repentance")).unlink()
     assert installer.install(bundle, game)["installed"]
-    assert (game / installer.backend_file("j835")).read_bytes() == b"j835"
-    extra = game / "isaac-lan/backends/j835/player.txt"
+    assert (game / installer.backend_file("repentance")).read_bytes() == b"repentance"
+    extra = game / "isaac-lan/backends/repentance/player.txt"
     extra.write_text("keep")
     installer.install(bundle, game, "Uninstall")
     assert extra.read_text() == "keep"
-    assert not (game / "isaac-lan/backends/j511").exists()
+    assert not (game / "isaac-lan/backends/repentance_plus").exists()
 
 
-def test_bundle_upgrade_retires_the_recorded_j510_probe(package_game, universal_bundle):
+@pytest.mark.parametrize("previous_plus", ["j510", "j511"])
+def test_bundle_migrates_both_numbered_backend_directories(
+    package_game, universal_bundle, previous_plus
+):
     _, game = package_game
-    bundle, _ = universal_bundle
+    bundle, profiles = universal_bundle
     installer.install(bundle, game)
     record = game / "isaac-lan/installation.json"
     prior = json.loads(record.read_text())
-    old_probe = installer.backend_file("j510")
-    new_probe = installer.backend_file("j511")
-    (game / new_probe).parent.rename((game / old_probe).parent)
-    (game / old_probe).write_bytes(b"previous J510 DLL")
-    prior["backends"].pop("j511")
-    prior["backends"]["j510"] = "1.9.7.19.J510"
-    prior["files"].pop(new_probe)
-    prior["files"][old_probe] = installer.digest(game / old_probe)
+    aliases = {"repentance": "j835", "repentance_plus": previous_plus}
+    for edition, previous in aliases.items():
+        old_probe = installer.backend_file(previous)
+        new_probe = installer.backend_file(edition)
+        (game / new_probe).parent.rename((game / old_probe).parent)
+        (game / old_probe).write_bytes(previous.encode())
+        prior["files"].pop(new_probe)
+        prior["files"][old_probe] = installer.digest(game / old_probe)
+        marker = prior["backends"].pop(edition)
+        prior["backends"][previous] = marker.rsplit(".", 1)[0] + "." + previous.upper()
     record.write_text(json.dumps(prior))
-    unrelated = (game / old_probe).with_name("player.txt")
+    unrelated = (game / installer.backend_file(previous_plus)).with_name("player.txt")
     unrelated.write_text("keep")
 
     assert installer.install(bundle, game)["installed"]
-    assert not (game / old_probe).exists()
-    assert (game / new_probe).read_bytes() == (
-        bundle / "backends/j511/isaac_lan_probe.dll"
-    ).read_bytes()
+    assert not (game / installer.backend_file("j835")).parent.exists()
+    for edition, previous in aliases.items():
+        assert not (game / installer.backend_file(previous)).exists()
+        assert (game / installer.backend_file(edition)).read_bytes() == (
+            bundle / "backends" / edition / "isaac_lan_probe.dll"
+        ).read_bytes()
     assert json.loads(record.read_text())["backends"] == {
-        "j511": "1.9.7.19.J511",
-        "j835": "1.7.9b.J835",
+        edition: profile["game_build"] for edition, profile in profiles.items()
     }
+    assert installer.install(bundle, game)["installed"]
+    assert not installer.install(bundle, game, "Uninstall")["installed"]
     assert unrelated.read_text() == "keep"
 
 
@@ -253,13 +265,13 @@ def test_bundle_preserves_foreign_target_and_rejects_symlinked_parent(
     parent.mkdir(parents=True)
     external = tmp_path / "external"
     external.mkdir()
-    (parent / "j835").symlink_to(external, target_is_directory=True)
+    (parent / "repentance").symlink_to(external, target_is_directory=True)
     with pytest.raises(installer.InstallerError, match="ordinary directory"):
         installer.install(bundle, game)
     assert list(external.iterdir()) == []
-    (parent / "j835").unlink()
-    (parent / "j835").mkdir()
-    foreign = game / installer.backend_file("j835")
+    (parent / "repentance").unlink()
+    (parent / "repentance").mkdir()
+    foreign = game / installer.backend_file("repentance")
     foreign.write_bytes(b"foreign")
     with pytest.raises(installer.InstallerError) as caught:
         installer.install(bundle, game)

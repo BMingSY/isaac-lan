@@ -1,10 +1,10 @@
 #include "test_support.h"
 #include "engine/pause_menu.h"
 #include "core/input_actions.h"
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/entrypoints.h"
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/entrypoints.h"
 #else
-#include "engine/versions/j511/entrypoints.h"
+#include "engine/versions/repentance_plus/entrypoints.h"
 #endif
 #define WIN32_LEAN_AND_MEAN
 #ifndef NOMINMAX
@@ -18,15 +18,15 @@
 namespace {
 namespace menu = isaac::pause_menu;
 namespace action = isaac::input::action;
-#ifdef ISAAC_LAN_TEST_J835
-namespace backend = isaac::engine::j835;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+namespace backend = isaac::engine::repentance;
 constexpr unsigned pauseOffset = 0x10203c, optionsOffset = 0x806a8;
 constexpr unsigned optionsSelection = 4, optionsEntries = 0x260;
 constexpr unsigned playersOffset = 0x1ba50, controllerOffset = 0x154c;
 constexpr unsigned managerOptions = 0x29df8;
 constexpr int resumeSelection = 1, exitSelection = 2;
 #else
-namespace backend = isaac::engine::j511;
+namespace backend = isaac::engine::repentance_plus;
 constexpr unsigned pauseOffset = 0x23a7c, optionsOffset = 0x5b0;
 constexpr unsigned optionsSelection = 8, optionsEntries = 0x27c;
 constexpr unsigned playersOffset = 0x1baa8, controllerOffset = 0x161c;
@@ -171,7 +171,7 @@ void intentsAndOptions() {
     require(menu::state(base()).optionId == -1, "Native option vector escaped capacity bounds");
 }
 void playerView() {
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
     const auto before = game;
     menu::selectPlayer(base(), 1);
     { menu::ViewScope view(base(), 1); }

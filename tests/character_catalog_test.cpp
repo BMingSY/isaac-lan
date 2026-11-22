@@ -1,12 +1,12 @@
 // Exercise each production catalogue against a private x86 image and ABI.
 #include "test_support.h"
 #include "engine/characters.h"
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/entrypoints.h"
-namespace backend = isaac::engine::j835;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/entrypoints.h"
+namespace backend = isaac::engine::repentance;
 #else
-#include "engine/versions/j511/entrypoints.h"
-namespace backend = isaac::engine::j511;
+#include "engine/versions/repentance_plus/entrypoints.h"
+namespace backend = isaac::engine::repentance_plus;
 #endif
 #include "net/protocol.h"
 #define WIN32_LEAN_AND_MEAN
@@ -25,7 +25,7 @@ namespace backend = isaac::engine::j511;
 namespace {
 constexpr std::size_t imageSize = privateGameImageBytes;
 constexpr unsigned menuStride = 24, configStride = 0x148, flagsOffset = 0x14 + 0x38;
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 constexpr unsigned menuOffset = 0x60d6b0, countersOffset = 0x14 + 0x2b8;
 constexpr unsigned stringTableOffset = 0x4a234, configsOffset = 0x29f90;
 constexpr unsigned achievementCount = 638, counterCount = 496, availableRva = 0x4a1ea0;

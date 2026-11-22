@@ -1,11 +1,11 @@
 #include "test_support.h"
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/smelted_trinkets.h"
-namespace backend = isaac::engine::j835;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/smelted_trinkets.h"
+namespace backend = isaac::engine::repentance;
 inline constexpr unsigned vectorOffset = 0x1670;
 #else
-#include "engine/versions/j511/smelted_trinkets.h"
-namespace backend = isaac::engine::j511;
+#include "engine/versions/repentance_plus/smelted_trinkets.h"
+namespace backend = isaac::engine::repentance_plus;
 inline constexpr unsigned vectorOffset = 0x1748;
 #endif
 #include <array>

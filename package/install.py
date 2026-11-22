@@ -14,6 +14,7 @@ import sys
 import tempfile
 
 OWNED = ("winmm.dll", "isaac_lan_probe.dll")
+EDITIONS = ("repentance", "repentance_plus")
 HINTS = {
     "GAME_PATH": "Select the game folder containing isaac-ng.exe (Steam > Manage > Browse local files).",
     "PACKAGE_INVALID": "Extract the entire release ZIP into a new folder and retry. Check security-software quarantine if a file is missing.",
@@ -181,6 +182,11 @@ def backend_file(backend):
     return f"isaac-lan/backends/{backend}/isaac_lan_probe.dll"
 
 
+def installed_backend(name):
+    # Old installation records used the executable's build number as the directory.
+    return name in EDITIONS or re.fullmatch(r"j[0-9]+", name) is not None
+
+
 def owned_hashes(record):
     names = OWNED
     if record.get("format") == 2:
@@ -189,8 +195,7 @@ def owned_hashes(record):
             not isinstance(backends, dict)
             or not backends
             or not all(
-                re.fullmatch(r"j[0-9]+", b) and isinstance(v, str) and v
-                for b, v in backends.items()
+                installed_backend(b) and isinstance(v, str) and v for b, v in backends.items()
             )
         ):
             raise InstallerError("INSTALLATION_INVALID", "Invalid installed backend list")
@@ -211,9 +216,8 @@ def payloads(package):
     backends = index.get("backends")
     if (
         not isinstance(backends, list)
-        or not backends
-        or not all(isinstance(b, str) and re.fullmatch(r"j[0-9]+", b) for b in backends)
-        or len(set(backends)) != len(backends)
+        or not all(isinstance(b, str) for b in backends)
+        or sorted(backends) != list(EDITIONS)
     ):
         raise InstallerError("PACKAGE_INVALID", "Invalid package backend list")
     parent = package / "backends"
@@ -417,7 +421,7 @@ def install_files(package, game, mode):
         candidates = list(OWNED)
         if not backends.is_symlink() and backends.is_dir():
             candidates.extend(
-                backend_file(p.name) for p in backends.iterdir() if re.fullmatch(r"j[0-9]+", p.name)
+                backend_file(p.name) for p in backends.iterdir() if installed_backend(p.name)
             )
         names = list(dict.fromkeys((*names, *candidates)))
     current = mode == "Install" and valid_marker and bool(previous) and previous_record == payload

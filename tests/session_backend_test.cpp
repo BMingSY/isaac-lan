@@ -1,12 +1,12 @@
 #include "test_support.h"
 #include "engine/session_backend.h"
 #include "core/chat.h"
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/entrypoints.h"
-namespace backend = isaac::engine::j835;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/entrypoints.h"
+namespace backend = isaac::engine::repentance;
 #else
-#include "engine/versions/j511/entrypoints.h"
-namespace backend = isaac::engine::j511;
+#include "engine/versions/repentance_plus/entrypoints.h"
+namespace backend = isaac::engine::repentance_plus;
 #endif
 #define WIN32_LEAN_AND_MEAN
 #ifndef NOMINMAX
@@ -18,7 +18,7 @@ namespace backend = isaac::engine::j511;
 #include <cstring>
 #include <vector>
 
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 extern "C" {
 void* completionTarget = nullptr;
 void* completionGame = nullptr;
@@ -52,7 +52,7 @@ using Method = void(__attribute__((thiscall)) *)(void*);
 using Plain = void(__cdecl*)();
 constexpr unsigned imageSize = 0x900000;
 // Independent fixture layouts: deliberately do not include the production layout/bindings.
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 constexpr unsigned stateOffset = 0xf34, continueFlag = 0x209c4, continueIntent = 0x1ea6c1;
 constexpr unsigned deleteIntent = 0x1ea814, cinematicIntent = 0x1ea830;
 constexpr unsigned menuIntent = 0x1ea818, menuTarget = 0x1ea81c;
@@ -106,7 +106,7 @@ void dispatch(const char* label, const session::Call& original) {
 void __cdecl save() {
     events.emplace_back("save");
 }
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 void __attribute__((fastcall)) eraseSlot(void*, void*) {
     events.emplace_back("erase-slot-file");
 }
@@ -123,7 +123,7 @@ void __cdecl unrelated() {
 void __cdecl replacement() {
     events.emplace_back("unrelated-hook");
 }
-#ifndef ISAAC_LAN_TEST_J835
+#ifndef ISAAC_LAN_TEST_REPENTANCE
 unsigned nativeCompletions = 0;
 void __stdcall completionOriginal(unsigned, unsigned, unsigned) {
     ++nativeCompletions;
@@ -131,7 +131,7 @@ void __stdcall completionOriginal(unsigned, unsigned, unsigned) {
 #endif
 void award(unsigned counter, unsigned bits, unsigned achievement) {
     awards.push_back({counter, bits, achievement});
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
     unsigned control;
     __asm__ __volatile__("stmxcsr %0" : "=m"(control));
     control ^= 0x6000;
@@ -176,11 +176,11 @@ void __attribute__((fastcall)) resetPause(void* object, void*) {
     checkReceiver(object, game.data() + pauseOffset, "Pause reset receiver");
     field<int>(object) = 0;
 }
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 void __attribute__((fastcall)) persist(void* object, void*, bool backup) {
     checkReceiver(object, manager.data() + progressOffset, "Persist receiver");
     require(backup && field<bool>(object),
-            "J835 must mark merged progress dirty and request backup");
+            "Repentance must mark merged progress dirty and request backup");
     field<bool>(object) = false;
     events.emplace_back("flush");
 }
@@ -202,7 +202,7 @@ void validateStart(int type, int challenge, const Seeds& seeds, unsigned difficu
     require(type == 19 && challenge == 0 && difficulty == 3, "Start stack arguments");
     require(seeds.words[1] == 0xabcdef01 && seeds.words.back() == 122, "By-value Seeds copy");
 }
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 using Start = void(__stdcall*)(int, int, Seeds, unsigned);
 void __stdcall gameStart(int type, int challenge, Seeds seeds, unsigned difficulty) {
 #else
@@ -214,7 +214,7 @@ void __attribute__((fastcall)) gameStart(void* object, void*, int type, int chal
     validateStart(type, challenge, seeds, difficulty);
     events.emplace_back("start");
 }
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 void __stdcall startNew(int type, int challenge, Seeds seeds, unsigned difficulty) {
 #else
 void __attribute__((fastcall)) startNew(void* object, void*, int type, int challenge, Seeds seeds,
@@ -336,7 +336,7 @@ void prepare() {
     require(image && MH_Initialize() == MH_OK, "Initialize synthetic image");
     patch(backend::entry::managerSave, save);
     patch(backend::entry::managerDeleteSave, erase);
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
     patch(backend::entry::gameStateDeleteFile, eraseSlot);
 #endif
     patch(backend::entry::managerSaveRerun, rerun);
@@ -358,7 +358,7 @@ void prepare() {
     patch(backend::entry::runtimeNetSeedConstructor, constructSeeds);
     patch(backend::entry::runtimeNetSetSeed, setSeed);
     patch(backend::entry::runtimeNetStartGame, startNew);
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
     patch(backend::entry::progressPersist, persist);
     patch(backend::entry::recordCompletionBoundary, completionOriginal);
 #else
@@ -399,7 +399,7 @@ void completion() {
     field<std::array<unsigned, 2>>(image, descriptor) = {32, 45};
     field<std::array<unsigned, 2>>(image, descriptor + 8) = {46, 67};
     const auto invoke = [&](unsigned event, unsigned owner, unsigned difficulty) {
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
         completionTarget = image + backend::entry::recordCompletionBoundary;
         completionGame = game.data();
         completionEvent = event;
@@ -476,7 +476,7 @@ void hooks() {
         }
         require(events == expected, "Hook forwarding and suppression order");
     }
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
     for (const bool protectedSlot : {true, false}) {
         forward = !protectedSlot;
         events.clear();
@@ -498,7 +498,7 @@ void hooks() {
     Seeds seeds;
     constructSeeds(&seeds, nullptr);
     setSeed(&seeds, nullptr, 0xabcdef01);
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
     entry<Start>(backend::entry::gameStart)(19, 0, seeds, 3);
 #else
     entry<Start>(backend::entry::gameStart)(game.data(), 19, 0, seeds, 3);
@@ -516,7 +516,7 @@ void state() {
             "Continue availability");
     session::continueAvailable(false);
     require(!session::continueAvailable(), "Restore solo availability");
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
     auto& diskChecksum = field<std::uint32_t>(manager.data(), 0xf28);
     for (std::uint32_t original : {0u, 0x38c649f2u}) {
         diskChecksum = original;
@@ -583,7 +583,7 @@ void state() {
     require(manager[progressOffset + 1] == 0, "Restore writable progress");
     events.clear();
     session::persistProgress();
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
     require(events == std::vector<std::string>{"flush"}, "Original persistence selection");
 #else
     require(events == std::vector<std::string>{"cloud", "file"}, "Plus persistence order");

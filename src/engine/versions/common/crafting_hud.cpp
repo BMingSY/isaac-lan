@@ -139,7 +139,7 @@ __attribute__((naked)) void isaac_lan_crafting_pocket_thunk() {
                                             "2:\n\taddl $16, %esp\n\t" RESTORE_HUD_REGISTERS
                                             "jmp *_isaac_lan_crafting_pocket_original");
 }
-// J835: ECX=PlayerHUD, XMM2=signed scale, XMM3=alpha, one Vector*
+// Repentance: ECX=PlayerHUD, XMM2=signed scale, XMM3=alpha, one Vector*
 // stack argument, ret 4. The sign cancels native HUD-index mirroring when the
 // local pocket is placed at the full bottom-right anchor. Keep alpha intact.
 __attribute__((naked)) void isaac_lan_crafting_pocket_registers_thunk() {

@@ -1,11 +1,11 @@
 // Exercise the x86 calling boundary in private memory; no game is started.
 #include "test_support.h"
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/stage_transition_binding.h"
-namespace native = isaac::engine::j835;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/stage_transition_binding.h"
+namespace native = isaac::engine::repentance;
 #else
-#include "engine/versions/j511/stage_transition_binding.h"
-namespace native = isaac::engine::j511;
+#include "engine/versions/repentance_plus/stage_transition_binding.h"
+namespace native = isaac::engine::repentance_plus;
 #endif
 #include <array>
 #include <cstring>

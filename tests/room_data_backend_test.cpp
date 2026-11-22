@@ -3,7 +3,7 @@
 #include "engine/versions/common/room_data.cpp"
 #include <cstring>
 #include <iostream>
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 constexpr unsigned gameGlobal = 0x7fd65c, descEntry = 0x30e0f0, cacheEntry = 0x4e2e40;
 constexpr unsigned roomOffset = 0x18190, indexOffset = 0x18194, dimensionOffset = 0x1819c;
 constexpr unsigned mapOffset = 0x1796c, countOffset = 0x1815c, frameOffset = 0x1a30dc;
@@ -306,13 +306,13 @@ int main() {
         require(success(receive(state::roomLayout, layoutPacket(-12, -12))) &&
                     field<int>(guest.special.data(), 4) == -12,
                 "Lazily initialized special room lost native descriptor");
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
         const auto beforeCalls = descCalls;
         rejectLayout(layoutPacket(-19, -19));
         require(descCalls == beforeCalls, "Unsupported vanilla special room wrote sentinel");
 #else
         require(success(receive(state::roomLayout, layoutPacket(-20, -20))),
-                "J511 special room range changed");
+                "Repentance+ special room range changed");
 #endif
         select(host);
         replica = false;

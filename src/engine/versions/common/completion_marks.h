@@ -5,7 +5,7 @@
 #include <optional>
 
 namespace isaac::engine::native_completion {
-// Repentance+/J835 persistent event IDs, in completion_widget.anm2 layer order. Paper
+// Repentance+/Repentance persistent event IDs, in completion_widget.anm2 layer order. Paper
 // represents Delirium. Alternate bodies share their starting character's record.
 // The low two bits are single-player marks; official online marks occupy
 // higher bits and must not be rendered as single-player completion.

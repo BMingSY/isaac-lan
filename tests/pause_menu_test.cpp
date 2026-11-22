@@ -1,10 +1,10 @@
-// Private x86 image: exercise the real J511 menu calls and input-query hook.
+// Private x86 image: exercise the real Repentance+ menu calls and input-query hook.
 // Including input.cpp keeps the query hook under test without installing hooks
 // in a process or exposing a production API solely for tests.
 #include "test_support.h"
 #include "engine/versions/common/input.cpp"
-#include "engine/versions/j511/entrypoints.h"
-#include "engine/versions/j511/layout.h"
+#include "engine/versions/repentance_plus/entrypoints.h"
+#include "engine/versions/repentance_plus/layout.h"
 #include <MinHook.h>
 #include <array>
 #include <vector>
@@ -48,7 +48,7 @@ void grantStartingRewards(void*, unsigned) {
 namespace {
 namespace menu = isaac::pause_menu;
 namespace input = isaac::input;
-namespace native = isaac::engine::j511;
+namespace native = isaac::engine::repentance_plus;
 using Address = std::uintptr_t;
 static_assert(sizeof(Address) == 4);
 constexpr unsigned imageSize = privateGameImageBytes, menuOffset = 0x23a7c;
@@ -781,7 +781,8 @@ void restartPhysicalRouting() {
     f.accept();
     f.press(input::action::restart);
     require(input::restartHeld(), "LAN restart lost physical input behind accepted gameplay input");
-    require(f.queries.front().controller == -2, "Restart did not query the J511 physical keyboard");
+    require(f.queries.front().controller == -2,
+            "Restart did not query the Repentance+ physical keyboard");
     f.clearPhysical();
     require(!input::restartHeld(), "Restart retained a released key");
     f.press(input::action::menuBack);

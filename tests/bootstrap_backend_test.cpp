@@ -1,13 +1,13 @@
 #include "test_support.h"
 #include "engine/versions/common/bootstrap.cpp"
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/entrypoints.h"
-namespace backend = isaac::engine::j835;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/entrypoints.h"
+namespace backend = isaac::engine::repentance;
 constexpr unsigned roomOffset = 0x18190, playersOffset = 0x1ba50, frameOffset = 0x1a30dc;
 constexpr unsigned positionOffset = 0x294, previousOffset = 0x29c, interpolatedOffset = 0x16d;
 #else
-#include "engine/versions/j511/room_probe.cpp"
-namespace backend = isaac::engine::j511;
+#include "engine/versions/repentance_plus/room_probe.cpp"
+namespace backend = isaac::engine::repentance_plus;
 constexpr unsigned roomOffset = 0x18300, playersOffset = 0x1baa8, frameOffset = 0x26508;
 constexpr unsigned positionOffset = 0x33c, previousOffset = 0x344, interpolatedOffset = 0x175;
 #endif
@@ -220,10 +220,10 @@ void probes() {
     for (unsigned i = 0; i < 4; ++i)
         L.functions.at("trace_callback")(&L);
     require(logs.size() == 4, "Callback trace lost its bounded logging");
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
     require(L.functions.size() == 2, "Original backend exposed an unaudited room experiment");
 #else
-    require(L.functions.size() == 6, "J511 experiment bindings were dropped");
+    require(L.functions.size() == 6, "Repentance+ experiment bindings were dropped");
     // Exercise the moved experiment with borrowed fixture rooms. Allocation,
     // native construction and destruction are not simulated here.
     backend::backgroundRoom = reinterpret_cast<Address>(background.data());

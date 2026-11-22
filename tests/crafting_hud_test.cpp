@@ -5,15 +5,15 @@
 #include <windows.h>
 #include <cstring>
 #include <vector>
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/entrypoints.h"
-namespace backend = isaac::engine::j835;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/entrypoints.h"
+namespace backend = isaac::engine::repentance;
 constexpr unsigned controllerOffset = 0x154c, ghostOffset = 0x1f88;
 constexpr unsigned activeBase = 0x14c4, activeStride = 0x1c;
 constexpr unsigned hudSize = 0x6b0, rootSize = hudSize * 8;
 #else
-#include "engine/versions/j511/entrypoints.h"
-namespace backend = isaac::engine::j511;
+#include "engine/versions/repentance_plus/entrypoints.h"
+namespace backend = isaac::engine::repentance_plus;
 constexpr unsigned controllerOffset = 0x161c, ghostOffset = 0x20a9;
 constexpr unsigned activeBase = 0x1580, activeStride = 0x20;
 constexpr unsigned hudSize = 0x6dc, rootSize = 0x5954;
@@ -70,7 +70,7 @@ int __attribute__((thiscall)) activeItemFixture(void* player, int slot) {
 __attribute__((naked)) void originalBagFixture() {
     __asm__ __volatile__(RECORD_REGISTERS "ret $4");
 }
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 __attribute__((naked)) void originalPocketFixture() {
     __asm__ __volatile__(RECORD_REGISTERS "movd %xmm3, _observedAlpha\n\tret $4");
 }
@@ -107,7 +107,7 @@ __attribute__((naked)) void invokeBagFixture() {
                          "movl -4(%esp), %eax\n\tmovl %eax, _returnedPositionArgument\n\t"
                          "movl _savedReturnEax, %eax\n\t" RECORD_RETURNED "popal\n\tpopfl\n\tret");
 }
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 __attribute__((naked)) void invokePocketFixture() {
     __asm__ __volatile__("pushfl\n\tpushal\n\tmovl %esp, _invocationStack\n\t" LOAD_REGISTERS
                          "pushl _invocationPosition\n\tcall *_pocketTarget\n\t"
@@ -141,7 +141,7 @@ void invoke(bool pocket, std::uintptr_t hud, std::uintptr_t expected, int layout
     invocationAlpha = std::bit_cast<std::uint32_t>(layout ? 0.35f : 1.0f);
     for (unsigned i = 0; i < invocationXmm.size(); ++i)
         invocationXmm[i] = 0x3e800001u + i;
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
     invocationXmm[8] = std::bit_cast<std::uint32_t>(scale);
     if (pocket)
         invocationXmm[12] = invocationAlpha;
@@ -157,7 +157,7 @@ void invoke(bool pocket, std::uintptr_t hud, std::uintptr_t expected, int layout
     require(returnedStack == invocationStack, "HUD unbalanced the caller stack");
     require(returnedPositionArgument == invocationPosition,
             "HUD changed the original position argument");
-#ifndef ISAAC_LAN_TEST_J835
+#ifndef ISAAC_LAN_TEST_REPENTANCE
     if (pocket)
         require(returnedLayoutArgument == std::uint32_t(layout) &&
                     returnedAlphaArgument == invocationAlpha,
@@ -171,7 +171,7 @@ void invoke(bool pocket, std::uintptr_t hud, std::uintptr_t expected, int layout
             require(observedPosition != reinterpret_cast<std::uintptr_t>(&position) &&
                         observedPositionValue == expectedAnchor,
                     "Local pocket did not use a separate native bottom-right anchor");
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
             expectedXmm[8] = std::bit_cast<std::uint32_t>(expectedPocketScale);
 #else
             require(observedLayout == 0, "Local pocket kept a compact co-op layout");
@@ -181,7 +181,7 @@ void invoke(bool pocket, std::uintptr_t hud, std::uintptr_t expected, int layout
             require(observedPosition == reinterpret_cast<std::uintptr_t>(&position) &&
                         observedPositionValue == originalPosition,
                     "Ordinary pocket or inner bag changed the caller's position");
-#ifndef ISAAC_LAN_TEST_J835
+#ifndef ISAAC_LAN_TEST_REPENTANCE
             if (pocket)
                 require(observedLayout == layout, "Ordinary pocket changed its layout");
 #endif
@@ -249,7 +249,7 @@ int main() {
                 "Crafting binding selected the wrong viewport globals");
         isaac_lan_crafting_screen_width = &screenWidth;
         isaac_lan_crafting_screen_height = &screenHeight;
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
         std::vector<std::uint8_t> manager(0x29e40);
         auto& managerPointer =
             *reinterpret_cast<std::uintptr_t*>(image + backend::globals::manager);
@@ -281,7 +281,7 @@ int main() {
         }
         const auto verify = [&](std::uintptr_t source, std::uintptr_t expectedBag,
                                 std::uintptr_t expectedPocket) {
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
             expectedPocketScale =
                 source && *reinterpret_cast<const short*>(source + 8) > 0 ? -1 : 1;
 #endif
@@ -315,7 +315,7 @@ int main() {
                 // Explicit expected anchors cover both logical resolutions,
                 // HUD offset endpoints, and incoming compact layouts/scales.
                 for (const std::array<float, 6> geometry : {
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
                          std::array<float, 6>{480, 270, 1, 0, 452, 252},
                          {480, 270, 0, 0, 468, 258},
                          {640, 360, 1, 0, 612, 342},
@@ -331,7 +331,7 @@ int main() {
                      }) {
                     screenWidth = geometry[0];
                     screenHeight = geometry[1];
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
                     *reinterpret_cast<float*>(manager.data() + 0x29e3c) = geometry[2];
 #else
                     *reinterpret_cast<float*>(root.data() + 0x594c) = geometry[2];
@@ -394,7 +394,7 @@ int main() {
                 }
                 verify(0, 0, 0);
             }
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
         isaac::runtime::local = 0;
         isaac::runtime::target = 1;
         managerPointer = 0;

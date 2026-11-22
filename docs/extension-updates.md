@@ -1,6 +1,6 @@
 # 原生扩展更新
 
-首次使用通用安装包，在游戏根目录安装共享加载器 `winmm.dll`，在 `isaac-lan/backends/j835/` 和 `isaac-lan/backends/j511/` 分别安装 `isaac_lan_probe.dll`。安装记录 `isaac-lan/installation.json` 保存所安装后端、完整游戏版本和各文件的相对路径与 SHA-256。加载器在每次启动时按正在运行的游戏镜像中的完整版本标记选择后端，再按该游戏版本和加载器的扩展版本基线筛选工坊更新。无法唯一识别游戏时，以兼容性错误结束启动。
+首次使用通用安装包，在游戏根目录安装共享加载器 `winmm.dll`，在 `isaac-lan/backends/repentance/` 和 `isaac-lan/backends/repentance_plus/` 分别安装 `isaac_lan_probe.dll`。安装记录 `isaac-lan/installation.json` 保存所安装后端、完整游戏版本和各文件的相对路径与 SHA-256。加载器在每次启动时按正在运行的游戏镜像中的完整版本标记选择后端，再按该游戏版本和加载器的扩展版本基线筛选工坊更新。无法唯一识别游戏时，以兼容性错误结束启动。
 
 ## 启动与来源
 
@@ -14,7 +14,7 @@
 
 ## 包契约
 
-[发布准备工具](https://github.com/BMingSY/isaac-lan/blob/main/tools/workshop_release.py)保留完整 ZIP，并从已经校验的 ZIP 提取两个游戏版本各自的主体 DLL 和清单。忏悔＋沿用 `isaac-lan-update/` 根目录，忏悔使用其下以完整游戏版本命名的子目录，例如 `1.7.9b.J835/`。加载器优先读取本游戏版本的子目录，读取根目录时也校验清单中的游戏版本。SHA-256、扩展版本和游戏版本来自各后端的 `payload.json`，不另行构建主体。缺少 `loader_abi` 的旧安装包只提供手动安装，不生成自动更新载荷。
+[发布准备工具](https://github.com/BMingSY/isaac-lan/blob/main/tools/workshop_release.py)保留完整 ZIP，并从已经校验的 ZIP 提取两个游戏版本各自的主体 DLL 和清单。工坊目录 `isaac-lan-update/` 下的 `repentance/` 和 `repentance_plus/` 分别对应忏悔和忏悔＋。加载器优先读取对应目录，并校验清单中的完整游戏构建号。遇到旧工坊包时，加载器依次查找完整构建号子目录和根目录。打包工具仅为能识别该构建的旧加载器在原位置保留同一份 DLL 和清单。SHA-256、扩展版本和游戏版本来自各后端的 `payload.json`，不另行构建主体。缺少 `loader_abi` 的旧安装包只提供手动安装，不生成自动更新载荷。
 
 [契约常量](https://github.com/BMingSY/isaac-lan/blob/main/src/core/extension_package.h)同时供 C++ 消费者和 [Python 打包组件](https://github.com/BMingSY/isaac-lan/blob/main/tools/extension_package.py)使用。`manifest.txt` 为 ASCII，依次包含以下五行，每行以换行结束；读取支持 LF 和 CRLF，不接受附加行：
 

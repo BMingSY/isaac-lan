@@ -4,7 +4,7 @@
 #include <iostream>
 #include <limits>
 #include <vector>
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 constexpr unsigned spriteOffset = 0x3c, extraOffset = 0xe18, layerStride = 0x9c;
 constexpr unsigned bodyVtable = 0x746348, tetherVtable = 0x73fffc;
 constexpr unsigned prepareEntry = 0x13c430, renderEntry = 0x26810;

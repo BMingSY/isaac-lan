@@ -5,13 +5,13 @@
 #include <algorithm>
 #include <utility>
 #include <vector>
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/entrypoints.h"
-namespace backend = isaac::engine::j835;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/entrypoints.h"
+namespace backend = isaac::engine::repentance;
 constexpr unsigned promptOffset = 0x1c33fc, selectionOffset = 0x80218, resultOffset = 0x8021c;
 #else
-#include "engine/versions/j511/entrypoints.h"
-namespace backend = isaac::engine::j511;
+#include "engine/versions/repentance_plus/entrypoints.h"
+namespace backend = isaac::engine::repentance_plus;
 constexpr unsigned promptOffset = 0x26c18, selectionOffset = 0x128, resultOffset = 0x12c;
 #endif
 namespace isaac::runtime {
@@ -152,7 +152,7 @@ int main() {
             field<bool>(object, 0x44) = true;
             field<int>(object, selectionOffset) = 0;
             field<int>(object, resultOffset) = 0;
-#ifndef ISAAC_LAN_TEST_J835
+#ifndef ISAAC_LAN_TEST_REPENTANCE
             field<bool>(object, 0x130) = true;
 #endif
         };
@@ -183,7 +183,7 @@ int main() {
             field<int>(object, selectionOffset) = selection;
             auto expected = game;
             auto* expectedPrompt = expected.data() + promptOffset;
-#ifndef ISAAC_LAN_TEST_J835
+#ifndef ISAAC_LAN_TEST_REPENTANCE
             field<bool>(expectedPrompt, 0x130) = false;
             expectState(true, selection, 0, true, true);
 #else
@@ -205,7 +205,7 @@ int main() {
         }
         reset();
         auto expected = game;
-#ifndef ISAAC_LAN_TEST_J835
+#ifndef ISAAC_LAN_TEST_REPENTANCE
         field<bool>(expected.data() + promptOffset, 0x130) = false;
 #endif
         for (int direction : {20, 21, 21, 20}) {
@@ -239,7 +239,7 @@ int main() {
             }
             const auto borrowed = animation;
             const bool active = phase != 1 && phase != 2;
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
             expectState(active, 0, 0, false, phase == 0);
 #else
             expectState(active, 0, 0, true, phase == 0);

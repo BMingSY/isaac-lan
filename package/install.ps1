@@ -5,6 +5,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $ownedFiles = @('winmm.dll', 'isaac_lan_probe.dll')
+$editions = @('repentance', 'repentance_plus')
 $win32Errors = @{ AccessDenied = 5; SharingViolation = 32; LockViolation = 33; HandleDiskFull = 39; FileExists = 80; DiskFull = 112; AlreadyExists = 183 }
 $failureCode = 'GAME_PATH'
 $installationLock = $null
@@ -106,6 +107,9 @@ function AssertManifest($Value, [string[]]$Names, [int]$ExpectedFormat = 1) {
 function BackendFile([string]$Backend) {
     return "isaac-lan/backends/$Backend/isaac_lan_probe.dll"
 }
+function InstalledBackend([string]$Name) {
+    return $Name -cin $editions -or $Name -cmatch '\Aj[0-9]+\z'
+}
 function InstalledFiles($Record) {
     if ((Property $Record 'format') -eq 2) {
         $backends = Property $Record 'backends'
@@ -114,7 +118,7 @@ function InstalledFiles($Record) {
         }
         $names = @('winmm.dll')
         foreach ($item in $backends.PSObject.Properties) {
-            if ($item.Name -cnotmatch '^j[0-9]+$' -or $item.Value -isnot [string] -or !$item.Value) {
+            if (!(InstalledBackend $item.Name) -or $item.Value -isnot [string] -or !$item.Value) {
                 throw 'Invalid installed backend.'
             }
             $names += BackendFile $item.Name
@@ -285,7 +289,7 @@ try {
         $details = @()
         if ($bundled) {
             $backends = $index.backends
-            if ($backends -isnot [array] -or !$backends.Count -or
+            if ($backends -isnot [array] -or $backends.Count -ne $editions.Count -or
                 @($backends | Select-Object -Unique).Count -ne $backends.Count) {
                 throw 'Invalid package backend list.'
             }
@@ -299,7 +303,7 @@ try {
             $directory = $PSScriptRoot
             $manifest = $index
             if ($bundled) {
-                if ($backend -isnot [string] -or $backend -cnotmatch '^j[0-9]+$') {
+                if ($backend -isnot [string] -or $backend -cnotin $editions) {
                     throw 'Invalid package backend.'
                 }
                 $directory = Join-Path $parent $backend
@@ -369,7 +373,7 @@ try {
             $backendDirectory = Get-Item -LiteralPath $backendRoot -Force
             if (!($backendDirectory.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
                 foreach ($child in Get-ChildItem -LiteralPath $backendRoot -Directory) {
-                    if ($child.Name -cmatch '^j[0-9]+$') {
+                    if (InstalledBackend $child.Name) {
                         $candidates += BackendFile $child.Name
                     }
                 }

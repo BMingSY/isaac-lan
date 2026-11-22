@@ -43,7 +43,7 @@ struct Bindings {
             unsigned id, type;
         } item;
     } layout;
-    // Repentance+ accepts an actor and always uses sticky, non-curse text. J835
+    // Repentance+ accepts an actor and always uses sticky, non-curse text. Repentance
     // accepts two style flags and inherits the actor from the active scope.
     bool customTextStyle;
     void* customTextDetour;

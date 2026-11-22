@@ -132,7 +132,7 @@ void writeContext(unsigned field, std::uint32_t value) {
         at<std::uint32_t>(game(), *offset) = value;
 }
 int controlRestoreState() {
-    // J835 has no J511 game-state gate: its native arrival always releases
+    // Repentance has no Repentance+ game-state gate: its native arrival always releases
     // controls and Game::End does not test that newer state machine.
     const auto offset = layout.game.controlRestoreGuard;
     return offset ? at<int>(game(), *offset) : 0;
@@ -474,7 +474,7 @@ using GetCardEx = int(__stdcall*)(unsigned, unsigned, unsigned, unsigned, bool);
 GetCardEx originalGetCardEx;
 int __stdcall getCardEx(unsigned seed, unsigned special, unsigned rune, unsigned suit,
                         bool nonCards) {
-    // J511 inlines its Tainted Lost lookup here rather than FindPlayerType.
+    // Repentance+ inlines its Tainted Lost lookup here rather than FindPlayerType.
     // Temporarily expose the team only when that shared trait is present.
     bool shared = false;
     {
@@ -521,7 +521,7 @@ struct DealChances {
 std::optional<DealChances> replicaDeals;
 using DealTotal = float(__attribute__((thiscall)) *)(void*);
 DealTotal originalDealTotal;
-// The internal J511 conditional Angel query returns in XMM0, unlike public
+// The internal Repentance+ conditional Angel query returns in XMM0, unlike public
 // Lua float getters (x87). Keep that ABI confined to this version backend.
 void* originalAngelShare;
 __attribute__((target("sse2"))) float queryAngelShare(void* query) {
@@ -1467,7 +1467,7 @@ void __attribute__((fastcall)) startRoomTransition(void* target, void*, int inde
         forward();
         return;
     }
-    // J835's Mom's Hand, Dogma and Death Certificate call this lower method
+    // Repentance's Mom's Hand, Dogma and Death Certificate call this lower method
     // directly. Its receiver is RoomTransition, while policy borrows Game.
     // Level::ChangeRoom still owns curse routing for these native requests.
     const auto caller = reinterpret_cast<Address>(__builtin_return_address(0)) - image;
@@ -1513,7 +1513,7 @@ void __cdecl rKey() {
         originalRKey();
         return;
     }
-    // J511's R Key timer calls TriggerRKey directly. Defer it until the room
+    // Repentance+'s R Key timer calls TriggerRKey directly. Defer it until the room
     // scope is gone so its native cleanup sees the complete co-op roster.
     if (!runtime::replica())
         pendingRestart = 1;
@@ -2308,7 +2308,7 @@ int actorLazarusUnpair(lua_State* L) {
         at<int>(twin, layout.player.controller) == at<int>(owner, layout.player.controller);
     if (valid) {
         // Birthright disappears into the ghost inventory. Native Update then
-        // demotes the listed twin to an owned, inactive backup (J511 0x382f0e),
+        // demotes the listed twin to an owned, inactive backup (Repentance+ 0x382f0e),
         // which ghost conversion/revival traverses and actorForm can relist.
         Scope scope(*room, all);
         using Unlist = void(__attribute__((thiscall))*)(void*, void*);
@@ -3099,7 +3099,7 @@ struct RoomTransfer {
                 // Replicas enter from a resolved room view, without
                 // Game::EnterDeathCertificate. Its five scalar origin
                 // fields are nevertheless consumed by ChangeRoom on
-                // return (J511 0x33fd70); preserve the native context.
+                // return (Repentance+ 0x33fd70); preserve the native context.
                 at<int>(game(), layout.game.deathCertificateRoom) = from->key.index;
                 at<unsigned char>(game(), layout.game.deathCertificateDimension) =
                     from->key.dimension;
@@ -3213,7 +3213,7 @@ struct RoomTransfer {
         }
         presentation::roomEntered(to->pointer, created);
         if (!created) {
-            // J511's native POST_NEW_ROOM dispatcher (callback 19). A
+            // Repentance+'s native POST_NEW_ROOM dispatcher (callback 19). A
             // resident room needs the entry notification without Init;
             // local Mod interfaces must not keep the departure descriptor.
             engine<PostUpdate>(bindings.entry.luaPostNewRoom)();
@@ -3441,7 +3441,7 @@ void finishFrame() {
             runtime::beginStage(request.same, request.animation, 0, 0, departureAnimations);
         // Replicas never simulate the chest collector or its grid markers.
         // Use the ordinary floor entry rather than waiting for local markers
-        // and re-evaluating the chest against replica unlocks/inventory. J511
+        // and re-evaluating the chest against replica unlocks/inventory. Repentance+
         // animation 1 plays Forget Me Now's collectible pickup, not a fade.
         const auto animation = runtime::replica() && request.animation == 4 ? 0 : request.animation;
         logger("floor_transaction=BEGIN same=" + std::to_string(request.same) +

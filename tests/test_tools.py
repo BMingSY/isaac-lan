@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 
 from testing.gameplay import CASES, CHECKPOINTS, build as build_suite
 from build_package import build
-from game_profiles import source_profile
+from game_profiles import build_profile, loader_versions, source_profile
 from build_release import release
 from check_release import FILES, LEGACY_FILES, check
 from extension_package import prepare_update
@@ -110,12 +110,12 @@ class ProgressFixtureTests(unittest.TestCase):
         self.assertEqual(checksum(bytes(range(256))), 0xE3797CD9)
 
     def test_original_save_preserves_opaque_tail_and_uses_its_own_marker(self):
-        layout = LAYOUTS["j835"]
+        layout = LAYOUTS["repentance"]
         data = layout.magic + struct.pack("<4I", 4, 1, 638, 638) + bytes(638)
         data += struct.pack("<3I", 2, 1984, 496) + bytes(1984) + bytes(range(200))
         source = data + struct.pack("<I", checksum(data[16:]))
         for host in (True, False):
-            result = patch(source, backend="j835", host=host, endings=True)
+            result = patch(source, backend="repentance", host=host, endings=True)
             self.assertEqual(result[32 + 637], int(host))
             self.assertEqual(
                 struct.unpack_from("<I", result, 32 + 638 + 12 + 495 * 4)[0], 98765 if host else 321
@@ -123,9 +123,9 @@ class ProgressFixtureTests(unittest.TestCase):
             self.assertEqual(source[-204:-4], result[-204:-4])
             self.assertEqual(len(source), len(result))
         with self.assertRaisesRegex(ValueError, "selected game build"):
-            patch(source, backend="j511", host=True)
+            patch(source, backend="repentance_plus", host=True)
         with self.assertRaisesRegex(ValueError, "selected game build"):
-            patch(self.baseline(), backend="j835", host=True)
+            patch(self.baseline(), backend="repentance", host=True)
 
     def test_completion_fixture_keeps_distinct_personal_and_online_marks(self):
         source = self.baseline()
@@ -311,12 +311,17 @@ class PackagingTests(unittest.TestCase):
         (self.build / "CMakeCache.txt").write_text(f"CMAKE_STRIP:FILEPATH={self.strip_tool}\n")
         self.vanilla = self.root / "vanilla"
         self.vanilla.mkdir()
-        (self.vanilla / "game-profile.json").write_text(json.dumps(source_profile("j835")))
+        (self.vanilla / "game-profile.json").write_text(json.dumps(source_profile("repentance")))
         (self.vanilla / "CMakeCache.txt").write_text(f"CMAKE_STRIP:FILEPATH={self.strip_tool}\n")
         for name in BINARIES:
-            (self.vanilla / name).write_bytes(b"fixture:j835-" + name.encode())
+            (self.vanilla / name).write_bytes(b"fixture:repentance-" + name.encode())
         self.builds = [self.vanilla, self.build]
+        self.write_loader_versions()
         self.tag = "v" + (ROOT / "VERSION").read_text().strip()
+
+    def write_loader_versions(self):
+        targets = loader_versions(build_profile(directory) for directory in self.builds)
+        (self.build / "loader-versions.json").write_text(json.dumps(targets))
 
     def strip_binary(self, command, *, check):
         self.assertTrue(check)
@@ -325,9 +330,9 @@ class PackagingTests(unittest.TestCase):
         self.assertNotEqual(destination.parent, self.build)
         destination.write_bytes(destination.read_bytes().removeprefix(b"fixture:"))
 
-    def archive(self):
+    def archive(self, directory="dist"):
         with mock_patch("build_package.subprocess.run", side_effect=self.strip_binary):
-            result = release(self.builds, self.root / "dist", self.tag)
+            result = release(self.builds, self.root / directory, self.tag)
         return Path(result["archive"])
 
     def rewrite_archive(self, archive, transform):
@@ -349,7 +354,10 @@ class PackagingTests(unittest.TestCase):
         output = self.root / "package"
         payload = build(self.build, output)
         self.assertEqual(payload["format"], 1)
-        self.assertEqual(payload["game_build"], "1.9.7.19.J511")
+        self.assertEqual(
+            payload["game_build"],
+            json.loads((self.build / "game-profile.json").read_text())["game_build"],
+        )
         self.assertEqual(payload["extension_version"], self.tag[1:])
         self.assertEqual(json.loads((output / "payload.json").read_text()), payload)
         self.assertEqual(
@@ -406,7 +414,7 @@ class PackagingTests(unittest.TestCase):
         with ZipFile(archive) as zipped:
             root = archive.stem + "/"
             index = json.loads(zipped.read(root + "payload.json"))
-            self.assertEqual(index, {"format": 3, "backends": ["j511", "j835"]})
+            self.assertEqual(index, {"format": 3, "backends": ["repentance_plus", "repentance"]})
             for backend in index["backends"]:
                 prefix = root + f"backends/{backend}/"
                 manifest = json.loads(zipped.read(prefix + "payload.json"))
@@ -414,15 +422,18 @@ class PackagingTests(unittest.TestCase):
                 self.assertEqual(manifest["game_build"], source_profile(backend)["game_build"])
                 for name in BINARIES:
                     source = (
-                        self.build if backend == "j511" or name == "winmm.dll" else self.vanilla
+                        self.build
+                        if backend == "repentance_plus" or name == "winmm.dll"
+                        else self.vanilla
                     )
                     self.assertEqual(
                         zipped.read((root if name == "winmm.dll" else prefix) + name),
                         (source / name).read_bytes().removeprefix(b"fixture:"),
                     )
-            wrong = zipped.read(root + "backends/j835/payload.json")
+            wrong = zipped.read(root + "backends/repentance/payload.json")
         self.rewrite_archive(
-            archive, lambda files: files.update({root + "backends/j511/payload.json": wrong})
+            archive,
+            lambda files: files.update({root + "backends/repentance_plus/payload.json": wrong}),
         )
         with self.assertRaisesRegex(ValueError, "manifest"):
             check(archive, self.tag)
@@ -433,26 +444,62 @@ class PackagingTests(unittest.TestCase):
                 release(builds, self.root / "dist", self.tag)
             self.assertFalse(any((self.root / "dist").glob("*.zip*")))
 
+    def test_bundle_refuses_a_loader_built_for_a_different_patch(self):
+        for field, value in (("game_build", "1.7.9b.J999"), ("version_rva", 12345)):
+            with self.subTest(field=field):
+                registry = self.build / "loader-versions.json"
+                targets = json.loads(registry.read_text())
+                targets["repentance"][field] = value
+                registry.write_text(json.dumps(targets))
+                with self.assertRaisesRegex(ValueError, "Rebuild the shared loader"):
+                    self.archive()
+                self.assertFalse(any((self.root / "dist").glob("*.zip*")))
+                self.write_loader_versions()
+
     def test_workshop_uses_both_release_dlls(self):
         archive = self.archive()
         content = self.root / "workshop"
         prepare_update(archive, content)
         root = content / "isaac-lan-update"
         with ZipFile(archive) as zipped:
-            for backend in ("j511", "j835"):
+            for backend in ("repentance_plus", "repentance"):
                 build = source_profile(backend)["game_build"]
-                destination = root if backend == "j511" else root / build
+                directory = root / backend
                 dll = zipped.read(archive.stem + f"/backends/{backend}/isaac_lan_probe.dll")
-                self.assertEqual((destination / "isaac_lan_probe.dll").read_bytes(), dll)
-                manifest = (destination / "manifest.txt").read_text().splitlines()
+                self.assertEqual((directory / "isaac_lan_probe.dll").read_bytes(), dll)
+                manifest = (directory / "manifest.txt").read_text().splitlines()
                 self.assertIn("game_build=" + build, manifest)
                 self.assertIn("sha256=" + hashlib.sha256(dll).hexdigest(), manifest)
+
+    def test_workshop_legacy_paths_are_limited_to_the_loaders_that_use_them(self):
+        for build, marker in ((self.build, "1.9.7.19.J510"), (self.vanilla, "1.7.9b.J835")):
+            snapshot = build / "game-profile.json"
+            profile = json.loads(snapshot.read_text())
+            profile["game_build"] = marker
+            snapshot.write_text(json.dumps(profile))
+        self.write_loader_versions()
+        archive = self.archive()
+        root = self.root / "old" / "isaac-lan-update"
+        prepare_update(archive, root.parent)
+        for edition, legacy in (("repentance_plus", root), ("repentance", root / "1.7.9b.J835")):
+            for name in ("manifest.txt", "isaac_lan_probe.dll"):
+                self.assertEqual((root / edition / name).read_bytes(), (legacy / name).read_bytes())
+        for build, marker in ((self.build, "1.9.7.20.J999"), (self.vanilla, "1.7.9b.J998")):
+            snapshot = build / "game-profile.json"
+            profile = json.loads(snapshot.read_text())
+            profile["game_build"] = marker
+            snapshot.write_text(json.dumps(profile))
+        self.write_loader_versions()
+        archive = self.archive("next-dist")
+        root = self.root / "next" / "isaac-lan-update"
+        prepare_update(archive, root.parent)
+        self.assertEqual({path.name for path in root.iterdir()}, {"repentance", "repentance_plus"})
 
     def test_release_strips_copies_before_hashing_and_preserves_build(self):
         originals = {name: (self.build / name).read_bytes() for name in BINARIES}
         archive = self.archive()
         with ZipFile(archive) as zipped:
-            prefix = archive.stem + "/backends/j511/"
+            prefix = archive.stem + "/backends/repentance_plus/"
             payload = json.loads(zipped.read(prefix + "payload.json"))
             for name, original in originals.items():
                 final = zipped.read((archive.stem + "/" if name == "winmm.dll" else prefix) + name)
@@ -536,7 +583,7 @@ class PackagingTests(unittest.TestCase):
 
     def test_check_rejects_manifest_changes(self):
         archive = self.archive()
-        name = archive.stem + "/backends/j511/payload.json"
+        name = archive.stem + "/backends/repentance_plus/payload.json"
         with ZipFile(archive) as zipped:
             original = json.loads(zipped.read(name))
         for field, wrong in (
@@ -556,7 +603,7 @@ class PackagingTests(unittest.TestCase):
 
     def test_check_rejects_binary_tampering(self):
         archive = self.archive()
-        name = archive.stem + "/backends/j511/isaac_lan_check.exe"
+        name = archive.stem + "/backends/repentance_plus/isaac_lan_check.exe"
         self.rewrite_archive(archive, lambda files: files.update({name: b"tampered"}))
         with self.assertRaisesRegex(ValueError, "file hash"):
             check(archive, self.tag)

@@ -36,7 +36,7 @@ def fixture_profile():
 
 
 def test_generated_profile_and_header_use_the_selected_backend(tmp_path):
-    profile = generate("j511", tmp_path)
+    profile = generate("repentance_plus", tmp_path)
     assert build_profile(tmp_path) == source_profile() == profile
     assert profile["signatures"] and profile["capabilities"]["native_emotes"]
     # Compile the generated descriptor and observe its public values and catalog.
@@ -81,10 +81,13 @@ int main() {
     ]
 
 
-def test_j511_manager_fields_match_checked_game_instructions(tmp_path):
-    signatures = {entry["name"]: entry for entry in source_profile("j511")["signatures"]}
+def test_repentance_plus_manager_fields_match_checked_game_instructions(tmp_path):
+    signatures = {entry["name"]: entry for entry in source_profile("repentance_plus")["signatures"]}
     source = tmp_path / "manager.cpp"
-    lines = ['#include "engine/versions/j511/layout.h"', "using namespace isaac::engine::j511;"]
+    lines = [
+        '#include "engine/versions/repentance_plus/layout.h"',
+        "using namespace isaac::engine::repentance_plus;",
+    ]
     for signature, start, field in (
         ("Manager.CharacterConfigVector", 2, "layout::manager::characterConfigs"),
         ("Manager.CharacterConfigVector", 8, "layout::manager::characterConfigs + 4"),
@@ -105,7 +108,7 @@ def test_j511_manager_fields_match_checked_game_instructions(tmp_path):
     )
 
 
-@pytest.mark.parametrize("backend", ["j835", "j511"])
+@pytest.mark.parametrize("backend", ["repentance", "repentance_plus"])
 def test_lab_observations_read_the_selected_backend_layout(backend, tmp_path):
     directory = ROOT / "src/engine/versions" / backend
     values = dict(
@@ -178,7 +181,7 @@ def test_lab_uses_its_profile_and_refuses_an_unaudited_progress_fixture(tmp_path
     with pytest.raises(ValueError, match="No audited progress fixture"):
         prepare(tmp_path, host=True)
     assert save.read_bytes() == b"preserve another version's save"
-    # A malformed explicit profile must not fall back to J511.
+    # A malformed explicit profile must not fall back to Repentance+.
     (tmp_path / "game-profile.json").write_text("{}")
     with pytest.raises(ValueError):
         lab_profile(tmp_path)
@@ -193,10 +196,14 @@ def test_profile_cannot_escape_the_owned_documents_directory(directory):
 
 
 def test_unknown_backend_is_rejected_before_generating_files(tmp_path):
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(ValueError, match="Unsupported game backend"):
         generate("unimplemented", tmp_path / "out")
     assert not (tmp_path / "out").exists()
-    for name in ("../j511", "j511/../j511", "j511;main"):
+    for name in (
+        "../repentance_plus",
+        "repentance_plus/../repentance_plus",
+        "repentance_plus;main",
+    ):
         with pytest.raises(ValueError):
             source_profile(name)
 
@@ -231,9 +238,34 @@ def test_legacy_lab_snapshot_still_identifies_its_documents_directory(tmp_path):
     assert profile_directory(tmp_path) == tmp_path / "profile/Documents/My Games/Isaac Fixture"
 
 
+def test_numbered_lab_snapshot_only_reuses_an_exact_supported_build(tmp_path, monkeypatch):
+    edition = "repentance_plus"
+    snapshot = tmp_path / "game-profile.json"
+    profile = backend_metadata(edition)
+    supported = "1.9.7.19.J511"
+    monkeypatch.setattr("game_profiles.backend_metadata", lambda _: {"game_build": supported})
+    monkeypatch.setattr("progress_fixture.backend_metadata", lambda _: {"game_build": supported})
+    profile["game_build"] = supported
+    profile["backend"] = profile["testing"]["progress_fixture"] = "j511"
+    snapshot.write_text(json.dumps(profile))
+    assert lab_profile(tmp_path)["backend"] == edition
+    assert lab_profile(tmp_path)["testing"]["progress_fixture"] == edition
+    profile["backend"] = profile["testing"]["progress_fixture"] = "j510"
+    profile["game_build"] = "1.9.7.19.J510"
+    snapshot.write_text(json.dumps(profile))
+    assert lab_profile(tmp_path)["backend"] == "j510"
+    (tmp_path / ".isaac-lan-lab").touch()
+    with pytest.raises(ValueError, match="No audited progress fixture"):
+        prepare(tmp_path, host=True)
+    profile["backend"] = profile["testing"]["progress_fixture"] = edition
+    snapshot.write_text(json.dumps(profile))
+    with pytest.raises(ValueError, match="No audited progress fixture"):
+        prepare(tmp_path, host=True)
+
+
 def test_repentance_backend_generates_original_capabilities(tmp_path):
-    metadata = backend_metadata("j835")
-    assert metadata["game_build"] == "1.7.9b.J835"
+    metadata = backend_metadata("repentance")
+    assert metadata["game_name"] == "Repentance"
     assert metadata["documents_directory"] == "Binding of Isaac Repentance"
     assert metadata["capabilities"]["native_emotes"] is False
     assert metadata["presentation"]["native_lobby"] is False
@@ -242,7 +274,7 @@ def test_repentance_backend_generates_original_capabilities(tmp_path):
         "resources-dlc3.zh/font/TeamMeatFontExtended12.fnt",
         "resources-dlc3.zh/font/TeamMeatFontExtended16Bold.fnt",
     }
-    selected = generate("j835", tmp_path / "output")
+    selected = generate("repentance", tmp_path / "output")
     assert selected["signatures"]
     build = tmp_path / "build"
     subprocess.run(
@@ -252,7 +284,7 @@ def test_repentance_backend_generates_original_capabilities(tmp_path):
             str(ROOT),
             "-B",
             str(build),
-            "-DISAAC_LAN_BACKEND=j835",
+            "-DISAAC_LAN_BACKEND=repentance",
             "-DISAAC_LAN_BUILD_ENGINE=OFF",
             "-DBUILD_TESTING=OFF",
         ],
@@ -264,32 +296,31 @@ def test_repentance_backend_generates_original_capabilities(tmp_path):
 
 
 def test_metadata_alone_cannot_enable_an_incomplete_native_backend(tmp_path):
-    metadata = backend_metadata("j835")
-    metadata["backend"] = "fixture"
-    directory = tmp_path / "src/engine/versions/fixture"
+    metadata = backend_metadata("repentance")
+    directory = tmp_path / "src/engine/versions/repentance"
     directory.mkdir(parents=True)
     (directory / "profile.json").write_text(json.dumps(metadata))
-    with pytest.raises(ValueError, match="Native backend is not implemented: fixture"):
-        source_profile("fixture", root=tmp_path)
+    with pytest.raises(ValueError, match="Native backend is not implemented: repentance"):
+        source_profile("repentance", root=tmp_path)
     (tmp_path / "CMakeLists.txt").write_text(
         "cmake_minimum_required(VERSION 3.20)\nproject(backend_fixture NONE)\n"
         f'include("{ROOT / "cmake/Backend.cmake"}")\n'
     )
     build = tmp_path / "build"
     result = subprocess.run(
-        ["cmake", "-S", str(tmp_path), "-B", str(build), "-DISAAC_LAN_BACKEND=fixture"],
+        ["cmake", "-S", str(tmp_path), "-B", str(build), "-DISAAC_LAN_BACKEND=repentance"],
         capture_output=True,
         text=True,
     )
     assert result.returncode != 0
-    assert "Native backend fixture has metadata but no implementation" in result.stderr
+    assert "Native backend repentance has metadata but no implementation" in result.stderr
     assert not (build / "game-profile.json").exists()
 
 
 def test_resource_fixtures_match_each_backends_metadata():
     # Execute the Lua fixture and compare values; the fixture's version branch
     # must not drift from the metadata that the native bridge actually exports.
-    for backend, vanilla in [("j511", False), ("j835", True)]:
+    for backend, vanilla in [("repentance_plus", False), ("repentance", True)]:
         script = f'''
 local r = dofile("{ROOT}/tests/fixtures/presentation_assets.lua")({str(vanilla).lower()})
 print(tostring(r.native_lobby))

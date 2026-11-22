@@ -122,7 +122,7 @@ python3 tools/run_projectile_pressure.py \
 
 `campaign` 使用固定路线、Boss 房定位、保护和伤害加速，原版战斗、拾取、出口、换层及羔羊结局仍实际执行；不代表随机无辅助通关。默认不录画面，按需 `--record`。隔离资料逐文件备份／恢复，进程非零退出仍判整轮失败。
 
-前置解锁由 [`tools/progress_fixture.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/progress_fixture.py) 在启动前写入隔离存档，核对 J511 文件头、区段和校验算法，以临时文件原子替换；必须已有原版基线；角色菜单初始化后禁止修改内存解锁表。
+前置解锁由 [`tools/progress_fixture.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/progress_fixture.py) 在启动前写入隔离存档，核对忏悔＋文件头、区段和校验算法，以临时文件原子替换；必须已有原版基线；角色菜单初始化后禁止修改内存解锁表。
 
 ## 原生异常与堆检查
 

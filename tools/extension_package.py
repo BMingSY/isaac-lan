@@ -7,9 +7,9 @@ import re
 from zipfile import ZipFile
 
 if __package__:
-    from .game_profiles import DEFAULT_BACKEND, bundle_backends
+    from .game_profiles import DEFAULT_BACKEND, LEGACY_BACKENDS, LEGACY_BUILDS, bundle_backends
 else:
-    from game_profiles import DEFAULT_BACKEND, bundle_backends
+    from game_profiles import DEFAULT_BACKEND, LEGACY_BACKENDS, LEGACY_BUILDS, bundle_backends
 
 ROOT = Path(__file__).resolve().parents[1]
 _HEADER = (ROOT / "src/core/extension_package.h").read_text(encoding="utf-8")
@@ -51,19 +51,25 @@ def prepare_update(archive, content):
         prefix = archive.stem + "/"
         index = json.loads(zipped.read(prefix + "payload.json"))
         if index.get("format") == 3:
-            for backend in bundle_backends(index):
+            for backend in bundle_backends(index, allow_legacy=True):
                 directory = prefix + f"backends/{backend}/"
                 payload = json.loads(zipped.read(directory + "payload.json"))
                 if payload.get("backend") != backend:
                     raise ValueError("Update backend differs from release manifest")
                 files = update_files(zipped, directory, payload)
-                # Existing Repentance+ loaders read the root of the Workshop update.
-                destination = root if backend == DEFAULT_BACKEND else root / payload["game_build"]
-                updates[destination] = files
+                edition = LEGACY_BACKENDS.get(backend, backend)
+                updates[root / edition] = files
+                # Older loaders can only address their original build or the flat update.
+                build = payload["game_build"]
+                if LEGACY_BUILDS.get(build) == edition:
+                    updates[root if edition == DEFAULT_BACKEND else root / build] = files
         elif "loader_abi" in index:
             updates[root] = update_files(zipped, prefix, index)
+    if updates:
+        root.mkdir(parents=True)
     for destination, (dll, manifest) in updates.items():
-        destination.mkdir(parents=True)
+        if destination != root:
+            destination.mkdir()
         (destination / constant("payloadFile")).write_bytes(dll)
         (destination / constant("manifestFile")).write_text(
             manifest, encoding="ascii", newline="\n"
