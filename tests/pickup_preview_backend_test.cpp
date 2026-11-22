@@ -1,13 +1,13 @@
 #include "test_support.h"
 #include "engine/pickup_preview.h"
 #include "engine/rooms.h"
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/entrypoints.h"
-namespace backend = isaac::engine::j835;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/entrypoints.h"
+namespace backend = isaac::engine::repentance;
 constexpr unsigned roomOffset = 0x18190, existsOffset = 0x16a;
 #else
-#include "engine/versions/j510/entrypoints.h"
-namespace backend = isaac::engine::j510;
+#include "engine/versions/repentance_plus/entrypoints.h"
+namespace backend = isaac::engine::repentance_plus;
 constexpr unsigned roomOffset = 0x18300, existsOffset = 0x172;
 #endif
 #include <MinHook.h>

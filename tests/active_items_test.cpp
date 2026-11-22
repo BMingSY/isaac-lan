@@ -1,12 +1,12 @@
 #include "test_support.h"
-#include "engine/versions/j510/active_items.h"
+#include "engine/versions/repentance_plus/active_items.h"
 #include <cstdio>
 #include <vector>
 
 using isaac::engine::native_active_items::field;
 int main() {
     try {
-        using namespace isaac::engine::j510;
+        using namespace isaac::engine::repentance_plus;
         using namespace active_items;
         std::vector<std::uint8_t> playerBytes(0x2200, 0), gameBytes(0x24000, 0xa5);
         const auto player = reinterpret_cast<Address>(playerBytes.data());

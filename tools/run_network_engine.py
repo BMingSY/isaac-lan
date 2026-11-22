@@ -485,7 +485,7 @@ def main():
         if action == "save-exit":
             control(pid, "Keys", "{ESC}")
             time.sleep(0.3)
-            exit_key = "{UP}" if selected_profile["backend"] == "j510" else "{DOWN}"
+            exit_key = "{UP}" if selected_profile["backend"] == "repentance_plus" else "{DOWN}"
             for key in (exit_key, "{ENTER}"):
                 control(pid, "Keys", key)
                 time.sleep(0.2)

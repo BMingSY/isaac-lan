@@ -79,12 +79,12 @@ jobs:
             -DIMGUI_SOURCE_DIR="$PWD/.deps/imgui" \
             -DMINHOOK_SOURCE_DIR="$PWD/.deps/minhook"
           cmake --build build-win32 --parallel "$(nproc)"
-          cmake -S . -B build-j835 -G Ninja \
+          cmake -S . -B build-repentance -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-x86.cmake \
-            -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DISAAC_LAN_BACKEND=j835 \
+            -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DISAAC_LAN_BACKEND=repentance \
             -DIMGUI_SOURCE_DIR="$PWD/.deps/imgui" \
             -DMINHOOK_SOURCE_DIR="$PWD/.deps/minhook"
-          cmake --build build-j835 --target isaac_lan_probe isaac_lan_loader isaac_lan_check --parallel "$(nproc)"
+          cmake --build build-repentance --target isaac_lan_probe isaac_lan_loader isaac_lan_check --parallel "$(nproc)"
       - name: Report compiler cache
         if: always()
         run: ccache --show-stats
@@ -92,7 +92,7 @@ jobs:
         env:
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
         run: |
-          python3 tools/build_release.py --build build-win32 --build build-j835 --output dist --tag "$RELEASE_TAG"
+          python3 tools/build_release.py --build build-win32 --build build-repentance --output dist --tag "$RELEASE_TAG"
           .deps/packaging/bin/python tools/check_release.py \
             "dist/Isaac-LAN-$RELEASE_TAG-windows-x86.zip" --tag "$RELEASE_TAG" --require-stripped
           python3 tools/bundle_ctest.py export --build build-win32 --output ci
@@ -113,9 +113,9 @@ jobs:
             build-win32/winmm.dll
             build-win32/isaac_lan_probe.dll
             build-win32/isaac_lan_check.exe
-            build-j835/winmm.dll
-            build-j835/isaac_lan_probe.dll
-            build-j835/isaac_lan_check.exe
+            build-repentance/winmm.dll
+            build-repentance/isaac_lan_probe.dll
+            build-repentance/isaac_lan_check.exe
           if-no-files-found: error
           retention-days: 7
 

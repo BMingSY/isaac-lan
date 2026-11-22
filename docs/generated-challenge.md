@@ -1,20 +1,20 @@
 # 原版错误道具挑战环境
 
-[联机挑战45](https://github.com/BMingSY/isaac-lan/blob/main/docs/lan-challenges.md#当前规则1006-挑战45)使用 J510 原生 DELETE THIS 的房间外观和路线判断。挑战目录与运行层持有规则身份，后端只接收布尔启用回调；不修改普通单人挑战或联机选角。
+[联机挑战45](https://github.com/BMingSY/isaac-lan/blob/main/docs/lan-challenges.md#当前规则1006-挑战45)使用忏悔＋原生 DELETE THIS 的房间外观和路线判断。挑战目录与运行层持有规则身份，后端只接收布尔启用回调；不修改普通单人挑战或联机选角。
 
-## J510 接口与校验
+## 忏悔＋接口与校验
 
-适用游戏 SHA-256：`114673659401da17e55bd44b2c9f1cb7d40ce5fd31e15690588661a8a7c60ff6`。
+适用游戏 SHA-256：`024ed7300fbed8b65afa1fdd1e36f20b446ede65dcdda0c8375d0423aa9f078d`。
 
-入口与签名分别注册在 [entrypoints.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j510/entrypoints.h) 和 [signatures.inc](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j510/signatures.inc)，仅对通过版本及指令校验的映像安装。[generated_challenge.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j510/generated_challenge.cpp)在以下五处原生 `Game.Challenge == 45` 比较中选择相等分支，后续随机选择仍使用原生逻辑和楼层种子：
+入口与签名分别注册在 [entrypoints.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance_plus/entrypoints.h) 和 [signatures.inc](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance_plus/signatures.inc)，仅对通过版本及指令校验的映像安装。[generated_challenge.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance_plus/generated_challenge.cpp)在以下五处原生 `Game.Challenge == 45` 比较中选择相等分支，后续随机选择仍使用原生逻辑和楼层种子：
 
 | 能力 | RVA | 游戏指针寄存器 |
 | --- | --- | --- |
 | 网格样式 | `0x31abb7` | EDX |
 | 岩石样式 | `0x321529` | EDX |
-| 背景类型 | `0x3f3538` | EDI |
-| 背景样式 | `0x3f99af` | EDX |
-| 房间配置外观 | `0x5a7eca` | EDI |
+| 背景类型 | `0x3f3518` | EDI |
+| 背景样式 | `0x3f999f` | EDX |
+| 房间配置外观 | `0x5a7d1a` | EDI |
 
 比较长度为 7 字节，续接点为比较之后。包装保留通用寄存器、XMM0–7 和非算术标志；启用时仅替换比较结果对应的算术标志，关闭时保持原生比较。回调不分配或持有游戏对象。
 

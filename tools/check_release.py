@@ -10,7 +10,14 @@ from zipfile import ZipFile
 
 import pefile
 from extension_package import LOADER_ABI
-from game_profiles import DEFAULT_BACKEND, RELEASE_BACKENDS, bundle_backends, release_name, validate
+from game_profiles import (
+    DEFAULT_BACKEND,
+    LEGACY_BACKENDS,
+    RELEASE_BACKENDS,
+    bundle_backends,
+    release_name,
+    validate,
+)
 
 
 BINARIES = {"winmm.dll", "isaac_lan_probe.dll", "isaac_lan_check.exe"}
@@ -30,15 +37,21 @@ SHARED_FILES = {
     "licenses/ENet-LICENSE.txt",
 }
 LEGACY_FILES = SHARED_FILES | PAYLOAD_FILES
-FILES = (
-    SHARED_FILES
-    | {"winmm.dll"}
-    | {
-        f"backends/{backend}/{name}"
-        for backend in RELEASE_BACKENDS
-        for name in PAYLOAD_FILES - {"winmm.dll"}
-    }
-)
+
+
+def bundle_files(backends):
+    return (
+        SHARED_FILES
+        | {"winmm.dll"}
+        | {
+            f"backends/{backend}/{name}"
+            for backend in backends
+            for name in PAYLOAD_FILES - {"winmm.dll"}
+        }
+    )
+
+
+FILES = bundle_files(RELEASE_BACKENDS)
 SYSTEM_DLLS = {
     "bcrypt.dll",
     "dwmapi.dll",
@@ -139,7 +152,10 @@ def check(archive, tag, *, require_stripped=False, allow_legacy=False):
     if not re.fullmatch(r"v\d+\.\d+\.\d+", tag):
         raise ValueError("Expected a version tag such as v0.1.0")
     standard = release_name(tag) + ".zip"
-    legacy_names = {standard: DEFAULT_BACKEND, f"Isaac-LAN-{tag}-j835-windows-x86.zip": "j835"}
+    legacy_names = {
+        standard: DEFAULT_BACKEND,
+        f"Isaac-LAN-{tag}-j835-windows-x86.zip": "repentance",
+    }
     if archive.name != standard and not (allow_legacy and archive.name in legacy_names):
         raise ValueError("Unexpected release archive name")
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
@@ -150,18 +166,27 @@ def check(archive, tag, *, require_stripped=False, allow_legacy=False):
     with ZipFile(archive) as zipped:
         names = zipped.namelist()
         legacy = allow_legacy and set(names) == {root + name for name in LEGACY_FILES}
-        expected = LEGACY_FILES if legacy else FILES
+        if root + "payload.json" not in names:
+            raise ValueError("Release archive contains missing or unexpected files")
+        index = json.loads(zipped.read(root + "payload.json"))
+        if legacy:
+            backend = index.get("backend")
+            if (
+                not isinstance(backend, str)
+                or LEGACY_BACKENDS.get(backend, backend) != legacy_names[archive.name]
+            ):
+                raise ValueError("Historical release backend differs from archive name")
+            expected, directories = LEGACY_FILES, {backend: root}
+        else:
+            if archive.name != standard:
+                raise ValueError("Unexpected release archive name for a bundle")
+            backends = bundle_backends(index, allow_legacy=allow_legacy)
+            expected = bundle_files(backends)
+            directories = {b: root + f"backends/{b}/" for b in backends}
         if len(names) != len(expected) or set(names) != {root + name for name in expected}:
             raise ValueError("Release archive contains missing or unexpected files")
         if zipped.testzip() is not None:
             raise ValueError("Release archive is damaged")
-        if legacy:
-            directories = {legacy_names[archive.name]: root}
-        else:
-            if archive.name != standard:
-                raise ValueError("Unexpected release archive name for a bundle")
-            backends = bundle_backends(json.loads(zipped.read(root + "payload.json")))
-            directories = {b: root + f"backends/{b}/" for b in backends}
         imports = {
             backend: check_payload(zipped, root, prefix, backend, tag, require_stripped, not legacy)
             for backend, prefix in directories.items()
@@ -179,7 +204,7 @@ if __name__ == "__main__":
     parser.add_argument("--tag", required=True)
     parser.add_argument("--require-stripped", action="store_true")
     parser.add_argument(
-        "--allow-legacy", action="store_true", help="Also accept historical single-backend archives"
+        "--allow-legacy", action="store_true", help="Also accept historical release layouts"
     )
     args = parser.parse_args()
     print(

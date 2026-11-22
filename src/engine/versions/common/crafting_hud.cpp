@@ -104,7 +104,7 @@ __attribute__((naked)) void isaac_lan_crafting_hud_thunk() {
                          "jmp *_isaac_lan_crafting_hud_original\n\t1:\n\t" RESTORE_HUD_REGISTERS
                          "ret $4");
 }
-// J510: ECX=PlayerHUD, XMM3=scale; Vector*, layout and alpha occupy 12 stack
+// Repentance+: ECX=PlayerHUD, XMM3=scale; Vector*, layout and alpha occupy 12 stack
 // bytes. Keep the local actor's cards, pills and active-item icon. Native 3/4
 // player layouts move this whole region into a small HUD; draw the full native
 // bottom-right layout instead, without changing the caller's Vector or HUD.
@@ -139,7 +139,7 @@ __attribute__((naked)) void isaac_lan_crafting_pocket_thunk() {
                                             "2:\n\taddl $16, %esp\n\t" RESTORE_HUD_REGISTERS
                                             "jmp *_isaac_lan_crafting_pocket_original");
 }
-// J835: ECX=PlayerHUD, XMM2=signed scale, XMM3=alpha, one Vector*
+// Repentance: ECX=PlayerHUD, XMM2=signed scale, XMM3=alpha, one Vector*
 // stack argument, ret 4. The sign cancels native HUD-index mirroring when the
 // local pocket is placed at the full bottom-right anchor. Keep alpha intact.
 __attribute__((naked)) void isaac_lan_crafting_pocket_registers_thunk() {

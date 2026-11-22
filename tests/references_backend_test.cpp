@@ -6,15 +6,16 @@
 #include <map>
 #include <set>
 #include <vector>
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 constexpr unsigned spriteOffset = 0x3c, cartOffset = 0x32c, heldOffset = 0x1358,
                    bombsOffset = 0xb40;
 constexpr unsigned assignEntry = 0x28cf00, resizeEntry = 0x3da10;
 #else
-#include "engine/versions/j510/entrypoints.h"
+#include "engine/versions/repentance_plus/entrypoints.h"
 constexpr unsigned spriteOffset = 0x48, cartOffset = 0x3d4, heldOffset = 0x1414,
                    bombsOffset = 0xbf0;
-constexpr unsigned assignEntry = isaac::engine::j510::entry::entityPtrAssign, resizeEntry = 0x50010;
+constexpr unsigned assignEntry = isaac::engine::repentance_plus::entry::entityPtrAssign,
+                   resizeEntry = 0x50010;
 #endif
 struct lua_State {
     int top = 1;

@@ -56,8 +56,9 @@ Extension load(const std::filesystem::path& game, std::string_view baselineVersi
         fallback = game / updates::payloadFile;
     updates::Selection selection{{fallback}, {}, {}};
     if (!labGame(game)) {
-        selection = updates::select(game, updates::workshopSource(game), baselineVersion,
-                                    version->version, updates::fileHash, fallback);
+        selection =
+            updates::select(game, updates::workshopSource(game), baselineVersion, version->backend,
+                            version->version, updates::fileHash, fallback);
     }
     if (!selection.detail.empty())
         OutputDebugStringA(("Isaac LAN update: " + selection.detail + "\n").c_str());

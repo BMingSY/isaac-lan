@@ -4,17 +4,17 @@
 #include <cstring>
 #include <map>
 #include <vector>
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/entrypoints.h"
-namespace backend = isaac::engine::j835;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/entrypoints.h"
+namespace backend = isaac::engine::repentance;
 constexpr unsigned transitionOffset = 0x1b6c0, playersOffset = 0x1ba50, managerOffset = 0x1ba40;
 constexpr unsigned roomIndexOffset = 0x18194, dimensionOffset = 0x1819c, pauseOffset = 0x10203c;
 constexpr unsigned firstBossOffset = 0x1d1c, secondBossOffset = 0x1d20;
 constexpr unsigned controllerOffset = 0x154c, controlsOffset = 0x360, markerOffset = 0x348;
 constexpr unsigned hudOffset = 0x3da4c, hudVisibleOffset = 0xc3eb6, hudStride = 0x6b0;
 #else
-#include "engine/versions/j510/entrypoints.h"
-namespace backend = isaac::engine::j510;
+#include "engine/versions/repentance_plus/entrypoints.h"
+namespace backend = isaac::engine::repentance_plus;
 constexpr unsigned transitionOffset = 0x1b83c, playersOffset = 0x1baa8, managerOffset = 0x1baa8;
 constexpr unsigned roomIndexOffset = 0x18304, dimensionOffset = 0x1830c, pauseOffset = 0x23a7c;
 constexpr unsigned firstBossOffset = 0x1bb0, secondBossOffset = 0x1bb4;
@@ -100,7 +100,7 @@ void __attribute__((fastcall)) nativeStart(void* object, void*, unsigned first, 
     observedIndex = field<int>(object, 0x14);
     observedDimension = field<int>(object, 0x18);
     observedRoster = currentRoster();
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
     observedActor = reinterpret_cast<void*>(field<Address>(object, 0x340));
     field<bool>(object, markerOffset) = true;
 #else
@@ -143,7 +143,7 @@ void __attribute__((fastcall)) nativeAssign(void* reference, void* actor) {
         registered[*slot].push_back(slot);
     ++assignments;
 }
-#ifndef ISAAC_LAN_TEST_J835
+#ifndef ISAAC_LAN_TEST_REPENTANCE
 int __attribute__((fastcall)) nativeHudLayout(void* hud, void*, int index, void* player) {
     require(hud == game.data() + hudOffset && index >= 0 && index < 4 &&
                 reinterpret_cast<Address>(player) == field<Address>(hud, index * hudStride),
@@ -331,7 +331,7 @@ int main() {
         jump(image + backend::entry::playerManagerSetControlsEnabled,
              reinterpret_cast<void*>(nativeControls));
         jump(image + backend::entry::entityPtrAssign, reinterpret_cast<void*>(nativeAssign));
-#ifndef ISAAC_LAN_TEST_J835
+#ifndef ISAAC_LAN_TEST_REPENTANCE
         jump(image + backend::entry::hUDPlayerLayout, reinterpret_cast<void*>(nativeHudLayout));
         jump(image + backend::entry::hUDPlayerPosition, reinterpret_cast<void*>(nativeHudPosition));
 #endif
@@ -437,14 +437,14 @@ int main() {
             require(!restores,
                     "Intro completion crossed a room, floor, ending or missing-player boundary");
         }
-#ifndef ISAAC_LAN_TEST_J835
+#ifndef ISAAC_LAN_TEST_REPENTANCE
         reset();
         audience = 2;
         field<int>(game.data(), roomIndexOffset) = 20;
         start();
         field<int>(game.data(), 0x26628) = 2;
         presentation::observeIntro(1, 1, false);
-        require(!restores, "J510 control restoration bypassed its native guard");
+        require(!restores, "Repentance+ control restoration bypassed its native guard");
 #endif
         reset();
         audience = 3;
@@ -454,13 +454,14 @@ int main() {
                     observedRoster == 3 && observedActor == players[0].data() &&
                     presentation::introActive(),
                 "Host intro lost its destination, actor, roster or full-width marker");
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
         require(assignments == 1 &&
                     registered[reinterpret_cast<Address>(players[0].data())].size() == 1,
-                "J835 intro bypassed native EntityPtr registration");
+                "Repentance intro bypassed native EntityPtr registration");
         field<bool>(transition(), markerOffset) = false;
         field<unsigned char>(transition(), markerOffset + 1) = 0xff;
-        require(!presentation::introActive(), "J835 intro marker read adjacent flags as a boss ID");
+        require(!presentation::introActive(),
+                "Repentance intro marker read adjacent flags as a boss ID");
         field<bool>(transition(), markerOffset) = true;
 #endif
         {
@@ -593,7 +594,7 @@ int main() {
                 "Truncated intro bytes were accepted or replayed");
         require(!apply(std::string(33 * 32, '\0')) && starts == 3,
                 "Oversized intro batch was accepted or partially replayed");
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
         auto* actor = players[1].data();
         for (auto* reference : registered[reinterpret_cast<Address>(actor)])
             *reference = 0;
@@ -642,14 +643,14 @@ int main() {
                 "HUD bridge changed native objects or lost active player anchors");
         const auto& first = hudState.tables[0].children.at("1").values;
         const auto& second = hudState.tables[0].children.at("0").values;
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
         require(first.at("layout") == 0 && first.at("x") == 48 && first.at("y") == 12 &&
                     second.at("layout") == 1 && second.at("x") == 369 && second.at("y") == 12,
-                "J835 HUD binding changed corner coordinates or controller identity");
+                "Repentance HUD binding changed corner coordinates or controller identity");
 #else
         require(first.at("layout") == 0 && first.at("x") == 100 && first.at("y") == 50 &&
                     second.at("layout") == 1 && second.at("x") == 110 && second.at("y") == 55,
-                "J510 HUD binding changed native coordinates or controller identity");
+                "Repentance+ HUD binding changed native coordinates or controller identity");
 #endif
         field<bool>(hud, hudVisibleOffset) = false;
         lua_State hiddenHud;

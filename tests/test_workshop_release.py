@@ -92,7 +92,7 @@ def release(tmp_path, monkeypatch):
             json.dumps(
                 {
                     "extension_version": "0.4.2",
-                    "game_build": "1.9.7.19.J510",
+                    "game_build": "1.9.7.19.J511",
                     "loader_abi": extension_package.LOADER_ABI,
                     "files": {"isaac_lan_probe.dll": hashlib.sha256(dll).hexdigest()},
                 }

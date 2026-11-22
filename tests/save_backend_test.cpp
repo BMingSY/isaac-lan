@@ -1,13 +1,13 @@
 #include "test_support.h"
 #include "engine/save.h"
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/entrypoints.h"
-#include "engine/versions/j835/layout.h"
-namespace backend = isaac::engine::j835;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/entrypoints.h"
+#include "engine/versions/repentance/layout.h"
+namespace backend = isaac::engine::repentance;
 #else
-#include "engine/versions/j510/entrypoints.h"
-#include "engine/versions/j510/layout.h"
-namespace backend = isaac::engine::j510;
+#include "engine/versions/repentance_plus/entrypoints.h"
+#include "engine/versions/repentance_plus/layout.h"
+namespace backend = isaac::engine::repentance_plus;
 #endif
 #define WIN32_LEAN_AND_MEAN
 #ifndef NOMINMAX
@@ -21,7 +21,7 @@ namespace backend = isaac::engine::j510;
 namespace {
 constexpr unsigned imageSize = 0x900000, stateSize = 0x21000;
 constexpr std::uintptr_t previousStream = 0x12345678;
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 constexpr std::array<unsigned, 4> nativeFileNames{0x1fa60, 0x1fa78, 0x1fa98, 0x1fab0};
 #else
 constexpr std::array<unsigned, 4> nativeFileNames{0x1fecc, 0x1fee4, 0x1ff1c, 0x1ff34};
@@ -82,8 +82,8 @@ bool __attribute__((thiscall)) writer(void* state, void* context) {
 bool readState(void* state, void* context) {
     ++reads;
     const auto stream = contextStream(state, context);
-#ifdef ISAAC_LAN_TEST_J835
-    // Model the mandatory J835 disk-save checksum comparison independently
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+    // Model the mandatory Repentance disk-save checksum comparison independently
     // of its production layout. The reader must still reject invalid bytes.
     std::uint32_t trailer;
     std::memcpy(&trailer, payload.data() + payload.size() - sizeof(trailer), sizeof(trailer));
@@ -113,7 +113,7 @@ bool readState(void* state, void* context) {
                 "Read stream must reject writes");
     return mode != Mode::reject;
 }
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 bool __attribute__((thiscall)) reader(void* state, void* context) {
     return readState(state, context);
 }
@@ -145,7 +145,7 @@ void prepare(void* state, Mode next = Mode::normal) {
     clears = reads = writes = captures = 0;
     std::memset(state, 0xa5, stateSize);
     at<std::uintptr_t>(state, backend::layout::gameState::stream) = previousStream;
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
     at<unsigned>(manager.data(), 0xf28) = previousChecksum;
 #endif
     // Exact-byte restoration includes strings with heap storage and embedded
@@ -156,7 +156,7 @@ void prepare(void* state, Mode next = Mode::normal) {
 void checkRestored(const std::vector<std::uint8_t>& before) {
     require(std::memcmp(expectedState, before.data(), stateSize) == 0,
             "Borrowed native stream/filename fields were not restored");
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
     require(at<unsigned>(manager.data(), 0xf28) == previousChecksum,
             "Memory restore retained a checkpoint's checksum in native disk-save state");
 #endif

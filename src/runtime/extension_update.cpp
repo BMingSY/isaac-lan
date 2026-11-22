@@ -44,7 +44,8 @@ struct Staging {
 } // namespace
 
 Selection select(const fs::path& game, const fs::path& workshop, std::string_view baselineVersion,
-                 std::string_view gameBuild, FileHash hash, const fs::path& installed) {
+                 std::string_view backend, std::string_view gameBuild, FileHash hash,
+                 const fs::path& installed) {
     Selection result;
     const auto baseline = parseVersion(baselineVersion);
     try {
@@ -76,8 +77,11 @@ Selection select(const fs::path& game, const fs::path& workshop, std::string_vie
             }
         try {
             if (!workshop.empty() && directory(workshop) && validGameBuild(gameBuild)) {
-                const auto specific = workshop / gameBuild;
-                const auto& source = directory(specific) ? specific : workshop;
+                auto source = workshop / backend;
+                if (!directory(source)) {
+                    const auto legacy = workshop / gameBuild;
+                    source = directory(legacy) ? legacy : workshop;
+                }
                 const auto sourceManifest = read(source / manifestFile);
                 const auto package = parseManifest(sourceManifest);
                 if (!package || !eligible(*package))
@@ -139,8 +143,8 @@ Selection select(const fs::path& game, const fs::path& workshop, std::string_vie
     return result;
 }
 std::optional<Package> pending(const fs::path& game, const fs::path& workshop,
-                               std::string_view runningVersion, std::string_view gameBuild,
-                               FileHash hash) {
-    return select(game, workshop, runningVersion, gameBuild, hash).newest;
+                               std::string_view runningVersion, std::string_view backend,
+                               std::string_view gameBuild, FileHash hash) {
+    return select(game, workshop, runningVersion, backend, gameBuild, hash).newest;
 }
 } // namespace isaac::updates

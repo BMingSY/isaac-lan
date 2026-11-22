@@ -12,6 +12,8 @@ local cases = {
 }
 local gamepad = { left = 4, right = 8, shootRight = 0x2000 }
 local first, duration, seen, cleaned = 60, 240, {}, {}
+local decapThrowAt = 52
+local decapWatchStart, decapWatchEnd = decapThrowAt + 12, decapThrowAt + 32
 local function actor(slot, fn)
     return native.rooms_with_player(slot, function()
         local index = assert(native.rooms_heads()[tostring(slot)])
@@ -76,8 +78,10 @@ function _IsaacLanFrame()
     local input = 0
     if not host and case then
         if decap then
-            input = (at >= 10 and at < 35 and gamepad.shootRight)
-                or (at >= 35 and at < 80 and gamepad.left)
+            -- Fire after the lift animation and walk away from the thrown head.
+            input = at >= decapThrowAt
+                    and at <= decapWatchEnd
+                    and (gamepad.shootRight | gamepad.left)
                 or 0
         else
             input = (at >= 65 and at < 90 and gamepad.right)
@@ -86,7 +90,8 @@ function _IsaacLanFrame()
         end
     end
     native.test_gamepad(input)
-    local observing = decap and at >= 40 and at <= 60 or not decap and at >= 70 and at <= 120
+    local observing = decap and at >= decapWatchStart and at <= decapWatchEnd
+        or not decap and at >= 70 and at <= 120
     if s.prepared and case and observing then
         local data = { case = case.name, actors = {} }
         for slot = 0, 1 do
@@ -96,6 +101,15 @@ function _IsaacLanFrame()
                     assert(p:HasCollectible(case.item), "Split collectible missing on its owner")
                     if not case.passive then
                         assert(count > 0, "Split temporary effect missing: " .. case.name)
+                    end
+                    if decap then
+                        assert(
+                            #Isaac.FindByType(
+                                    EntityType.ENTITY_FAMILIAR,
+                                    FamiliarVariant.DECAP_ATTACK
+                                ) > 0,
+                            "Thrown head missing from the owner's room"
+                        )
                     end
                     seen[case.name] = (seen[case.name] or 0) + 1
                 else

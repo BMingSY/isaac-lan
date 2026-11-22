@@ -1,6 +1,6 @@
 #include "test_support.h"
 #include "engine/visuals.h"
-#include "engine/versions/j510/layout.h"
+#include "engine/versions/repentance_plus/layout.h"
 #include "net/protocol.h"
 #include <array>
 #include <cstdio>
@@ -16,7 +16,7 @@ void abort(const std::string& reason) {
 } // namespace isaac::runtime
 namespace {
 using Address = std::uintptr_t;
-namespace layout = isaac::engine::j510::layout;
+namespace layout = isaac::engine::repentance_plus::layout;
 template <class T> T& at(Address p, unsigned offset) {
     return *reinterpret_cast<T*>(p + offset);
 }

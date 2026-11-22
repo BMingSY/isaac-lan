@@ -24,6 +24,7 @@ from item_audit import (
 )
 from testing.results import SCHEMA_VERSION, finish_run, write_report
 from testing.engine import configure_interrupts, engine_command
+from game_profiles import lab_profile
 from lab_profile import ProtectedLabs, idle, windows, validate_labs, validate_startup
 from item_effect_checks import SUPPORTED_EFFECTS
 
@@ -128,7 +129,9 @@ def run_batch(args, cases, output, labs):
         evidence = AuditJournals(journals)
         report["journal_sha256"] = evidence.sha256
         try:
-            catalog = catalog_from_log("".join(evidence.catalog_lines))
+            catalog = catalog_from_log(
+                "".join(evidence.catalog_lines), lab_profile(labs[0])["game_build"]
+            )
             (output / "catalog.json").write_text(
                 json.dumps(catalog, ensure_ascii=False, indent=2) + "\n"
             )

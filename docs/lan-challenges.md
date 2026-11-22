@@ -63,7 +63,7 @@
 | 终点 | 普通路线子宫二的妈心／它还活着所在 Boss 房清场后生成奖杯；领取后结束全队挑战 |
 | 房间规则 | 由房主自行选择，沿用普通分房、集合和传送规则 |
 
-楼层生成通过 [floor_generation.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j510/floor_generation.cpp) 的具名能力选择原版生成分支。挑战编号与规则由挑战目录和运行层持有；原生 `Game.Challenge` 保持为零，不触发原版挑战解锁。奖杯和出口清理沿用通用挑战终点组件。
+楼层生成通过 [floor_generation.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance_plus/floor_generation.cpp) 的具名能力选择原版生成分支。挑战编号与规则由挑战目录和运行层持有；原生 `Game.Challenge` 保持为零，不触发原版挑战解锁。奖杯和出口清理沿用通用挑战终点组件。
 
 ## 当前规则：1005 你的准星
 
@@ -106,7 +106,7 @@
 | 生命周期、重连与结束 | [bridge/runtime/challenges.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/challenges.lua)、[runtime/session.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/session.cpp) |
 | 终点与奖励规则 | [compat/routes/challenge_goal.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/routes/challenge_goal.lua) |
 | 运气游戏规则 | [compat/challenges/luck_game.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/challenges/luck_game.lua) |
-| 菜单与本机显示 | [presentation/menu.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/presentation/menu.lua)、[J510 HUD 能力](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#hud-与本机输入) |
+| 菜单与本机显示 | [presentation/menu.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/presentation/menu.lua)、[忏悔＋ HUD 能力](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#hud-与本机输入) |
 
 地图策略可通过 `maps[id]` 提供 `onLayoutReady(info, level)` 与 `canEnter(ctx)`。前者在权威布局准备后调用，后者在迁移入队前验证来源／目标和传送类型。1001 和 1002 不配置地图策略，1003 通过这些回调展开红房间并限制 Boss 入口。回调只协调游戏 API，新增房间沿用既有布局同步。
 

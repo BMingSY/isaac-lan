@@ -22,7 +22,7 @@ def build_suite(output, coordination, cases=CASES, *, backend=DEFAULT_BACKEND):
     if not cases or len(set(cases)) != len(cases) or not set(cases) <= set(CASES):
         raise ValueError("Choose distinct known release cases")
     coordination = str(coordination).replace("\\", "/").rstrip("/")
-    first_visit = {"j835": "rewind", "j510": "error-room"}[backend]
+    first_visit = {"repentance": "rewind", "repentance_plus": "error-room"}[backend]
     factories = []
     for name in cases:
         prefix = ""

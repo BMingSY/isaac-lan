@@ -4,14 +4,14 @@
 #include <map>
 #include <variant>
 #include <iostream>
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/entrypoints.h"
-namespace backend = isaac::engine::j835;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/entrypoints.h"
+namespace backend = isaac::engine::repentance;
 constexpr unsigned layerStride = 0x9c, layerFlagsOffset = 0x88, cropOffset = 0x8c;
 constexpr unsigned nativeBlendCount = 4;
 #else
-#include "engine/versions/j510/entrypoints.h"
-namespace backend = isaac::engine::j510;
+#include "engine/versions/repentance_plus/entrypoints.h"
+namespace backend = isaac::engine::repentance_plus;
 constexpr unsigned layerStride = 0xa0, layerFlagsOffset = 0x8c, cropOffset = 0x90;
 constexpr unsigned nativeBlendCount = 5;
 #endif
@@ -296,11 +296,11 @@ int main() {
             require(!applyPose(one, bad).success && oneBefore.matches(one),
                     "Invalid visual values or duplicate IDs partially changed a Sprite");
         }
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
         auto nonzeroReserved = packet;
         nonzeroReserved.replace(nonzeroReserved.size() - 8, 4, hexBytes("00000001"));
         require(!applyPose(one, nonzeroReserved).success && oneBefore.matches(one),
-                "J835 wrote the absent blend word over flags or native resource pointers");
+                "Repentance wrote the absent blend word over flags or native resource pointers");
 #endif
         one.setPath(0, one.heapPath);
         const auto heapPacket = capture(one).output;

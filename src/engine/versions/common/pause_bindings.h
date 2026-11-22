@@ -4,7 +4,7 @@
 
 namespace isaac::engine::native_pause {
 // Both versions expose the same synchronous menu calls, with different native
-// subobjects and root selections. J835 derives its player from roster[0].
+// subobjects and root selections. Repentance derives its player from roster[0].
 struct Bindings {
     std::uint32_t game, manager, show, hide, controls, saveOptions;
     unsigned pauseMenu, players, playerController, managerOptions, pauseOnFocusLost;

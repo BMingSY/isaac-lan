@@ -18,7 +18,7 @@
 
 | 主题 | 文档 |
 | --- | --- |
-| 原生能力、ABI 与所有权 | [J510 后端](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md) |
+| 原生能力、ABI 与所有权 | [忏悔＋后端](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md) |
 | 兼容效果与当前验证状态 | [角色](https://github.com/BMingSY/isaac-lan/blob/main/docs/character-compatibility.md)、[道具](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)、[第三方 Mod](https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-compatibility.md) |
 | 专项能力契约 | [错误道具定义](https://github.com/BMingSY/isaac-lan/blob/main/docs/generated-item-definitions.md)、[共享开门概率](https://github.com/BMingSY/isaac-lan/blob/main/docs/shared-deal-chances.md) |
 | 挑战规则与接入 | [联机挑战](https://github.com/BMingSY/isaac-lan/blob/main/docs/lan-challenges.md) |

@@ -1,8 +1,10 @@
 set(ISAAC_LAN_BACKEND
-    "j510"
+    "repentance_plus"
     CACHE STRING "Audited native game backend")
-if(NOT ISAAC_LAN_BACKEND MATCHES "^[a-z0-9_]+$")
-    message(FATAL_ERROR "Invalid ISAAC_LAN_BACKEND identifier")
+set(isaac_lan_editions repentance_plus repentance)
+set_property(CACHE ISAAC_LAN_BACKEND PROPERTY STRINGS ${isaac_lan_editions})
+if(NOT ISAAC_LAN_BACKEND IN_LIST isaac_lan_editions)
+    message(FATAL_ERROR "Unsupported ISAAC_LAN_BACKEND: ${ISAAC_LAN_BACKEND}")
 endif()
 set(ISAAC_LAN_BACKEND_DIR "${PROJECT_SOURCE_DIR}/src/engine/versions/${ISAAC_LAN_BACKEND}")
 if(NOT EXISTS "${ISAAC_LAN_BACKEND_DIR}/sources.cmake")
@@ -31,6 +33,8 @@ execute_process(
         ANY)
 configure_file("${PROJECT_BINARY_DIR}/generated/game-profile.json"
                "${PROJECT_BINARY_DIR}/game-profile.json" COPYONLY)
+configure_file("${PROJECT_BINARY_DIR}/generated/loader-versions.json"
+               "${PROJECT_BINARY_DIR}/loader-versions.json" COPYONLY)
 add_library(isaac_lan_profile STATIC src/engine/profile.cpp)
 target_include_directories(
     isaac_lan_profile

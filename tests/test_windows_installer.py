@@ -83,7 +83,7 @@ public class Checker {
     public static int Main(string[] args) {
         string content = File.ReadAllText(args[0]);
         Console.WriteLine(content);
-        if (content == "j510" || content == "j835")
+        if (content == "repentance_plus" || content == "repentance")
             return content == new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory).Name ? 0 : 1;
         return content == "compatible" ? 0 : content == "unsupported" ? 1 : 7;
     }
@@ -115,7 +115,7 @@ public class Checker {
                 sys.executable,
                 str(ROOT / "tools/generate_game_profile.py"),
                 "--backend",
-                "j510",
+                "repentance_plus",
                 "--output",
                 str(self.package),
             ],
@@ -130,8 +130,10 @@ public class Checker {
             "format": 1,
             "extension_version": "0.8.0",
             "loader_abi": 1,
-            "game_build": "1.9.7.19.J510",
-            "backend": "j510",
+            "game_build": json.loads((self.package / "game-profile.json").read_text())[
+                "game_build"
+            ],
+            "backend": "repentance_plus",
             "linux_files": {
                 "game-profile.json": hashlib.sha256(
                     (self.package / "game-profile.json").read_bytes()
@@ -180,7 +182,7 @@ public class Checker {
         self.run_installer()
         root = self.package
         parent = root / "backends"
-        plus = parent / "j510"
+        plus = parent / "repentance_plus"
         plus.mkdir(parents=True)
         for name in (
             "isaac_lan_probe.dll",
@@ -189,10 +191,12 @@ public class Checker {
             "payload.json",
         ):
             (root / name).rename(plus / name)
-        vanilla = parent / "j835"
+        vanilla = parent / "repentance"
         shutil.copytree(plus, vanilla)
         profile = json.loads((vanilla / "game-profile.json").read_text())
-        profile.update(backend="j835", game_build="1.7.9b.J835")
+        profile.update(
+            json.loads((ROOT / "src/engine/versions/repentance/profile.json").read_text())
+        )
         (vanilla / "game-profile.json").write_text(json.dumps(profile))
         manifest = json.loads((vanilla / "payload.json").read_text())
         manifest.update(backend=profile["backend"], game_build=profile["game_build"])
@@ -200,12 +204,14 @@ public class Checker {
             (vanilla / "game-profile.json").read_bytes()
         ).hexdigest()
         probe = "isaac_lan_probe.dll"
-        (vanilla / probe).write_bytes(b"j835 probe")
+        (vanilla / probe).write_bytes(b"repentance probe")
         manifest["files"][probe] = hashlib.sha256((vanilla / probe).read_bytes()).hexdigest()
         (vanilla / "payload.json").write_text(json.dumps(manifest))
-        (root / "payload.json").write_text(json.dumps({"format": 3, "backends": ["j510", "j835"]}))
+        (root / "payload.json").write_text(
+            json.dumps({"format": 3, "backends": ["repentance_plus", "repentance"]})
+        )
         executable = self.game / "isaac-ng.exe"
-        executable.write_text("j835")
+        executable.write_text("repentance")
         # Both identically named DLLs and the old root DLL must roll back together.
         legacy = self.installed_files()
         self.run_installer(
@@ -224,7 +230,7 @@ function Move-Item {
         record = json.loads((self.game / "isaac-lan/installation.json").read_text())
         self.assertEqual(record["format"], 2)
         self.assertFalse((self.game / probe).exists())
-        for backend in ("j835", "j510"):
+        for backend in ("repentance", "repentance_plus"):
             executable.write_text(backend)
             self.assertEqual(
                 json.loads(self.run_installer("Status"))["gameBuild"], record["backends"][backend]

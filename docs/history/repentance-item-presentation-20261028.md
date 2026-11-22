@@ -12,7 +12,7 @@
 | 直接消费者 | 道具候选的 `core.compatibility-targets`、`core.localized-text`、`bridge.presentation` 三项通过；Home 门控候选的 `core.intro-barrier`、`bridge.presentation` 两项通过 |
 | 构建与检查 | 两个候选的 Windows x86 Release J460 DLL 构建通过；分层／版本检查各 32 项通过，格式与差异检查通过；当前 122 项 J835 入口签名及重定位掩码匹配目标程序 |
 
-目标原版程序 SHA-256 为 `04469d0c3d3581936fcf85bea5f9f4f3a65b2ccf96b36310456c9626bac36dc6`。核验只读取程序：J835 自定义文字清栈 16 字节且没有玩家参数，原有 J460 接口清栈 12 字节；原版大书为 47 个配置，独立声明对象大小和 Mega Mush Sprite 位置。规则提示索引回放先检查本机分类树大小，再调用不自带越界检查的原版入口。接口限制与所有权见[原生参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md#道具演出与屏幕状态)。
+目标原版程序 SHA-256 为 `04469d0c3d3581936fcf85bea5f9f4f3a65b2ccf96b36310456c9626bac36dc6`。核验只读取程序：J835 自定义文字清栈 16 字节且没有玩家参数，原有 J460 接口清栈 12 字节；原版大书为 47 个配置，独立声明对象大小和 Mega Mush Sprite 位置。规则提示索引回放先检查本机分类树大小，再调用不自带越界检查的原版入口。接口限制与所有权见[原生参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-repentance.md#道具演出与屏幕状态)。
 
 ## 失败与未验证项
 

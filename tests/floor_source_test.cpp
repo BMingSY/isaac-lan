@@ -5,7 +5,7 @@
 int main() {
     using isaac::engine::native_rooms::FloorSource;
     FloorSource source(-20);
-    // J510 SetNextStage's Womb II branch: source index -8 selects Blue Womb;
+    // Repentance+ SetNextStage's Womb II branch: source index -8 selects Blue Womb;
     // the ordinary departure selects stage 10 (Sheol/Cathedral).
     for (int authority : {-8, -9, 84, 168}) {
         for (int viewport : {-8, -9, 84, 168}) {

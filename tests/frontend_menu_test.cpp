@@ -1,8 +1,8 @@
 #include "presentation/main_menu.h"
 #include "engine/versions/common/frontend_bindings.h"
 #include "test_support.h"
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/layout.h"
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/layout.h"
 #endif
 #include <array>
 #include <cstddef>
@@ -16,7 +16,7 @@ static_assert(sizeof(Address) == 4);
 template <class T> void write(Address object, unsigned offset, T value) {
     *reinterpret_cast<T*>(object + offset) = value;
 }
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 constexpr unsigned managerGlobal = 0x7fd680, menusGlobal = 0x7fd688;
 constexpr unsigned pageOffset = 0x38, blockedOffset = 0x20, managerBlock = 0x4a268;
 
@@ -58,7 +58,7 @@ void checkNativeRows(Address image) {
                 "An original menu item changed its native confirm action");
 }
 void checkPaperDrawing(Address image, Address menus) {
-    namespace layout = isaac::engine::j835::layout;
+    namespace layout = isaac::engine::repentance::layout;
     namespace rows = isaac::presentation::main_menu;
     const auto draw = isaac::engine::native_frontend::bindings.insertedRow.value().draw;
     std::array<std::byte, layout::mainMenu::sprite + layout::sprite::size> storage{};
@@ -112,8 +112,8 @@ void checkPaperDrawing(Address image, Address menus) {
             "Incomplete menu art did not use one unmodified native draw");
 }
 #else
-constexpr unsigned managerGlobal = 0x89a0d4, menusGlobal = 0x89a8e4;
-constexpr unsigned pageOffset = 0x40, blockedOffset = 0xd, managerBlock = 0x4d44c;
+constexpr unsigned managerGlobal = 0x89a094, menusGlobal = 0x89a8a4;
+constexpr unsigned pageOffset = 0x40, blockedOffset = 0xd, managerBlock = 0x4d444;
 
 #endif
 } // namespace
@@ -136,7 +136,7 @@ int main() {
         write(image, managerGlobal, manager);
         require(!ready(), "Missing menus accepted a LAN overlay");
         write(image, menusGlobal, menus);
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
         checkNativeRows(image);
         checkPaperDrawing(image, menus);
 #else
@@ -186,7 +186,7 @@ int main() {
         write(manager, managerBlock, 1u);
         require(!accepts() && !entry(true), "Blocked manager accepted LAN input");
         write(manager, managerBlock, 0u);
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
         write(menus, 1, true);
         require(!accepts() && !entry(true),
                 "Pending vanilla Continue was interrupted by LAN entry");

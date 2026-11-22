@@ -17,7 +17,7 @@ struct Bindings {
         unsigned stride, data, id, path;
         std::array<unsigned, layerFlags> booleans;
         std::array<unsigned, layerValues> numbers;
-        // The canonical fifth blend word is absent in J835 and must be zero.
+        // The canonical fifth blend word is absent in Repentance and must be zero.
         std::array<std::optional<unsigned>, blendValues> blend;
         unsigned flags;
     } layer;

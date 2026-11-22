@@ -1,10 +1,10 @@
-// Private x86 image: exercise the real J510 menu calls and input-query hook.
+// Private x86 image: exercise the real Repentance+ menu calls and input-query hook.
 // Including input.cpp keeps the query hook under test without installing hooks
 // in a process or exposing a production API solely for tests.
 #include "test_support.h"
 #include "engine/versions/common/input.cpp"
-#include "engine/versions/j510/entrypoints.h"
-#include "engine/versions/j510/layout.h"
+#include "engine/versions/repentance_plus/entrypoints.h"
+#include "engine/versions/repentance_plus/layout.h"
 #include <MinHook.h>
 #include <array>
 #include <vector>
@@ -48,7 +48,7 @@ void grantStartingRewards(void*, unsigned) {
 namespace {
 namespace menu = isaac::pause_menu;
 namespace input = isaac::input;
-namespace native = isaac::engine::j510;
+namespace native = isaac::engine::repentance_plus;
 using Address = std::uintptr_t;
 static_assert(sizeof(Address) == 4);
 constexpr unsigned imageSize = privateGameImageBytes, menuOffset = 0x23a7c;
@@ -171,7 +171,7 @@ struct Fixture {
     }
     bool query(int action, unsigned kind = native::entry::inputTriggered, float* result = nullptr,
                int* source = nullptr) {
-        return input::query(image + 0x87f0a8, nullptr, queryController,
+        return input::query(image + 0x87f068, nullptr, queryController,
                             reinterpret_cast<void*>(base() + kind), &action, result, source);
     }
     void press(unsigned action) {
@@ -186,7 +186,7 @@ struct Fixture {
     void onlyLocalQueries() const {
         require(!queries.empty(), "Expected native physical queries");
         for (const auto& query : queries)
-            require(query.receiver == image + 0x87f0a8 && query.controller == -1,
+            require(query.receiver == image + 0x87f068 && query.controller == -1,
                     "Pause input queried a peer controller instead of the local source");
     }
 };
@@ -203,7 +203,7 @@ void __attribute__((thiscall)) hideFixture(void* receiver) {
     current->page() = 0;
 }
 void __attribute__((thiscall)) saveOptionsFixture(void* receiver) {
-    current->validReceiver &= receiver == current->manager.data() + 0x2a614 && current->page() == 2;
+    current->validReceiver &= receiver == current->manager.data() + 0x2a60c && current->page() == 2;
     ++current->saves;
     current->saveHideOrder.push_back('S');
 }
@@ -781,7 +781,8 @@ void restartPhysicalRouting() {
     f.accept();
     f.press(input::action::restart);
     require(input::restartHeld(), "LAN restart lost physical input behind accepted gameplay input");
-    require(f.queries.front().controller == -2, "Restart did not query the J510 physical keyboard");
+    require(f.queries.front().controller == -2,
+            "Restart did not query the Repentance+ physical keyboard");
     f.clearPhysical();
     require(!input::restartHeld(), "Restart retained a released key");
     f.press(input::action::menuBack);

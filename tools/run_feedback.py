@@ -11,6 +11,7 @@ import subprocess
 import threading
 import zipfile
 
+from game_profiles import lab_profile
 from lab_profile import ProtectedLabs, idle, validate_labs, validate_startup
 from testing.engine import configure_interrupts, engine_command, engine_process
 from testing.results import finish_run
@@ -52,7 +53,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         pass
 
 
-def inspect(upload):
+def inspect(upload, game_build):
     """Return the manifest after checking headers and the zip contract."""
     headers = upload["headers"]
     assert upload["path"] == SUBMIT, upload["path"]
@@ -68,7 +69,7 @@ def inspect(upload):
         assert "game/log.txt" in names and "config/config.ini" in names
         assert any(RUN_LOG.fullmatch(name) for name in names), names
         assert b"[feedback]" in archive.read("config/config.ini")
-    assert manifest["schema"] == 1 and manifest["game"] == "1.9.7.19.J510"
+    assert manifest["schema"] == 1 and manifest["game"] == game_build
     assert manifest["context"]["phase"] == "running"
     return manifest
 
@@ -125,7 +126,8 @@ def main():
             uploads = list(receiver.uploads)
         for index, upload in enumerate(uploads, 1):
             (output / f"upload-{index}.zip").write_bytes(upload["body"])
-        manifests = [inspect(upload) for upload in uploads]
+        game_build = lab_profile(labs[0])["game_build"]
+        manifests = [inspect(upload, game_build) for upload in uploads]
         report["uploads"] = [
             {"description": m["description"], "context": m["context"], "files": m["files"]}
             for m in manifests

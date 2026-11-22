@@ -1,9 +1,9 @@
 #include "test_support.h"
 #include "engine/versions/common/player_input.h"
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/entrypoints.h"
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/entrypoints.h"
 #else
-#include "engine/versions/j510/entrypoints.h"
+#include "engine/versions/repentance_plus/entrypoints.h"
 #endif
 #define WIN32_LEAN_AND_MEAN
 #ifndef NOMINMAX
@@ -17,8 +17,8 @@
 namespace {
 namespace players = isaac::engine::native_players;
 using Address = std::uintptr_t;
-#ifdef ISAAC_LAN_TEST_J835
-namespace backend = isaac::engine::j835;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+namespace backend = isaac::engine::repentance;
 constexpr unsigned managerOffset = 0x1ba40, rosterOffset = 0x1ba50, controllerOffset = 0x154c;
 constexpr unsigned positionX = 0x294, positionY = 0x298, previousX = 0x29c, previousY = 0x2a0;
 constexpr unsigned hudOffset = 0x3da4c;
@@ -28,7 +28,7 @@ constexpr auto initializeRva = backend::entry::playerInitialize;
 constexpr auto getHUDRva = backend::entry::gameGetHUD;
 constexpr auto assignHUDsRva = backend::entry::hudAssignPlayers;
 #else
-namespace backend = isaac::engine::j510;
+namespace backend = isaac::engine::repentance_plus;
 constexpr unsigned managerOffset = 0x1baa8, rosterOffset = 0x1baa8, controllerOffset = 0x161c;
 constexpr unsigned positionX = 0x33c, positionY = 0x340, previousX = 0x344, previousY = 0x348;
 constexpr unsigned hudOffset = 0x1da04;

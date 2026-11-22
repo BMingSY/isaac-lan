@@ -1,16 +1,16 @@
 // Private x86 memory and synthetic native callees only. No game is loaded.
 #include "test_support.h"
 #include "engine/versions/common/combat_feedback.cpp"
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/entrypoints.h"
-#include "engine/versions/j835/layout.h"
-namespace native = isaac::engine::j835;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/entrypoints.h"
+#include "engine/versions/repentance/layout.h"
+namespace native = isaac::engine::repentance;
 constexpr unsigned seedOffset = 0x344, spriteOffset = 0x3c;
 constexpr unsigned roomOffset = 0x18194, dimensionOffset = 0x1819c;
 #else
-#include "engine/versions/j510/entrypoints.h"
-#include "engine/versions/j510/layout.h"
-namespace native = isaac::engine::j510;
+#include "engine/versions/repentance_plus/entrypoints.h"
+#include "engine/versions/repentance_plus/layout.h"
+namespace native = isaac::engine::repentance_plus;
 constexpr unsigned seedOffset = 0x3ec, spriteOffset = 0x48;
 constexpr unsigned roomOffset = 0x18304, dimensionOffset = 0x1830c;
 #endif

@@ -3,7 +3,7 @@
 #include "engine/versions/common/room_data.cpp"
 #include <cstring>
 #include <iostream>
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 constexpr unsigned gameGlobal = 0x7fd65c, descEntry = 0x30e0f0, cacheEntry = 0x4e2e40;
 constexpr unsigned roomOffset = 0x18190, indexOffset = 0x18194, dimensionOffset = 0x1819c;
 constexpr unsigned mapOffset = 0x1796c, countOffset = 0x1815c, frameOffset = 0x1a30dc;
@@ -12,7 +12,7 @@ constexpr unsigned waterOffset = 0x7344, savedStride = 0x68, mapState = 0x101904
 constexpr std::array<unsigned, 2> caches{0x1a2ac8, 0x1a2c28};
 constexpr int minimumRoom = -18;
 #else
-constexpr unsigned gameGlobal = 0x899538, descEntry = 0x348580, cacheEntry = 0x5a2800;
+constexpr unsigned gameGlobal = 0x8994f8, descEntry = 0x348580, cacheEntry = 0x5a2650;
 constexpr unsigned roomOffset = 0x18300, indexOffset = 0x18304, dimensionOffset = 0x1830c;
 constexpr unsigned mapOffset = 0x17adc, countOffset = 0x182cc, frameOffset = 0x26508;
 constexpr unsigned waterOffset = 0x7478, savedStride = 0x78, mapState = 0x22ed4, mapTimer = 0x22edc;
@@ -306,13 +306,13 @@ int main() {
         require(success(receive(state::roomLayout, layoutPacket(-12, -12))) &&
                     field<int>(guest.special.data(), 4) == -12,
                 "Lazily initialized special room lost native descriptor");
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
         const auto beforeCalls = descCalls;
         rejectLayout(layoutPacket(-19, -19));
         require(descCalls == beforeCalls, "Unsupported vanilla special room wrote sentinel");
 #else
         require(success(receive(state::roomLayout, layoutPacket(-20, -20))),
-                "J510 special room range changed");
+                "Repentance+ special room range changed");
 #endif
         select(host);
         replica = false;

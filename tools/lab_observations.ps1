@@ -7,16 +7,12 @@ function Get-LabObservationLayout([System.Diagnostics.Process]$GameProcess) {
         throw 'A marked isolated game is required.'
     }
     $gameProfile = Get-Content -Raw -LiteralPath (Join-Path $lab 'game-profile.json') | ConvertFrom-Json
-    $backend = switch ($gameProfile.game_build) {
-        '1.7.9b.J835' {
-            'j835'
-        }
-        '1.9.7.19.J510' {
-            'j510'
-        }
-        default {
-            throw 'Unsupported isolated game layout.'
+    foreach ($edition in 'repentance', 'repentance_plus') {
+        $directory = Join-Path $PSScriptRoot "../src/engine/versions/$edition"
+        $profile = Get-Content -Raw -LiteralPath (Join-Path $directory 'profile.json') | ConvertFrom-Json
+        if ($gameProfile.game_build -ceq $profile.game_build) {
+            return Import-PowerShellDataFile -LiteralPath (Join-Path $directory 'lab_observations.psd1')
         }
     }
-    return Import-PowerShellDataFile -LiteralPath (Join-Path $PSScriptRoot "../src/engine/versions/$backend/lab_observations.psd1")
+    throw 'Unsupported isolated game layout.'
 }

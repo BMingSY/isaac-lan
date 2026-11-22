@@ -3,12 +3,12 @@
 #include <windows.h>
 #include <array>
 #include <cstring>
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/entrypoints.h"
-namespace backend = isaac::engine::j835;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/entrypoints.h"
+namespace backend = isaac::engine::repentance;
 #else
-#include "engine/versions/j510/entrypoints.h"
-namespace backend = isaac::engine::j510;
+#include "engine/versions/repentance_plus/entrypoints.h"
+namespace backend = isaac::engine::repentance_plus;
 #endif
 
 namespace {
@@ -25,7 +25,7 @@ void __attribute__((thiscall)) enterB(void* familiar) {
     observedFamiliar = familiar;
     visits += 10;
 }
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 int __attribute__((thiscall)) price(void* room, int variant, int subtype, int shopItem) {
     require(room == expectedRoom && variant == 100 && subtype == 51 && shopItem == 3,
             "Original price query lost its native arguments");
@@ -78,7 +78,7 @@ int main() {
     patch(image, backend::entry::managerShowCutscene, showMovie);
     patch(image, backend::entry::roomPickupPrice, price);
     patch(image, backend::entry::roomDiscountedPrice, discount);
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
     patch(image, backend::entry::familiarNewRoom203, enterA);
     patch(image, backend::entry::familiarNewRoom221, enterB);
 #else
@@ -103,7 +103,7 @@ int main() {
                     -1,
                 "Room price adapter lost the native discounted price");
     }
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
     require(visits == 1100, "Original inline room entry dispatched the wrong familiar");
 #else
     require(visits == 300, "Native familiar room entry was not forwarded");

@@ -6,7 +6,7 @@
 #include <span>
 #include <vector>
 
-// Shared x86 MSVC stream ABI, audited separately in J510 and J835.
+// Shared x86 MSVC stream ABI, audited separately in Repentance+ and Repentance.
 // Entry addresses, GameState layout and reader arity stay in each backend.
 namespace isaac::engine::native_save {
 inline constexpr std::size_t limit = 8 * 1024 * 1024;

@@ -1,9 +1,9 @@
 #include "test_support.h"
 #include "engine/versions/common/input_devices.h"
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/entrypoints.h"
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/entrypoints.h"
 #else
-#include "engine/versions/j510/entrypoints.h"
+#include "engine/versions/repentance_plus/entrypoints.h"
 #endif
 #define WIN32_LEAN_AND_MEAN
 #ifndef NOMINMAX
@@ -19,13 +19,13 @@
 
 namespace {
 namespace devices = isaac::engine::native_devices;
-#ifdef ISAAC_LAN_TEST_J835
-namespace backend = isaac::engine::j835;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+namespace backend = isaac::engine::repentance;
 constexpr unsigned managerOffset = 0x7e7c98, beginOffset = 4, endOffset = 8;
 constexpr unsigned stride = 4, idOffset = 8, updateEntry = 0x56a150;
 #else
-namespace backend = isaac::engine::j510;
-constexpr unsigned managerOffset = 0x87f0a8, beginOffset = 8, endOffset = 12;
+namespace backend = isaac::engine::repentance_plus;
+constexpr unsigned managerOffset = 0x87f068, beginOffset = 8, endOffset = 12;
 constexpr unsigned stride = 8, idOffset = 12, updateEntry = 0;
 #endif
 constexpr unsigned imageSize = privateGameImageBytes;
@@ -111,7 +111,7 @@ void setup() {
             "Installed device hooks did not forward their native calls");
 }
 void layoutAndRestore() {
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
     constexpr int keyboard = 0, firstPad = 4;
 #else
     constexpr int keyboard = -2, firstPad = 0;

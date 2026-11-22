@@ -4,13 +4,13 @@
 #include <iostream>
 #include <limits>
 #include <vector>
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 constexpr unsigned spriteOffset = 0x3c, extraOffset = 0xe18, layerStride = 0x9c;
 constexpr unsigned bodyVtable = 0x746348, tetherVtable = 0x73fffc;
 constexpr unsigned prepareEntry = 0x13c430, renderEntry = 0x26810;
 #else
 constexpr unsigned spriteOffset = 0x48, extraOffset = 0xee0, layerStride = 0xa0;
-constexpr unsigned bodyVtable = 0x764914, tetherVtable = 0x71d264;
+constexpr unsigned bodyVtable = 0x787bf4, tetherVtable = 0x780ffc;
 constexpr unsigned prepareEntry = 0x155ea0, renderEntry = 0x394b0;
 #endif
 struct lua_State {

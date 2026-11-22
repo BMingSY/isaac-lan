@@ -1,14 +1,14 @@
 #include "test_support.h"
 #include "native_call.h"
 #include "engine/versions/common/animation_skip.cpp"
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/entrypoints.h"
-namespace backend = isaac::engine::j835;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/entrypoints.h"
+namespace backend = isaac::engine::repentance;
 constexpr unsigned nightmareOffset = 0x211bc, stageOffset = 0x1ba0c;
 #else
-#include "engine/versions/j510/entrypoints.h"
-namespace backend = isaac::engine::j510;
-constexpr unsigned nightmareOffset = 0x21778, stageOffset = 0x1ba78;
+#include "engine/versions/repentance_plus/entrypoints.h"
+namespace backend = isaac::engine::repentance_plus;
+constexpr unsigned nightmareOffset = 0x21770, stageOffset = 0x1ba78;
 #endif
 #include <cstring>
 

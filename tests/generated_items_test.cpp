@@ -1,22 +1,22 @@
 // Exercise the production x86 registry adapter without launching the game.
 #include "test_support.h"
 #include "engine/versions/common/generated_items.cpp"
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/entrypoints.h"
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/entrypoints.h"
 #else
-#include "engine/versions/j510/entrypoints.h"
+#include "engine/versions/repentance_plus/entrypoints.h"
 #endif
 #include <array>
 #include <cstdio>
 
 namespace {
 namespace adapter = isaac::generated_items;
-#ifdef ISAAC_LAN_TEST_J835
-namespace backend = isaac::engine::j835;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+namespace backend = isaac::engine::repentance;
 constexpr unsigned registryOffset = 0x283c20, inventoryHead = 0x1ec4, inventorySize = 0x1ec8;
 constexpr unsigned playersOffset = 0x1ba50, spriteOffset = 0x3c;
 #else
-namespace backend = isaac::engine::j510;
+namespace backend = isaac::engine::repentance_plus;
 constexpr unsigned registryOffset = 0x67e48, inventoryHead = 0x1fcc, inventorySize = 0x1fd0;
 constexpr unsigned playersOffset = 0x1baa8, spriteOffset = 0x48;
 #endif

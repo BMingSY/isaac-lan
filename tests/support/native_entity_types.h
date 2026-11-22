@@ -1,8 +1,8 @@
 #pragma once
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/entrypoints.h"
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/entrypoints.h"
 #else
-#include "engine/versions/j510/entrypoints.h"
+#include "engine/versions/repentance_plus/entrypoints.h"
 #endif
 #include "../test_support.h"
 #include <windows.h>
@@ -10,10 +10,10 @@
 #include <cstring>
 
 namespace isaac::test {
-#ifdef ISAAC_LAN_TEST_J835
-namespace native_test_backend = engine::j835;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+namespace native_test_backend = engine::repentance;
 #else
-namespace native_test_backend = engine::j510;
+namespace native_test_backend = engine::repentance_plus;
 #endif
 // Synthetic MSVC x86 RTTI, consumed by the actual Windows CRT. No game objects,
 // game executable, hooks or entity-type-based stand-in for dynamic_cast.

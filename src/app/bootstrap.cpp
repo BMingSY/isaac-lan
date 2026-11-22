@@ -259,7 +259,7 @@ DWORD initialize() {
         isaac::updates::startupNotice() = isaac::updates::Notice([directory] {
             const auto update = isaac::updates::pending(
                 directory, isaac::updates::workshopSource(directory), ISAAC_LAN_VERSION,
-                isaac::build::version(), isaac::updates::fileHash);
+                isaac::engine::profile().id, isaac::build::version(), isaac::updates::fileHash);
             return update ? update->version : std::string{};
         });
     }

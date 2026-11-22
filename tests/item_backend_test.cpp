@@ -1,9 +1,9 @@
 #include "test_support.h"
 #include "engine/versions/common/item_effects.cpp"
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/entrypoints.h"
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/entrypoints.h"
 #else
-#include "engine/versions/j510/entrypoints.h"
+#include "engine/versions/repentance_plus/entrypoints.h"
 #endif
 #include <vector>
 
@@ -14,19 +14,19 @@ struct lua_State {
 };
 namespace {
 namespace items = isaac::engine::items;
-#ifdef ISAAC_LAN_TEST_J835
-namespace backend = isaac::engine::j835;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+namespace backend = isaac::engine::repentance;
 constexpr unsigned spriteOffset = 0x3c, seedOffset = 0x344, activeOffset = 0x16a;
 constexpr unsigned controllerOffset = 0x154c, activeItemOffset = 0x14c4, activeStride = 0x1c;
 constexpr unsigned playersOffset = 0x1ba50, beamOffset = 0x13a0, durationOffset = 0x1814;
 constexpr unsigned chargeOffset = 0x474, dataOffset = 0x4e8, stringTableOffset = 0x4a234;
 constexpr int forwardedPool = 0;
 #else
-namespace backend = isaac::engine::j510;
+namespace backend = isaac::engine::repentance_plus;
 constexpr unsigned spriteOffset = 0x48, seedOffset = 0x3ec, activeOffset = 0x172;
 constexpr unsigned controllerOffset = 0x161c, activeItemOffset = 0x1580, activeStride = 0x20;
 constexpr unsigned playersOffset = 0x1baa8, beamOffset = 0x1458, durationOffset = 0x18f4;
-constexpr unsigned chargeOffset = 0x524, dataOffset = 0x59c, stringTableOffset = 0x4abf8;
+constexpr unsigned chargeOffset = 0x524, dataOffset = 0x59c, stringTableOffset = 0x4abf0;
 constexpr unsigned poolOffset = 0x530;
 constexpr int forwardedPool = 10;
 #endif
@@ -96,7 +96,7 @@ bool withPlayer(unsigned slot, const std::function<void()>& run) {
 }
 } // namespace isaac::rooms
 namespace {
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 void __attribute__((thiscall)) add(void* object, int id, int charge, bool first, int slot,
                                    int data) {
     const int pool = 0;
@@ -107,7 +107,7 @@ void __attribute__((thiscall)) add(void* object, int id, int charge, bool first,
     checkPlayer(object);
     grants.push_back({id, charge, first, slot, data, pool});
 }
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 void __attribute__((thiscall)) queue(void* object, void* item, int charge, unsigned char flags,
                                      int data) {
     const int pool = 0;
@@ -167,7 +167,7 @@ int __attribute__((thiscall)) maxCharge(void* object, int slot) {
     require(slot == 2, "Native max-charge slot");
     return 6;
 }
-#ifndef ISAAC_LAN_TEST_J835
+#ifndef ISAAC_LAN_TEST_REPENTANCE
 int __attribute__((thiscall)) chargeType(void* object, int slot) {
     checkPlayer(object);
     require(slot == 2, "Plus charge-type slot");
@@ -205,7 +205,7 @@ Address callsite(unsigned returned, unsigned target, bool reward) {
     // Thiscall wrapper accepts item/config and synthesizes only this version's
     // native arguments; an incorrect RET size corrupts the caller's stack.
     std::vector<unsigned char> setup{0x8b, 0x44, 0x24, 4};
-#ifndef ISAAC_LAN_TEST_J835
+#ifndef ISAAC_LAN_TEST_REPENTANCE
     setup.insert(setup.end(), {0x6a, static_cast<unsigned char>(reward ? 0 : 10)});
 #endif
     if (reward)
@@ -239,7 +239,7 @@ void setup() {
     patch(backend::entry::levelTryInitializeBlueRoom, blueRoom);
     patch(backend::entry::entityPtrAssign, detach);
     patch(backend::entry::stringTableLookup, lookup);
-#ifndef ISAAC_LAN_TEST_J835
+#ifndef ISAAC_LAN_TEST_REPENTANCE
     patch(backend::entry::playerActiveChargeType, chargeType);
 #endif
     grantSite =
@@ -265,7 +265,7 @@ void setup() {
     field<int>(manager.data(), stringTableOffset) = 3;
     field<int>(pickup.data(), chargeOffset) = 7;
     field<int>(pickup.data(), dataOffset) = 9;
-#ifndef ISAAC_LAN_TEST_J835
+#ifndef ISAAC_LAN_TEST_REPENTANCE
     field<int>(pickup.data(), poolOffset) = 10;
 #else
     field<unsigned>(pickup.data(), 0x480) = 0xfedcba98; // Original price, not a source pool.
@@ -433,12 +433,12 @@ bool install(std::uintptr_t) {
     return true;
 }
 } // namespace isaac::engine::native_certificate_return
-#ifndef ISAAC_LAN_TEST_J835
-namespace isaac::engine::j510 {
+#ifndef ISAAC_LAN_TEST_REPENTANCE
+namespace isaac::engine::repentance_plus {
 namespace cursed_mist {
 bool install(std::uintptr_t) {
     return true;
 }
 } // namespace cursed_mist
-} // namespace isaac::engine::j510
+} // namespace isaac::engine::repentance_plus
 #endif

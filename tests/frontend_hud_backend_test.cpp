@@ -4,7 +4,7 @@
 #include <cstring>
 #include <iostream>
 #include <vector>
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 constexpr unsigned gameGlobal = 0x7fd65c, playersOffset = 0x1ba50, historyOffset = 0xc45c4;
 constexpr unsigned controllerOffset = 0x154c, indexOffset = 0x1550, twinOffset = 0x1d80,
                    kindOffset = 0x130c, parentOffset = 0x314, activeOffset = 0x16a;
@@ -12,12 +12,12 @@ constexpr unsigned partSize = 0x6b0, refreshOffset = 0x6a0;
 constexpr std::array<unsigned, 8> entries{0x508370, 0x508400, 0x508000, 0x507c90,
                                           0x4f9780, 0x5027e0, 0x502a20, 0x504610};
 #else
-constexpr unsigned gameGlobal = 0x899538, playersOffset = 0x1baa8, historyOffset = 0x5c54;
+constexpr unsigned gameGlobal = 0x8994f8, playersOffset = 0x1baa8, historyOffset = 0x5c54;
 constexpr unsigned controllerOffset = 0x161c, indexOffset = 0x1620, twinOffset = 0x1e68,
                    kindOffset = 0x13c4, parentOffset = 0x3bc, activeOffset = 0x172;
 constexpr unsigned partSize = 0x6dc, refreshOffset = 0x6ac;
-constexpr std::array<unsigned, 8> entries{0x454c80, 0x454d20, 0x4446d0, 0x444360,
-                                          0x44ab40, 0x5b9c00, 0x5b9da0, 0x5bb020};
+constexpr std::array<unsigned, 8> entries{0x454b50, 0x454bf0, 0x444590, 0x444220,
+                                          0x44aa10, 0x5b9a50, 0x5b9bf0, 0x5bae80};
 #endif
 namespace {
 namespace view = isaac::engine::native_frontend_hud;

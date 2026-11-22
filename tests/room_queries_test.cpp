@@ -5,13 +5,13 @@
 #include <array>
 #include <cstring>
 #include <windows.h>
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/entrypoints.h"
-constexpr unsigned queryEntry = isaac::engine::j835::entry::playerManagerHasPlayerType;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/entrypoints.h"
+constexpr unsigned queryEntry = isaac::engine::repentance::entry::playerManagerHasPlayerType;
 constexpr bool returnsPointer = false;
 #else
-#include "engine/versions/j510/entrypoints.h"
-constexpr unsigned queryEntry = isaac::engine::j510::entry::playerManagerFindPlayerType;
+#include "engine/versions/repentance_plus/entrypoints.h"
+constexpr unsigned queryEntry = isaac::engine::repentance_plus::entry::playerManagerFindPlayerType;
 constexpr bool returnsPointer = true;
 #endif
 

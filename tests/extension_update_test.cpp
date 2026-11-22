@@ -10,7 +10,7 @@
 namespace {
 namespace fs = std::filesystem;
 using namespace isaac::updates;
-constexpr auto gameBuild = "1.9.7.19.J510";
+constexpr auto gameBuild = "1.9.7.19.J511";
 fs::path sourceToChange;
 void require(bool value, const char* message) {
     if (!value)
@@ -56,8 +56,8 @@ struct Fixture {
         write(source / payloadFile, bytes);
     }
     Selection select(std::string_view baseline = "0.6.3", FileHash hasher = hash) {
-        auto selection =
-            isaac::updates::select(game, source, baseline, gameBuild, hasher, game / payloadFile);
+        auto selection = isaac::updates::select(game, source, baseline, "repentance_plus",
+                                                gameBuild, hasher, game / payloadFile);
         require(read(game / payloadFile) == "installed DLL", "root DLL remains unchanged");
         require(read(game / "isaac-lan/session.keep") == "saved session", "session preserved");
         require(read(game / "isaac-lan/installation.json") == "installation ownership unchanged",
@@ -115,12 +115,28 @@ void multiversion() {
     write(specific / manifestFile, manifest("0.6.4", "next", vanilla));
     write(specific / payloadFile, "next");
     const auto plus = fixture.select();
-    const auto base = select(fixture.game, fixture.source, "0.6.3", vanilla, hash);
+    const auto base = select(fixture.game, fixture.source, "0.6.3", "repentance", vanilla, hash);
     require(read(plus.candidates.front()) == "new", "Repentance+ uses the root update");
     require(read(base.candidates.front()) == "next", "Repentance uses its own update");
     fs::remove_all(fixture.game / "isaac-lan/versions");
+    const auto plusDirectory = fixture.source / "repentance_plus";
+    const auto baseDirectory = fixture.source / "repentance";
+    write(plusDirectory / manifestFile, manifest("0.6.5", "next"));
+    write(plusDirectory / payloadFile, "next");
+    write(baseDirectory / manifestFile, manifest("0.6.5", "new", vanilla));
+    write(baseDirectory / payloadFile, "new");
+    require(read(fixture.select().candidates.front()) == "next",
+            "Repentance+ prefers its edition directory");
+    require(read(select(fixture.game, fixture.source, "0.6.3", "repentance", vanilla, hash)
+                     .candidates.front()) == "new",
+            "Repentance prefers its edition directory");
+    fs::remove_all(fixture.game / "isaac-lan/versions");
+    write(baseDirectory / manifestFile, manifest("0.6.5", "new", gameBuild));
+    require(!pending(fixture.game, fixture.source, "0.6.3", "repentance", vanilla, hash),
+            "the edition directory must contain the exact running build");
+    fs::remove_all(baseDirectory);
     fs::remove_all(specific);
-    require(!pending(fixture.game, fixture.source, "0.6.3", vanilla, hash),
+    require(!pending(fixture.game, fixture.source, "0.6.3", "repentance", vanilla, hash),
             "missing Repentance update cannot use the Repentance+ DLL");
 }
 void recovery() {
@@ -185,7 +201,8 @@ void boundaries() {
 void pendingUpdate() {
     Fixture fixture;
     auto pending = [&](const char* running = "0.6.9") {
-        return isaac::updates::pending(fixture.game, fixture.source, running, gameBuild, hash);
+        return isaac::updates::pending(fixture.game, fixture.source, running, "repentance_plus",
+                                       gameBuild, hash);
     };
     require(!pending(), "missing download cannot prompt");
     fixture.package("0.6.10");

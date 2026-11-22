@@ -4,16 +4,16 @@
 #include <cstring>
 #include <iostream>
 #include <limits>
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 constexpr unsigned gameGlobal = 0x7fd65c, renderer = 0x7c7a30, mapOffset = 0x1a2ab0;
 constexpr unsigned roomOffset = 0x18194, dimensionOffset = 0x1819c;
 constexpr unsigned widthOffset = 0x80, heightOffset = 0x84, textureEntry = 0x55f990;
 constexpr std::array<unsigned, 4> entries{0x4e55f0, 0x4e5e50, 0x4e2e40, 0x565030};
 #else
-constexpr unsigned gameGlobal = 0x899538, renderer = 0x89e890, mapOffset = 0x25edc;
+constexpr unsigned gameGlobal = 0x8994f8, renderer = 0x89e850, mapOffset = 0x25edc;
 constexpr unsigned roomOffset = 0x18304, dimensionOffset = 0x1830c;
 constexpr unsigned widthOffset = 0x10, heightOffset = 0x14, textureEntry = 0x1000;
-constexpr std::array<unsigned, 4> entries{0x5a4d80, 0x5a56c0, 0x5a2800, 0x632700};
+constexpr std::array<unsigned, 4> entries{0x5a4bd0, 0x5a5510, 0x5a2650, 0x6325d0};
 #endif
 namespace {
 namespace map = isaac::engine::native_minimap;
@@ -60,17 +60,17 @@ void __attribute__((fastcall)) flushNative(void* value, void*, bool all) {
             "Minimap flush changed renderer, ABI or ordering");
     events.push_back("flush");
 }
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 void* __attribute__((fastcall)) textureNative(void* value, void*, const float* quad,
                                               const float* dest, const float* a, const float* b,
                                               const float* c, const float* d) {
     require(a == colors[0].data() && b == colors[1].data() && c == colors[2].data() &&
                 d == colors[3].data(),
-            "J835 draw lost a corner color or used the J510 ABI");
+            "Repentance draw lost a corner color or used the Repentance+ ABI");
 #else
 void* __attribute__((fastcall)) textureNative(void* value, void*, const void* quad,
                                               const void* dest, bool transparent) {
-    require(transparent, "J510 draw lost transparency argument");
+    require(transparent, "Repentance+ draw lost transparency argument");
 #endif
     require(value == texture.data() && quad == source.data() && dest == destination.data(),
             "Texture draw changed borrowed inputs");
@@ -78,7 +78,7 @@ void* __attribute__((fastcall)) textureNative(void* value, void*, const void* qu
     return reinterpret_cast<void*>(0x12345678);
 }
 void callTexture() {
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
     const auto result = native_fixture::call(
         image + textureEntry, texture.data(),
         {address(source.data()), address(destination.data()), address(colors[0].data()),
@@ -115,7 +115,7 @@ void expectEvents(std::initializer_list<const char*> expected) {
 void setSource(bool pixels) {
     const float size = pixels ? 100.0f : 1.0f;
     source = {0, 0, size, 0, 0, size, size, size, 0};
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
     field<unsigned>(source.data(), 0x20) = pixels ? 0 : 1;
 #else
     field<unsigned>(source.data(), 0x20) = pixels ? 1 : 0;

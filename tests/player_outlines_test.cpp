@@ -1,11 +1,11 @@
 // Exercise the production x86 render boundaries using private memory only.
 #include "test_support.h"
-#include "engine/versions/j510/player_outlines.cpp"
+#include "engine/versions/repentance_plus/player_outlines.cpp"
 #include <climits>
 #include <cstdio>
 
 namespace outlines = isaac::presentation::outlines;
-namespace layout = isaac::engine::j510::layout;
+namespace layout = isaac::engine::repentance_plus::layout;
 extern "C" {
 unsigned char outlineFrame[256]{}, outlinePlayer[layout::player::controller + sizeof(int)]{};
 void (*outlineThunk)() = nullptr;

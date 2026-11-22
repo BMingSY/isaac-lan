@@ -1383,7 +1383,7 @@ def test_truncated_catalog_and_torn_event_are_not_accepted():
     assert events('LAN_ITEM_AUDIT {"event":') == []
     text = "LAN_ITEM_AUDIT " + json.dumps({"event": "catalog", "item": {"key": "pill:0"}})
     with pytest.raises(ValueError, match="truncated"):
-        catalog_from_log(text)
+        catalog_from_log(text, source_profile()["game_build"])
 
 
 def test_journal_index_retains_late_evidence_and_crash_attribution(tmp_path):

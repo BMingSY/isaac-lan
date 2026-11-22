@@ -4,13 +4,13 @@
 #include <array>
 #include <cstring>
 #include <vector>
-#ifdef ISAAC_LAN_TEST_J835
-#include "engine/versions/j835/entrypoints.h"
-namespace backend = isaac::engine::j835;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+#include "engine/versions/repentance/entrypoints.h"
+namespace backend = isaac::engine::repentance;
 constexpr unsigned updateEntry = backend::entry::bossOverlayUpdateBoundary;
 #else
-#include "engine/versions/j510/entrypoints.h"
-namespace backend = isaac::engine::j510;
+#include "engine/versions/repentance_plus/entrypoints.h"
+namespace backend = isaac::engine::repentance_plus;
 constexpr unsigned updateEntry = backend::entry::bossOverlayUpdate;
 #endif
 namespace isaac::runtime {
@@ -66,7 +66,7 @@ void jump(unsigned char* target, void* function) {
         reinterpret_cast<std::uintptr_t>(function) - reinterpret_cast<std::uintptr_t>(target + 5);
     std::memcpy(target + 1, &relative, sizeof(relative));
 }
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
 unsigned word(const unsigned char* memory, unsigned offset) {
     unsigned value;
     std::memcpy(&value, memory + offset, sizeof(value));
@@ -83,8 +83,8 @@ int main() {
             VirtualAlloc(nullptr, imageSize, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
         require(image && MH_Initialize() == MH_OK, "Allocate scene fixture");
         auto* target = image + updateEntry;
-#ifdef ISAAC_LAN_TEST_J835
-        // The actual J835 boundary first reads Game.BossOverlay.state into EAX.
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+        // The actual Repentance boundary first reads Game.BossOverlay.state into EAX.
         const unsigned char readState[]{0x8b, 0x87, 0x20, 0xcf, 0x01, 0};
         std::memcpy(target, readState, sizeof(readState));
         jump(target + sizeof(readState), reinterpret_cast<void*>(sceneOriginal));
@@ -116,7 +116,7 @@ int main() {
             for (bool terminal : {false, true, false}) {
                 isaac::runtime::guest = guest;
                 isaac::runtime::terminal = terminal;
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
                 isaac::runtime::disturb = true;
 #endif
                 sceneUpdates = sceneSkipped = 0;
@@ -126,7 +126,7 @@ int main() {
                             sceneStackBefore == sceneStackAfter && object == before,
                         "Scene hook advanced the wrong peer, changed native data or unbalanced the "
                         "stack");
-#ifdef ISAAC_LAN_TEST_J835
+#ifdef ISAAC_LAN_TEST_REPENTANCE
                 require(sceneSkipped == static_cast<unsigned>(!advance),
                         "Inlined scene suppression missed the next native update block");
                 const std::array<unsigned, 8> expected{

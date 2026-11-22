@@ -6,8 +6,17 @@ from pathlib import Path
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_BACKEND = "j510"
-RELEASE_BACKENDS = (DEFAULT_BACKEND, "j835")
+DEFAULT_BACKEND = "repentance_plus"
+RELEASE_BACKENDS = (DEFAULT_BACKEND, "repentance")
+# Identifiers written by packages and lab snapshots before edition-based directories.
+LEGACY_BUILDS = {
+    "1.7.9b.J835": "repentance",
+    "1.9.7.19.J510": "repentance_plus",
+    "1.9.7.19.J511": "repentance_plus",
+}
+LEGACY_BACKENDS = {
+    marker.rsplit(".", 1)[-1].lower(): edition for marker, edition in LEGACY_BUILDS.items()
+}
 
 
 def validate(profile):
@@ -64,8 +73,8 @@ def validate(profile):
 
 
 def backend_metadata(backend=DEFAULT_BACKEND, *, root=ROOT):
-    if not re.fullmatch(r"[a-z0-9_]+", backend):
-        raise ValueError("Invalid backend identifier")
+    if backend not in RELEASE_BACKENDS:
+        raise ValueError(f"Unsupported game backend: {backend}")
     directory = root / "src/engine/versions" / backend
     profile = validate(json.loads((directory / "profile.json").read_text()))
     if profile["backend"] != backend:
@@ -113,6 +122,16 @@ def source_profile(backend=DEFAULT_BACKEND, *, root=ROOT):
     return profile
 
 
+def loader_versions(profiles):
+    return {
+        profile["backend"]: {
+            "game_build": profile["game_build"],
+            "version_rva": profile["version_rva"],
+        }
+        for profile in profiles
+    }
+
+
 def build_profile(build):
     """Use the configured build's snapshot, never the source tree's default."""
     return validate(json.loads((Path(build) / "game-profile.json").read_text()))
@@ -122,20 +141,39 @@ def lab_profile(lab):
     path = Path(lab) / "game-profile.json"
     if not path.is_file():
         raise ValueError("Missing game-profile.json; prepare this lab with a supported game build")
-    return validate(json.loads(path.read_text()))
+    profile = validate(json.loads(path.read_text()))
+    previous = profile["backend"]
+    edition = LEGACY_BACKENDS.get(previous)
+    if (
+        edition
+        and profile["game_build"].rsplit(".", 1)[-1].lower() == previous
+        and profile["game_build"] == backend_metadata(edition)["game_build"]
+    ):
+        profile["backend"] = edition
+        if profile.get("testing", {}).get("progress_fixture") == previous:
+            profile["testing"]["progress_fixture"] = edition
+    return profile
 
 
-def bundle_backends(index):
-    if index != {"format": 3, "backends": list(RELEASE_BACKENDS)}:
-        raise ValueError("Release manifest must include both supported game backends")
-    return RELEASE_BACKENDS
+def bundle_backends(index, *, allow_legacy=False):
+    if index == {"format": 3, "backends": list(RELEASE_BACKENDS)}:
+        return RELEASE_BACKENDS
+    if allow_legacy:
+        names = index.get("backends")
+        if isinstance(names, list) and all(isinstance(name, str) for name in names):
+            if (
+                index == {"format": 3, "backends": names}
+                and tuple(LEGACY_BACKENDS.get(name) for name in names) == RELEASE_BACKENDS
+            ):
+                return tuple(names)
+    raise ValueError("Release manifest must include both supported game backends")
 
 
 def installer_payload(package, backend):
     directory = Path(package)
     payload = json.loads((directory / "payload.json").read_text())
     if payload.get("format") == 3:
-        if backend not in bundle_backends(payload):
+        if backend not in bundle_backends(payload, allow_legacy=True):
             raise ValueError("The installer does not contain the selected backend")
         directory = directory / "backends" / backend
         payload = json.loads((directory / "payload.json").read_text())

@@ -1,6 +1,6 @@
 """Native pause assertions shared by focused and release acceptance."""
 
-ITEMS_PAGE = {"j835": False, "j510": True}
+ITEMS_PAGE = {"repentance": False, "repentance_plus": True}
 COMPLETION = "LAN_NETWORK PASS native pause menu"
 
 
