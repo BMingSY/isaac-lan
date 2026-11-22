@@ -66,6 +66,9 @@ local function stateEnvironment()
                 root .. "/src/bridge/presentation/tear_motion.lua"
             ),
             ["presentation/audio"] = dofile(root .. "/src/bridge/presentation/audio.lua"),
+            ["presentation/walk_collision"] = dofile(
+                root .. "/src/bridge/presentation/walk_collision.lua"
+            ),
             ["presentation/motion"] = dofile(root .. "/src/bridge/presentation/motion.lua"),
             ["presentation/timeline"] = dofile(root .. "/src/bridge/presentation/timeline.lua"),
             ["presentation/attachments"] = dofile(

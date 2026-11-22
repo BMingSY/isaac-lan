@@ -11,6 +11,7 @@ namespace isaac::configuration {
 struct Settings {
     unsigned inputHz = 60;
     unsigned otherPlayersOpacity = 100;
+    bool movementPrediction = true;
     logging::Level logLevel = logging::Level::info;
     bool performance = false;
     unsigned sampleIntervalMs = 1000;
@@ -31,7 +32,9 @@ inline constexpr std::string_view defaults =
     "input_hz = 60\n\n"
     "[players]\n"
     "; 其他玩家默认不透明度：0–100；0 完全透明，100 保留原本外观，仅影响本机画面。\n"
-    "others_opacity = 100\n\n"
+    "others_opacity = 100\n"
+    "; 客机自己的移动预测：true 开启，false 只显示房主确认的位置。\n"
+    "movement_prediction = true\n\n"
     "[logging]\n"
     "; 日志与原版 log.txt 位于同一游戏数据目录，按启动和局次分目录保存。\n"
     "; startup.log 记录启动和退出，runtime.log 记录局内事件。\n"
@@ -109,6 +112,11 @@ inline Parsed parse(std::string_view source) {
                 result.settings.logLevel = logging::Level::warning;
             else if (value == "ERROR")
                 result.settings.logLevel = logging::Level::error;
+            else
+                warn("invalid_value=" + key);
+        } else if (key == "players.movement_prediction") {
+            if (value == "true" || value == "false")
+                result.settings.movementPrediction = value == "true";
             else
                 warn("invalid_value=" + key);
         } else if (key == "diagnostics.performance") {

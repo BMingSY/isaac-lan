@@ -157,6 +157,8 @@ def main():
                     cmd += ["--installed", "--check-local-stats", "--watch-floor-hud"]
                 if case == "mod-ui":
                     cmd += ["--mod", str(a.goodtrip)]
+                if case == "motion":
+                    cmd += ["--scenario-timeout", "240"]
                 if case == "peer-flash":
                     cmd += ["--native-record-view", "0", "--frame-ms", "16"]
                 if case in ("item-revive", "peer-intro"):

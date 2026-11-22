@@ -401,6 +401,8 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_isaac_lan_probe(lua_State* 
                   originalGetProc))
         return 0;
     lua.createTable(L, 0, 1);
+    lua.pushBoolean(L, settings.movementPrediction);
+    lua.setField(L, -2, "movement_prediction");
     for (const auto& [name, fn] : std::array<std::pair<const char*, isaac::lua::Function>, 5>{
              {{"diagnostics_begin", diagnosticsBegin},
               {"diagnostics_end", diagnosticsEnd},

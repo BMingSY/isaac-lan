@@ -23,9 +23,10 @@ function vector:Dot(other)
     return self.X * other.X + self.Y * other.Y
 end
 local now, pause = 0, 0
-local motion = dofile(root .. "/src/bridge/presentation/motion.lua")(
+local makeMotion = dofile(root .. "/src/bridge/presentation/motion.lua")(
     dofile(root .. "/src/bridge/sync/fields.lua")
-)({
+)
+local motion = makeMotion({
     rooms_with_player = function(_, fn)
         fn()
         return true
@@ -185,6 +186,13 @@ function player:GetSprite()
     }
 end
 local room = {
+    GetGridPosition = function()
+        return Vector(20, 20)
+    end,
+    GetGridIndex = function()
+        return 1
+    end,
+    GetGridEntity = function() end,
     IsMirrorWorld = function()
         return false
     end,
@@ -204,21 +212,21 @@ local collision = {
     COLLISION_WALL_EXCEPT_PLAYER = 5,
     COLLISION_WALL = 4,
 }
-local gridType = { GRID_ROCK = 2, GRID_POOP = 14 }
+local gridType = {
+    GRID_ROCK = 2,
+    GRID_ROCK_ALT = 6,
+    GRID_LOCK = 11,
+    GRID_POOP = 14,
+    GRID_WALL = 15,
+    GRID_DOOR = 16,
+}
+local walkCollision =
+    dofile(root .. "/src/bridge/presentation/walk_collision.lua")(Vector, collision, gridType)
 local actor =
     { 1, 2, { 1 }, {}, { { "body", "LiftItem" } }, false, false, { string.rep("\0", 12), true } }
 local doorBlocked = false
 local doorPreview, doorBegins = nil, 0
-local localMotion = assert(
-    loadfile(
-        root .. "/src/bridge/presentation/motion.lua",
-        "t",
-        setmetatable(
-            { GridCollisionClass = collision, GridEntityType = gridType },
-            { __index = _G }
-        )
-    )
-)()(dofile(root .. "/src/bridge/sync/fields.lua"))({
+local localMotion = makeMotion({
     rooms_with_player = function(_, fn)
         fn()
         return true
@@ -238,6 +246,7 @@ local localMotion = assert(
         reset = function() end,
         arrive = function() end,
     },
+    walkCollision = walkCollision,
     vector = Vector,
     player = function()
         return player
@@ -378,13 +387,7 @@ for id = 1, 2 do
         prediction = prediction.new(body.Position),
     }
 end
-local pairedMotion = assert(
-    loadfile(
-        root .. "/src/bridge/presentation/motion.lua",
-        "t",
-        setmetatable({ GridCollisionClass = { COLLISION_NONE = 0 } }, { __index = _G })
-    )
-)()(dofile(root .. "/src/bridge/sync/fields.lua"))({
+local pairedMotion = makeMotion({
     rooms_with_player = function(slot, fn)
         assert(slot == 1 and not inRoom)
         inRoom = true
@@ -393,6 +396,7 @@ local pairedMotion = assert(
         return true
     end,
 }, {}, {
+    walkCollision = walkCollision,
     vector = Vector,
     clock = function()
         return now * 1000
@@ -553,18 +557,13 @@ end
 room.GetType = function()
     return roomType
 end
-local special = assert(
-    loadfile(
-        root .. "/src/bridge/presentation/motion.lua",
-        "t",
-        setmetatable({ GridCollisionClass = collision }, { __index = _G })
-    )
-)()(dofile(root .. "/src/bridge/sync/fields.lua"))({
+local special = makeMotion({
     rooms_with_player = function(_, fn)
         fn()
         return true
     end,
 }, {}, {
+    walkCollision = walkCollision,
     vector = Vector,
     clock = function()
         return now * 1000
@@ -639,14 +638,17 @@ localState.target, localState.display = Vector(100, 100), Vector(100, 100)
 localState.prediction = prediction.new(localState.target)
 localMotion.reset()
 for s = 0, 10 do
-    assert(localRender(s) <= 110, "High-speed prediction crossed a grid or ignored body radius")
+    assert(
+        localRender(s) <= 110.0001,
+        "High-speed prediction crossed a grid or ignored body radius"
+    )
 end
 player.GetMovementInput = function()
     return Vector(0.6, 0.8)
 end
 for s = 11, 20 do
     localRender(s)
-    assert(player.Position.X <= 110, "Diagonal slide entered a blocked grid")
+    assert(player.Position.X <= 110.0001, "Diagonal slide entered a blocked grid")
 end
 assert(player.Position.Y > 110, "Collision prevented sliding along the wall")
 localState.prediction:confirm(Vector(200, 100), 20, Vector(0, 0), 300)
@@ -693,6 +695,9 @@ assert(
     "Arrival failed to resume normal acceleration"
 )
 print("PASS arrival hold, delayed acknowledgement and immediate local acceleration")
+room.GetGridPosition = function()
+    return Vector(0, 0)
+end
 local keyDoor = { Position = Vector(200, 100), open = false }
 function keyDoor:IsOpen()
     return self.open
@@ -827,6 +832,122 @@ for frame = 1, 60 do
 end
 assert(rockSamples > 5 and player.Position.X > 380)
 print("PASS native poop contact, rock boundary, corner correction and broken-grid cleanup")
+-- A normal walking step must reach the tile face and retain its tangent,
+-- even when the remaining clearance is smaller than one prediction step.
+do
+    local function resolve(radius, flying)
+        return walkCollision(room, radius, flying, function() end, true)
+    end
+    contactType = gridType.GRID_ROCK_ALT
+    local point = resolve(10, false)(Vector(327.3, 280), Vector(331, 282))
+    close(point.X, 330, "A fractional step stopped short of the pot face")
+    close(point.Y, 282, "The blocked axis discarded tangential movement")
+    local corner = resolve(10, false)(Vector(330, 303), Vector(331, 303))
+    assert(corner.X < 331 and corner.Y > 303, "Missed contact between the old footprint samples")
+    local big = resolve(42, false)(Vector(280, 280), Vector(360, 280))
+    close(big.X, 298, "A multi-cell body missed the near edge")
+    room.GetGridCollisionAtPos = function(_, p)
+        return p.X >= 340 and p.X < 380 and collision.COLLISION_PIT or collision.COLLISION_NONE
+    end
+    close(
+        resolve(10, false)(Vector(300, 280), Vector(389, 280)).X,
+        330,
+        "Grounded body walked into a pit"
+    )
+    close(
+        resolve(10, true)(Vector(300, 280), Vector(389, 280)).X,
+        389,
+        "Flying body could not cross a pit"
+    )
+    local accepted = Vector(342, 280)
+    local admitted = resolve(10, false)(Vector(330, 280), accepted, accepted)
+    close(admitted.X, accepted.X, "Conservative collision stranded a confirmed pose")
+    room.GetGridCollisionAtPos = function()
+        return collision.COLLISION_NONE
+    end
+    close(
+        resolve(10, false)(Vector(300, 280), Vector(389, 280)).X,
+        389,
+        "A bridged pit retained its collision"
+    )
+end
+
+do
+    local center = Vector(400, 280)
+    local door = {
+        Position = center,
+        IsOpen = function()
+            return true
+        end,
+    }
+    local kind, wallRow = gridType.GRID_LOCK, center.Y
+    local doorwayRoom = {
+        GetGridPosition = function()
+            return center
+        end,
+        GetClampedPosition = function(_, position)
+            return position
+        end,
+        GetGridIndex = function()
+            return 1
+        end,
+        GetGridEntity = function()
+            return {
+                GetType = function()
+                    return kind
+                end,
+            }
+        end,
+        GetGridCollisionAtPos = function(_, position)
+            return position.X == center.X and position.Y == wallRow and collision.COLLISION_WALL
+                or collision.COLLISION_NONE
+        end,
+        GetDoor = function()
+            return door
+        end,
+    }
+    local function corridor(_, position)
+        if math.abs(position.Y - center.Y) < 16 then
+            return 2, Vector(1, 0), center.X - position.X
+        end
+    end
+    local function approach(radius)
+        local resolve = walkCollision(doorwayRoom, radius, false, corridor, true)
+        return resolve(Vector(346, 280), Vector(406, 280))
+    end
+    close(approach(10).X, 370, "An open door disabled a blocking object in the doorway")
+    kind = gridType.GRID_WALL
+    close(approach(10).X, 406, "The open doorway still blocked the player")
+    wallRow = center.Y + 40
+    assert(approach(30).Y <= 270.01, "A large body overlapped the wall beside an open door")
+end
+
+-- Opting out keeps the local body exactly at the newest host pose even with
+-- velocity, held input and an open door. Door presentation still sees arrival.
+localState.prediction, localState.doorway, localState.target = nil, nil, Vector(150, 100)
+localState.velocity = Vector(2, 0)
+room.GetDoor = function(_, slot)
+    return slot == 2 and keyDoor or nil
+end
+keyDoor.open = true
+player.GetMovementInput = function()
+    return Vector(1, 0)
+end
+room.GetGridCollisionAtPos = function()
+    error("Disabled movement queried speculative collisions")
+end
+local beforeDoor = doorBegins
+for frame = 1, 15 do
+    close(localRender(frame), 150, "Disabled movement extrapolated across updates")
+end
+localState.target = Vector(185, 100)
+close(localRender(16), 185, "Disabled movement failed to present authority at the door")
+assert(doorBegins == beforeDoor + 1, "Disabled prediction lost the door transition")
+localState.target = Vector(188, 100)
+close(localRender(17), 188, "Door preview overrode the new confirmed position")
+print(
+    "PASS continuous grid faces and corners, grounded and bridged pits, confirmed-only local movement and doors"
+)
 -- Receipt jitter must not restart a remote projectile's simulation clock.
 motion.reset(true)
 state, pause = {}, 0

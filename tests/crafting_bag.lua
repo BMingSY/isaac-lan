@@ -252,6 +252,7 @@ local function environment()
     for _, name in ipairs({
         "sync/deals",
         "sync/pills",
+        "presentation/walk_collision",
         "presentation/items",
         "presentation/audio",
         "compat/routes/crawlspace",

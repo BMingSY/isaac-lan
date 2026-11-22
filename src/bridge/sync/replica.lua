@@ -70,7 +70,7 @@ return function(fields)
             m.target, m.display, m.velocity, m.at, m.tick =
                 position, m.display or position, velocity, now, tick
             m.actor, m.controller = actor, actor and e:ToPlayer().ControllerIndex or -1
-            m.prediction = actor and (m.prediction or prediction.new(position))
+            m.prediction = actor and prediction and (m.prediction or prediction.new(position))
             m.attachment = deps.attachments and deps.attachments.capture(e, v)
             m.held = v[Entity.held]
             m.track = motionPresentation.track(
@@ -330,7 +330,7 @@ return function(fields)
             performance.counter("grids", #value.room[Room.grids])
             performance.counter("map_rooms", #value.map)
             for _, m in pairs(motion) do
-                if m.actor and m.controller == value.slot + 1 then
+                if m.prediction and m.controller == value.slot + 1 then
                     m.prediction:confirm(m.target, ack, m.velocity * 60, tick)
                 end
             end

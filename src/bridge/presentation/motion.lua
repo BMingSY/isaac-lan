@@ -138,111 +138,6 @@ return function(fields)
                 end
             end
         end
-        local POOP_CONTACT_RADIUS, GRID_CONTACT_TOLERANCE = 18, 0.1
-        local function clearForPlayer(room, position, center, radius, aperture, flying)
-            local collision = room:GetGridCollisionAtPos(position)
-            if
-                collision == GridCollisionClass.COLLISION_NONE
-                or collision == GridCollisionClass.COLLISION_WALL_EXCEPT_PLAYER
-                or (flying and (collision == GridCollisionClass.COLLISION_PIT or collision == GridCollisionClass.COLLISION_OBJECT or collision == GridCollisionClass.COLLISION_SOLID))
-                or (aperture and collision == GridCollisionClass.COLLISION_WALL)
-            then
-                return true
-            end
-            if
-                collision == GridCollisionClass.COLLISION_OBJECT
-                or collision == GridCollisionClass.COLLISION_SOLID
-            then
-                -- Grid queries identify a whole tile. Poop uses a smaller round
-                -- boundary; clipping to its tile traps correction at corners.
-                -- Rocks share its collision class but retain the tile boundary.
-                local index = room:GetGridIndex(position)
-                local grid = room:GetGridEntity(index)
-                if grid and grid:GetType() == GridEntityType.GRID_POOP then
-                    return (center - room:GetGridPosition(index)):LengthSquared()
-                        >= (radius + POOP_CONTACT_RADIUS - GRID_CONTACT_TOLERANCE) ^ 2
-                end
-            end
-            return false
-        end
-        local footprint = {
-            { 1, 0 },
-            { -1, 0 },
-            { 0, 1 },
-            { 0, -1 },
-            { 0.7071, 0.7071 },
-            { -0.7071, 0.7071 },
-            { 0.7071, -0.7071 },
-            { -0.7071, -0.7071 },
-        }
-        local maxSweepStep, maxSweepDistance = 4, 256
-        local function sweep(room, from, wanted, radius, flying, controls, authority, preview)
-            local function clear(position)
-                local aperture = controls and doorCorridor(room, position, preview) ~= nil
-                if not clearForPlayer(room, position, position, radius, aperture, flying) then
-                    return false
-                end
-                for _, offset in ipairs(footprint) do
-                    if
-                        not clearForPlayer(
-                            room,
-                            position + Vector(offset[1] * radius, offset[2] * radius),
-                            position,
-                            radius,
-                            aperture,
-                            flying
-                        )
-                    then
-                        return false
-                    end
-                end
-                return true
-            end
-            -- A native arrival, changed grid or conservative footprint can leave
-            -- the old display overlapping a wall. Sweeping every correction from
-            -- that invalid origin would reject every subsequent step forever.
-            -- Only reconciliation may recover from the host's accepted position;
-            -- ordinary prediction still sweeps every local movement segment.
-            if authority and not clear(from) then
-                from = authority
-                if not clear(from) then
-                    return authority
-                end
-            end
-            local slot, outward, along = doorCorridor(room, wanted, preview)
-            local aperture = controls and slot ~= nil
-            if aperture and slot == preview and not room:GetDoor(slot):IsOpen() and along < 18 then
-                -- Stop inside the source room until the real unlock arrives.
-                wanted = room:GetDoor(slot).Position - outward * 18
-            end
-            if not aperture then
-                wanted = room:GetClampedPosition(wanted, radius)
-            end
-            local delta = wanted - from
-            local distance = math.max(math.abs(delta.X), math.abs(delta.Y))
-            if distance > maxSweepDistance then
-                delta = delta * (maxSweepDistance / distance)
-                distance = maxSweepDistance
-            end
-            local steps = math.max(1, math.ceil(distance / maxSweepStep))
-            local increment = delta * (1 / steps)
-            local position = from
-            for _ = 1, steps do
-                local nextPosition = position + increment
-                if clear(nextPosition) then
-                    position = nextPosition
-                else
-                    local x = Vector(nextPosition.X, position.Y)
-                    local y = Vector(position.X, nextPosition.Y)
-                    if clear(x) then
-                        position = x
-                    elseif clear(y) then
-                        position = y
-                    end
-                end
-            end
-            return position
-        end
         local function present(input, sequence, actorVisuals, motion, ref, receivedTick)
             if receivedTick < 0 then
                 return
@@ -288,13 +183,14 @@ return function(fields)
                 local e = ref(identifier)
                 if e then
                     local position
-                    local predict = m.actor and m.controller == status.slot + 1
-                    if predict and view.predictMovement then
+                    local owned = m.actor and m.controller == status.slot + 1
+                    local walking = owned
+                    if walking and view.predictMovement then
                         assert(native.rooms_with_player(status.slot, function()
-                            predict = view.predictMovement(e:ToPlayer(), view.room())
+                            walking = view.predictMovement(e:ToPlayer(), view.room())
                         end))
                     end
-                    if predict then
+                    if walking then
                         local p = e:ToPlayer()
                         local controls = p.ControlsEnabled
                             and p:AreControlsEnabled()
@@ -325,27 +221,26 @@ return function(fields)
                                     and view.doors.preview
                                     and view.doors.preview(room, p, m.display, direction, m)
                                 or nil
-                            local function resolve(from, wanted, authority)
-                                return sweep(
+                            local resolve = m.prediction
+                                and view.walkCollision(
                                     room,
-                                    from,
-                                    wanted,
                                     radius,
                                     p.CanFly or p:IsCoopGhost(),
+                                    doorCorridor,
                                     controls,
-                                    authority,
                                     preview
                                 )
-                            end
-                            position = m.prediction:step(
-                                controls and direction or Vector(0, 0),
-                                sequence,
-                                p.MoveSpeed,
-                                dt,
-                                not controls,
-                                resolve,
-                                p.Friction
-                            )
+                            position = m.prediction
+                                    and m.prediction:step(
+                                        controls and direction or Vector(0, 0),
+                                        sequence,
+                                        p.MoveSpeed,
+                                        dt,
+                                        not controls,
+                                        resolve,
+                                        p.Friction
+                                    )
+                                or m.target
                             if m.doorway then
                                 local door = room:GetDoor(m.doorway.slot)
                                 if
@@ -366,7 +261,7 @@ return function(fields)
                                 aperture
                                 and not m.doorway
                                 and direction:Dot(outward) > 0
-                                and along < 18
+                                and along <= 18
                             then
                                 m.doorway = {
                                     slot = slot,
@@ -377,6 +272,10 @@ return function(fields)
                                 if view.doors then
                                     view.doors.begin()
                                 end
+                            end
+                            if not m.prediction then
+                                -- The confirmed approach still drives the door fade.
+                                return
                             end
                             if m.doorway then
                                 -- Await the host's room commit at the doorway. Do not
@@ -390,15 +289,15 @@ return function(fields)
                                 m.target
                             )
                             m.prediction.teleported = false
+                            m.prediction:clip(position)
                         end))
-                        m.prediction:clip(position)
-                        if view.metrics and view.metrics.enabled then
+                        if m.prediction and view.metrics and view.metrics.enabled then
                             view.metrics.counter(
                                 "prediction.correction_step_millipixels",
                                 math.floor((m.prediction.correctionStep or 0) * 1000)
                             )
                         end
-                        if actorsPresentation.walk and actorByID[identifier] then
+                        if m.prediction and actorsPresentation.walk and actorByID[identifier] then
                             actorsPresentation.walk(
                                 p,
                                 actorByID[identifier],
@@ -408,7 +307,12 @@ return function(fields)
                                 controls
                             )
                         end
-                        if view.metrics and view.metrics.enabled and m.prediction.errorSquared then
+                        if
+                            m.prediction
+                            and view.metrics
+                            and view.metrics.enabled
+                            and m.prediction.errorSquared
+                        then
                             local error = math.sqrt(m.prediction.errorSquared)
                             corrections = corrections + 1
                             correctionTotal = correctionTotal + error
@@ -439,13 +343,12 @@ return function(fields)
                             -- walking input. Retain the real acknowledgement so a
                             -- later form cannot replay another body's pending path.
                             m.prediction:reset(m.target, m.prediction.acknowledged, m.velocity * 60)
-                            m.doorway = nil
-                            m.walk = nil
                         end
+                        m.doorway, m.walk = nil, nil
                         -- Continue from the same display trajectory across packet
                         -- gaps. Only the authority error is smoothed, without a
                         -- compulsory extra snapshot of interpolation delay.
-                        position = sample(m.track, now)
+                        position = owned and not m.prediction and m.target or sample(m.track, now)
                     end
                     m.display = position
                     e.Position = position

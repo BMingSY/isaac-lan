@@ -34,6 +34,11 @@ def main():
     parser.add_argument("--mod", type=Path, action="append", default=[])
     parser.add_argument("--host-mod", type=Path, action="append", default=[])
     parser.add_argument("--client-mod", type=Path, action="append", default=[])
+    parser.add_argument(
+        "--no-client-movement-prediction",
+        action="store_true",
+        help="Exercise confirmed guest positions in the protected client",
+    )
     parser.add_argument("--case", choices=CASES + DIAGNOSTICS, action="append")
     parser.add_argument(
         "--first-floor",
@@ -148,6 +153,8 @@ def main():
         )
         else "900",
     )
+    if args.no_client_movement_prediction:
+        command.append("--no-client-movement-prediction")
     if not args.injected:
         command.append("--automatic")
     if args.record_relay:

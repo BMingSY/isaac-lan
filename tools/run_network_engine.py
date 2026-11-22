@@ -138,6 +138,11 @@ def main():
         "--debug-logs", action="store_true", help="Enable DEBUG in the owned lab config"
     )
     parser.add_argument(
+        "--no-client-movement-prediction",
+        action="store_true",
+        help="Display confirmed guest positions in the isolated client config",
+    )
+    parser.add_argument(
         "--client-input-hz",
         type=int,
         choices=(30, 60),
@@ -664,20 +669,15 @@ def main():
                     "host": role == "host",
                     "players": len(labs),
                     "exerciseMenu": args.exercise_menu,
+                    "movementPrediction": role == "host" or not args.no_client_movement_prediction,
                     "port": str(args.menu_port + (1 if args.latency_ms and role != "host" else 0)),
                 }
                 result.setdefault("scenario_config", {})[role] = scenario_config
                 (lab / "frontend-scenario.lua").write_text(
                     fixture_header
-                    + "_IsaacLanTest = { host = "
-                    + ("true" if scenario_config["host"] else "false")
-                    + ', port = "'
-                    + scenario_config["port"]
-                    + '", players = '
-                    + str(scenario_config["players"])
-                    + ", exerciseMenu = "
-                    + str(scenario_config["exerciseMenu"]).lower()
-                    + " }\n"
+                    + "_IsaacLanTest = "
+                    + literal(scenario_config)
+                    + "\n"
                     + tested_script.read_text(encoding="utf-8"),
                     encoding="utf-8",
                 )
@@ -726,6 +726,11 @@ def main():
                 + "\nsample_interval_ms=1000\n"
                 + "\n[network]\n"
                 + f"input_hz={args.client_input_hz if role != 'host' and args.client_input_hz else 60}\n"
+                + (
+                    "\n[players]\nmovement_prediction=false\n"
+                    if role != "host" and args.no_client_movement_prediction
+                    else ""
+                )
                 # Isolated labs upload feedback only to an explicit receiver.
                 + (
                     f"\n[feedback]\nendpoint={args.feedback_endpoint}\n"

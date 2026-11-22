@@ -19,6 +19,7 @@ presentation/fonts
 presentation/menu_assets
 presentation/menu_characters
 presentation/audio
+presentation/walk_collision
 presentation/motion
 presentation/attachments
 presentation/tethers
