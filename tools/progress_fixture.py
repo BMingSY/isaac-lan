@@ -19,9 +19,9 @@ class ProgressLayout:
 
 LAYOUTS = {
     "j835": ProgressLayout(b"ISAACNGSAVE09R  ", 638, 496, 637, 495),
-    "j510": ProgressLayout(b"ISAACNGSAVE10R  ", 642, 523, 640, 522),
+    "j511": ProgressLayout(b"ISAACNGSAVE10R  ", 642, 523, 640, 522),
 }
-MAGIC = LAYOUTS["j510"].magic
+MAGIC = LAYOUTS["j511"].magic
 PROFILE = Path("profile/Documents/My Games") / source_profile()["documents_directory"]
 WOMB_ACHIEVEMENT = 4
 TAINTED_LAZARUS_ACHIEVEMENT = 482

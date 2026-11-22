@@ -3,7 +3,7 @@
 #ifdef ISAAC_LAN_TEST_J835
 #include "engine/versions/j835/entrypoints.h"
 #else
-#include "engine/versions/j510/entrypoints.h"
+#include "engine/versions/j511/entrypoints.h"
 #endif
 #define WIN32_LEAN_AND_MEAN
 #ifndef NOMINMAX
@@ -28,7 +28,7 @@ constexpr auto initializeRva = backend::entry::playerInitialize;
 constexpr auto getHUDRva = backend::entry::gameGetHUD;
 constexpr auto assignHUDsRva = backend::entry::hudAssignPlayers;
 #else
-namespace backend = isaac::engine::j510;
+namespace backend = isaac::engine::j511;
 constexpr unsigned managerOffset = 0x1baa8, rosterOffset = 0x1baa8, controllerOffset = 0x161c;
 constexpr unsigned positionX = 0x33c, positionY = 0x340, previousX = 0x344, previousY = 0x348;
 constexpr unsigned hudOffset = 0x1da04;

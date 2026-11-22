@@ -7,9 +7,9 @@
 #include "engine/versions/j835/layout.h"
 namespace backend = isaac::engine::j835;
 #else
-#include "engine/versions/j510/entrypoints.h"
-#include "engine/versions/j510/layout.h"
-namespace backend = isaac::engine::j510;
+#include "engine/versions/j511/entrypoints.h"
+#include "engine/versions/j511/layout.h"
+namespace backend = isaac::engine::j511;
 #endif
 #include <windows.h>
 #include <MinHook.h>

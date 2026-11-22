@@ -4,8 +4,8 @@
 namespace native = isaac::engine::j835;
 constexpr unsigned playerType = 0x130c, coopGhost = 0x1f88, subplayer = 0x1cb8;
 #else
-#include "engine/versions/j510/forgotten_form.h"
-namespace native = isaac::engine::j510;
+#include "engine/versions/j511/forgotten_form.h"
+namespace native = isaac::engine::j511;
 constexpr unsigned playerType = 0x13c4, coopGhost = 0x20a9, subplayer = 0x1d98;
 #endif
 constexpr unsigned entityType = 0x28;

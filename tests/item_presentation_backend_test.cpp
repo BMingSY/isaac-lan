@@ -15,13 +15,13 @@ constexpr unsigned hudOffset = 0x3da4c, pauseOffset = 0x10203c, nightmareOffset 
 constexpr unsigned tableOffset = 0x4a234, pixelsOffset = 0x24363c, dizzyOffset = 0x283c04;
 constexpr unsigned bloomOffset = 0x1c3148;
 #else
-#include "engine/versions/j510/entrypoints.h"
-namespace backend = isaac::engine::j510;
+#include "engine/versions/j511/entrypoints.h"
+namespace backend = isaac::engine::j511;
 constexpr unsigned overlayOffset = 0x1c034, overlayBytes = 0x12b8, configs = 48;
 constexpr unsigned megaOffset = 0x11a4, delayOffset = 0x119c, sceneOffset = 0x1d2ec;
 constexpr unsigned playersOffset = 0x1baa8, controllerOffset = 0x161c, controlsOffset = 0x410;
-constexpr unsigned hudOffset = 0x1da04, pauseOffset = 0x23a7c, nightmareOffset = 0x21778;
-constexpr unsigned tableOffset = 0x4abf8, pixelsOffset = 0x26e80, dizzyOffset = 0x67e28;
+constexpr unsigned hudOffset = 0x1da04, pauseOffset = 0x23a7c, nightmareOffset = 0x21770;
+constexpr unsigned tableOffset = 0x4abf0, pixelsOffset = 0x26e80, dizzyOffset = 0x67e28;
 constexpr unsigned bloomOffset = 0x26538;
 #endif
 struct lua_State {
@@ -194,7 +194,7 @@ void customText(void* player, const char* title, const char* subtitle, unsigned 
              {word(title), word(subtitle), style & 1, (style >> 1) & 1});
     });
 #else
-    require(style == 1, "J510 fixture received an unsupported text style");
+    require(style == 1, "J511 fixture received an unsupported text style");
     call(backend::entry::hUDShowItemTextCustomUTF8, hud(),
          {word(player), word(title), word(subtitle)});
 #endif
@@ -577,7 +577,7 @@ int main() {
                     objectObserved == hud(),
                 "Custom text did not survive its native ABI and wire round trip");
 #ifndef ISAAC_LAN_TEST_J835
-        require(playerObserved == players[1].data(), "J510 custom text lost its actor parameter");
+        require(playerObserved == players[1].data(), "J511 custom text lost its actor parameter");
 #endif
         for (unsigned style : {0u, 1u, 2u, 3u}) {
 #ifndef ISAAC_LAN_TEST_J835

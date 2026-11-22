@@ -2,7 +2,7 @@
 #ifdef ISAAC_LAN_TEST_J835
 #include "engine/versions/j835/entrypoints.h"
 #else
-#include "engine/versions/j510/entrypoints.h"
+#include "engine/versions/j511/entrypoints.h"
 #endif
 #include "../test_support.h"
 #include <windows.h>
@@ -13,7 +13,7 @@ namespace isaac::test {
 #ifdef ISAAC_LAN_TEST_J835
 namespace native_test_backend = engine::j835;
 #else
-namespace native_test_backend = engine::j510;
+namespace native_test_backend = engine::j511;
 #endif
 // Synthetic MSVC x86 RTTI, consumed by the actual Windows CRT. No game objects,
 // game executable, hooks or entity-type-based stand-in for dynamic_cast.

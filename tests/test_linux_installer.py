@@ -137,7 +137,7 @@ def installed_files(game):
 def universal_bundle(tmp_path):
     builds = []
     profiles = {}
-    for backend in ("j510", "j835"):
+    for backend in ("j511", "j835"):
         build = tmp_path / backend
         build.mkdir()
         profiles[backend] = game_profile(ROOT, backend)
@@ -211,7 +211,37 @@ def test_bundle_repair_and_rollback_both_named_probes(package_game, universal_bu
     extra.write_text("keep")
     installer.install(bundle, game, "Uninstall")
     assert extra.read_text() == "keep"
-    assert not (game / "isaac-lan/backends/j510").exists()
+    assert not (game / "isaac-lan/backends/j511").exists()
+
+
+def test_bundle_upgrade_retires_the_recorded_j510_probe(package_game, universal_bundle):
+    _, game = package_game
+    bundle, _ = universal_bundle
+    installer.install(bundle, game)
+    record = game / "isaac-lan/installation.json"
+    prior = json.loads(record.read_text())
+    old_probe = installer.backend_file("j510")
+    new_probe = installer.backend_file("j511")
+    (game / new_probe).parent.rename((game / old_probe).parent)
+    (game / old_probe).write_bytes(b"previous J510 DLL")
+    prior["backends"].pop("j511")
+    prior["backends"]["j510"] = "1.9.7.19.J510"
+    prior["files"].pop(new_probe)
+    prior["files"][old_probe] = installer.digest(game / old_probe)
+    record.write_text(json.dumps(prior))
+    unrelated = (game / old_probe).with_name("player.txt")
+    unrelated.write_text("keep")
+
+    assert installer.install(bundle, game)["installed"]
+    assert not (game / old_probe).exists()
+    assert (game / new_probe).read_bytes() == (
+        bundle / "backends/j511/isaac_lan_probe.dll"
+    ).read_bytes()
+    assert json.loads(record.read_text())["backends"] == {
+        "j511": "1.9.7.19.J511",
+        "j835": "1.7.9b.J835",
+    }
+    assert unrelated.read_text() == "keep"
 
 
 def test_bundle_preserves_foreign_target_and_rejects_symlinked_parent(

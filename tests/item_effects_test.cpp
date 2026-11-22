@@ -1,17 +1,17 @@
 // Private x86 image only: no game process, files, input or hooks are installed.
 #include "test_support.h"
-#include "engine/versions/j510/item_effects.cpp"
+#include "engine/versions/j511/item_effects.cpp"
 #include "engine/versions/common/item_effects.cpp"
-#include "engine/versions/j510/death_certificate_return.cpp"
+#include "engine/versions/j511/death_certificate_return.cpp"
 #include "engine/versions/common/death_certificate_return.cpp"
-#include "engine/versions/j510/moving_box.cpp"
+#include "engine/versions/j511/moving_box.cpp"
 #include "engine/versions/common/moving_box.cpp"
-#include "engine/versions/j510/cursed_mist.cpp"
-#include "engine/versions/j510/pickup_preview.cpp"
+#include "engine/versions/j511/cursed_mist.cpp"
+#include "engine/versions/j511/pickup_preview.cpp"
 #include "engine/versions/common/pickup_preview.cpp"
-#include "engine/versions/j510/session_backend.cpp"
+#include "engine/versions/j511/session_backend.cpp"
 #include "engine/versions/common/session_backend.cpp"
-#include "engine/versions/j510/floor_generation.cpp"
+#include "engine/versions/j511/floor_generation.cpp"
 #include "engine/versions/common/floor_generation.cpp"
 #include "runtime/progression.h"
 #include <array>
@@ -102,7 +102,7 @@ __attribute__((naked)) int invokeCertificateBoundary() {
 
 namespace {
 namespace items = isaac::engine::items;
-namespace native = isaac::engine::j510;
+namespace native = isaac::engine::j511;
 using Address = std::uintptr_t;
 static_assert(sizeof(Address) == 4);
 std::vector<int> grants;
@@ -488,7 +488,7 @@ void __attribute__((thiscall)) reviveCollectibleFixture(void* player, unsigned i
 }
 void __attribute__((thiscall)) reviveTrinketFixture(void* player, unsigned id, unsigned scratch) {
     require(player == expectedPlayer && id == 23 && scratch == 0x12345678,
-            "Trinket revival changed native arguments or dropped J510's second stack word");
+            "Trinket revival changed native arguments or dropped J511's second stack word");
     require(isaac::rooms::revivalScoped == isaac::rooms::scopeAvailable,
             "Trinket revival escaped its actor scope");
     ++revivalCalls;

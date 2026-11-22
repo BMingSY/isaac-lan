@@ -10,8 +10,8 @@ namespace backend = isaac::engine::j835;
 constexpr unsigned layerStride = 0x9c, layerFlagsOffset = 0x88, cropOffset = 0x8c;
 constexpr unsigned nativeBlendCount = 4;
 #else
-#include "engine/versions/j510/entrypoints.h"
-namespace backend = isaac::engine::j510;
+#include "engine/versions/j511/entrypoints.h"
+namespace backend = isaac::engine::j511;
 constexpr unsigned layerStride = 0xa0, layerFlagsOffset = 0x8c, cropOffset = 0x90;
 constexpr unsigned nativeBlendCount = 5;
 #endif

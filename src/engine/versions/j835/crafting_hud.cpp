@@ -13,7 +13,7 @@ bool placePocket(std::uintptr_t image, std::uintptr_t hud, std::uintptr_t, float
     const auto manager = image ? at<std::uintptr_t>(image, j835::globals::manager) : 0;
     if (!manager)
         return false;
-    // HUD::Render at 0x505ece uses the current option directly. No J510 HUD
+    // HUD::Render at 0x505ece uses the current option directly. No Repentance+ HUD
     // offset or layout object exists at this boundary.
     const float margin =
         1.0f - at<float>(manager, layout::manager::options + layout::options::hudOffset);

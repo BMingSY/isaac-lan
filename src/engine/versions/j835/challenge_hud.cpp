@@ -6,7 +6,7 @@ namespace isaac::engine::native_challenge_hud {
 namespace {
 void writeParameters(Parameters& parameters, std::array<int, 2> goal) {
     parameters[j835::layout::challengeParams::stage / sizeof(std::uint32_t)] = goal[0];
-    // J835's HUD consumes the legacy path flags. J510's destination type
+    // J835's HUD consumes the legacy path flags. Repentance+'s destination type
     // encodes alternate (1) and secret (2) paths in a single scalar instead.
     constexpr int alternate = 1, secret = 2;
     auto* bytes = reinterpret_cast<std::uint8_t*>(parameters.data());

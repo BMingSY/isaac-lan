@@ -3,7 +3,7 @@
 #ifdef ISAAC_LAN_TEST_J835
 #include "engine/versions/j835/entrypoints.h"
 #else
-#include "engine/versions/j510/entrypoints.h"
+#include "engine/versions/j511/entrypoints.h"
 #endif
 #include <limits>
 
@@ -21,9 +21,9 @@ namespace backend = isaac::engine::j835;
 constexpr unsigned roomOffset = 0x18190, indexOffset = 0x18194, dimensionOffset = 0x1819c;
 constexpr unsigned musicOffset = 0x29a78, volumeOffset = 0x29e10;
 #else
-namespace backend = isaac::engine::j510;
+namespace backend = isaac::engine::j511;
 constexpr unsigned roomOffset = 0x18300, indexOffset = 0x18304, dimensionOffset = 0x1830c;
-constexpr unsigned musicOffset = 0x2a10c, volumeOffset = 0x2a62c;
+constexpr unsigned musicOffset = 0x2a104, volumeOffset = 0x2a624;
 #endif
 constexpr unsigned currentOffset = 0x30c, queuedOffset = 0x310, imageSize = privateGameImageBytes;
 using Address = std::uintptr_t;

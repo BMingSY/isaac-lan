@@ -83,7 +83,7 @@ public class Checker {
     public static int Main(string[] args) {
         string content = File.ReadAllText(args[0]);
         Console.WriteLine(content);
-        if (content == "j510" || content == "j835")
+        if (content == "j511" || content == "j835")
             return content == new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory).Name ? 0 : 1;
         return content == "compatible" ? 0 : content == "unsupported" ? 1 : 7;
     }
@@ -115,7 +115,7 @@ public class Checker {
                 sys.executable,
                 str(ROOT / "tools/generate_game_profile.py"),
                 "--backend",
-                "j510",
+                "j511",
                 "--output",
                 str(self.package),
             ],
@@ -130,8 +130,8 @@ public class Checker {
             "format": 1,
             "extension_version": "0.8.0",
             "loader_abi": 1,
-            "game_build": "1.9.7.19.J510",
-            "backend": "j510",
+            "game_build": "1.9.7.19.J511",
+            "backend": "j511",
             "linux_files": {
                 "game-profile.json": hashlib.sha256(
                     (self.package / "game-profile.json").read_bytes()
@@ -180,7 +180,7 @@ public class Checker {
         self.run_installer()
         root = self.package
         parent = root / "backends"
-        plus = parent / "j510"
+        plus = parent / "j511"
         plus.mkdir(parents=True)
         for name in (
             "isaac_lan_probe.dll",
@@ -203,7 +203,7 @@ public class Checker {
         (vanilla / probe).write_bytes(b"j835 probe")
         manifest["files"][probe] = hashlib.sha256((vanilla / probe).read_bytes()).hexdigest()
         (vanilla / "payload.json").write_text(json.dumps(manifest))
-        (root / "payload.json").write_text(json.dumps({"format": 3, "backends": ["j510", "j835"]}))
+        (root / "payload.json").write_text(json.dumps({"format": 3, "backends": ["j511", "j835"]}))
         executable = self.game / "isaac-ng.exe"
         executable.write_text("j835")
         # Both identically named DLLs and the old root DLL must roll back together.
@@ -224,7 +224,7 @@ function Move-Item {
         record = json.loads((self.game / "isaac-lan/installation.json").read_text())
         self.assertEqual(record["format"], 2)
         self.assertFalse((self.game / probe).exists())
-        for backend in ("j835", "j510"):
+        for backend in ("j835", "j511"):
             executable.write_text(backend)
             self.assertEqual(
                 json.loads(self.run_installer("Status"))["gameBuild"], record["backends"][backend]

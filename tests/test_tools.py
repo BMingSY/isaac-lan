@@ -123,7 +123,7 @@ class ProgressFixtureTests(unittest.TestCase):
             self.assertEqual(source[-204:-4], result[-204:-4])
             self.assertEqual(len(source), len(result))
         with self.assertRaisesRegex(ValueError, "selected game build"):
-            patch(source, backend="j510", host=True)
+            patch(source, backend="j511", host=True)
         with self.assertRaisesRegex(ValueError, "selected game build"):
             patch(self.baseline(), backend="j835", host=True)
 
@@ -349,7 +349,7 @@ class PackagingTests(unittest.TestCase):
         output = self.root / "package"
         payload = build(self.build, output)
         self.assertEqual(payload["format"], 1)
-        self.assertEqual(payload["game_build"], "1.9.7.19.J510")
+        self.assertEqual(payload["game_build"], "1.9.7.19.J511")
         self.assertEqual(payload["extension_version"], self.tag[1:])
         self.assertEqual(json.loads((output / "payload.json").read_text()), payload)
         self.assertEqual(
@@ -406,7 +406,7 @@ class PackagingTests(unittest.TestCase):
         with ZipFile(archive) as zipped:
             root = archive.stem + "/"
             index = json.loads(zipped.read(root + "payload.json"))
-            self.assertEqual(index, {"format": 3, "backends": ["j510", "j835"]})
+            self.assertEqual(index, {"format": 3, "backends": ["j511", "j835"]})
             for backend in index["backends"]:
                 prefix = root + f"backends/{backend}/"
                 manifest = json.loads(zipped.read(prefix + "payload.json"))
@@ -414,7 +414,7 @@ class PackagingTests(unittest.TestCase):
                 self.assertEqual(manifest["game_build"], source_profile(backend)["game_build"])
                 for name in BINARIES:
                     source = (
-                        self.build if backend == "j510" or name == "winmm.dll" else self.vanilla
+                        self.build if backend == "j511" or name == "winmm.dll" else self.vanilla
                     )
                     self.assertEqual(
                         zipped.read((root if name == "winmm.dll" else prefix) + name),
@@ -422,7 +422,7 @@ class PackagingTests(unittest.TestCase):
                     )
             wrong = zipped.read(root + "backends/j835/payload.json")
         self.rewrite_archive(
-            archive, lambda files: files.update({root + "backends/j510/payload.json": wrong})
+            archive, lambda files: files.update({root + "backends/j511/payload.json": wrong})
         )
         with self.assertRaisesRegex(ValueError, "manifest"):
             check(archive, self.tag)
@@ -439,9 +439,9 @@ class PackagingTests(unittest.TestCase):
         prepare_update(archive, content)
         root = content / "isaac-lan-update"
         with ZipFile(archive) as zipped:
-            for backend in ("j510", "j835"):
+            for backend in ("j511", "j835"):
                 build = source_profile(backend)["game_build"]
-                destination = root if backend == "j510" else root / build
+                destination = root if backend == "j511" else root / build
                 dll = zipped.read(archive.stem + f"/backends/{backend}/isaac_lan_probe.dll")
                 self.assertEqual((destination / "isaac_lan_probe.dll").read_bytes(), dll)
                 manifest = (destination / "manifest.txt").read_text().splitlines()
@@ -452,7 +452,7 @@ class PackagingTests(unittest.TestCase):
         originals = {name: (self.build / name).read_bytes() for name in BINARIES}
         archive = self.archive()
         with ZipFile(archive) as zipped:
-            prefix = archive.stem + "/backends/j510/"
+            prefix = archive.stem + "/backends/j511/"
             payload = json.loads(zipped.read(prefix + "payload.json"))
             for name, original in originals.items():
                 final = zipped.read((archive.stem + "/" if name == "winmm.dll" else prefix) + name)
@@ -536,7 +536,7 @@ class PackagingTests(unittest.TestCase):
 
     def test_check_rejects_manifest_changes(self):
         archive = self.archive()
-        name = archive.stem + "/backends/j510/payload.json"
+        name = archive.stem + "/backends/j511/payload.json"
         with ZipFile(archive) as zipped:
             original = json.loads(zipped.read(name))
         for field, wrong in (
@@ -556,7 +556,7 @@ class PackagingTests(unittest.TestCase):
 
     def test_check_rejects_binary_tampering(self):
         archive = self.archive()
-        name = archive.stem + "/backends/j510/isaac_lan_check.exe"
+        name = archive.stem + "/backends/j511/isaac_lan_check.exe"
         self.rewrite_archive(archive, lambda files: files.update({name: b"tampered"}))
         with self.assertRaisesRegex(ValueError, "file hash"):
             check(archive, self.tag)

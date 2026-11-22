@@ -31,7 +31,7 @@ void prepare(const fs::path& directory, const fs::path& fixture, const std::stri
     fs::copy_file(fixture, directory / payloadFile);
     write(directory / manifestFile,
           std::string(manifestMagic) + "\nversion=" + version +
-              "\ngame_build=1.9.7.19.J510\nloader_abi=" + std::to_string(loaderABI) +
+              "\ngame_build=1.9.7.19.J511\nloader_abi=" + std::to_string(loaderABI) +
               "\nsha256=" + isaac::updates::fileHash(directory / payloadFile) + "\n");
 }
 constexpr auto plus = &isaac::engine::supportedGameVersions[0];
@@ -119,7 +119,7 @@ int wmain(int argc, wchar_t** argv) {
         write(game / "isaac-lan/session.keep", "preserved session");
         fs::copy_file(compatible, game / payloadFile);
         require(load(game) == game / payloadFile, "no package uses installed root");
-        require(plus->backend == "j510", "legacy fixture uses the Repentance+ build");
+        require(plus->backend == "j511", "legacy fixture uses the Repentance+ build");
         const auto split = temporary.root / "split";
         std::vector<char> image;
         for (const auto& expected : isaac::engine::supportedGameVersions) {
@@ -192,7 +192,7 @@ int wmain(int argc, wchar_t** argv) {
         write(labGame / "isaac-lan/session.keep", "preserved fixture");
         fs::copy_file(compatible, labGame / payloadFile);
         prepare(source, compatible, "0.6.4");
-        isaac::updates::select(labGame, source, "0.6.3", "1.9.7.19.J510", isaac::updates::fileHash);
+        isaac::updates::select(labGame, source, "0.6.3", "1.9.7.19.J511", isaac::updates::fileHash);
         wchar_t previous[32768]{};
         GetEnvironmentVariableW(L"ISAAC_LAN_LAB_ROOT", previous, std::size(previous));
         SetEnvironmentVariableW(L"ISAAC_LAN_LAB_ROOT", lab.c_str());

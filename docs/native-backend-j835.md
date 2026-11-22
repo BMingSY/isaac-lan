@@ -1,6 +1,6 @@
 # J835 原生接口参考
 
-原版《忏悔》`1.7.9b.J835` 使用 [J835 后端](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j835)，通过 `-DISAAC_LAN_BACKEND=j835` 构建联机 DLL 和版本检查器。通用安装包同时安装两个后端，共享加载器按当前游戏选择对应主体。版本后端提供本页列出的入口、布局和 ABI 适配，共享组件负责房间调度、会话和表现作用域；构建及启动均按所选版本校验，不从 J510 借用地址。原版没有官方表情轮盘，`native_emotes=false`；LAN 文字聊天继续使用普通气泡。
+原版《忏悔》`1.7.9b.J835` 使用 [J835 后端](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j835)，通过 `-DISAAC_LAN_BACKEND=j835` 构建联机 DLL 和版本检查器。通用安装包同时安装两个后端，共享加载器按当前游戏选择对应主体。版本后端提供本页列出的入口、布局和 ABI 适配，共享组件负责房间调度、会话和表现作用域；构建及启动均按所选版本校验，不从 J511 借用地址。原版没有官方表情轮盘，`native_emotes=false`；LAN 文字聊天继续使用普通气泡。
 
 目标游戏程序 SHA-256 为 `04469d0c3d3581936fcf85bea5f9f4f3a65b2ccf96b36310456c9626bac36dc6`，架构为 Windows x86。版本标记、PE 节区、Lua DLL 和资料目录以 [profile.json](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/profile.json) 为准。两端须使用相同游戏和扩展构建，不能与忏悔＋混联。
 
@@ -12,7 +12,7 @@ Lua ABI 为 5.3，符号加载复用 [lua_api.h](https://github.com/BMingSY/isaa
 
 ## 主菜单入口
 
-[前端绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/frontend.cpp)与 J510 共用[前端装配](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/frontend.cpp)和[菜单边界](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/menu_context.h)。选定存档后，第三项“联机模式”位于“继续游戏”和“挑战”之间，支持上下选择、确认和鼠标点击。确认后直接进入局域网联机，退出局域网页面即回到主菜单。
+[前端绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/frontend.cpp)与 J511 共用[前端装配](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/frontend.cpp)和[菜单边界](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/menu_context.h)。选定存档后，第三项“联机模式”位于“继续游戏”和“挑战”之间，支持上下选择、确认和鼠标点击。确认后直接进入局域网联机，退出局域网页面即回到主菜单。
 
 主菜单对象位于 MenuManager `+0x80fac`，选择字段为对象 `+4`，游戏持有的 Sprite 内嵌于 `+0x10`。主菜单的纸张绘制入口为 RVA `0x4d9f70`，使用 thiscall，无栈参数。文字和鼠标命中使用本次纸张绘制的屏幕坐标，即对象的位置 `+8/+0xc` 加上 MenuManager 的当前视图位置 `+0x3c/+0x40`。滑入和滑出期间都沿用这一坐标。绘制时按图层 ID 找到六项原生文字和指针，临时调整纵坐标，为联机入口留出一行，绘制后恢复全部坐标。图层缺失时沿用原生绘制。指针使用原生选中行。局域网界面盖住主菜单时，底下的纸张仍按同一布局绘制。
 
@@ -24,7 +24,7 @@ MenuManager 全局指针 RVA `0x7fd688`，页字段 `+0x38`；标题、存档、
 
 [小地图组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/minimap.cpp)使用[J835 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/minimap.cpp)。原生地图为 `Game+0x1a2ab0`，大小地图配置为地图 `+0x18/+0x178`。更新、绘制、缓存入口分别为 `0x4e55f0/0x4e5e50/0x4e2e40`，均 thiscall、无栈参数。房间视角准备期间更新失效缓存，切换渲染目标前对全局 Renderer RVA `0x7c7a30` 调用 Flush `0x565030`，栈参数 false、清栈 4 字节；实际绘制不重建缓存。缓存只有在原生调用成功后才登记房间，Game 替换与断线清空旧归属。
 
-配置的借用纹理、单元宽高、间距和锚点为 `+0x114/+0x124/+0x128/+0x130/+0x140/+0x144`。纹理宽高为 `+0x80/+0x84`。Draw RVA `0x55f990` 的 ECX 为纹理，栈参数为源四边形、目标四边形和四个角的颜色指针，清栈 24 字节；源 `+0x20` 的值 1 表示归一化纹理坐标，目标只有八个 float 坐标，alpha 来自颜色 `+0xc`，不能按 J510 的目标布局读取。
+配置的借用纹理、单元宽高、间距和锚点为 `+0x114/+0x124/+0x128/+0x130/+0x140/+0x144`。纹理宽高为 `+0x80/+0x84`。Draw RVA `0x55f990` 的 ECX 为纹理，栈参数为源四边形、目标四边形和四个角的颜色指针，清栈 24 字节；源 `+0x20` 的值 1 表示归一化纹理坐标，目标只有八个 float 坐标，alpha 来自颜色 `+0xc`，不能按 J511 的目标布局读取。
 
 观察仅在当前地图绘制作用域内采集，返回普通屏幕坐标、裁剪、透明度、维度和队员标记；源纹理、颜色及四边形不被写入或持有。原生大小地图使用相同的四角透明度，适配取左上角值。嵌套／异常绘制恢复外层作用域，非有限坐标不进入叠加画面。地图三个 Hook 成组安装；纹理 Hook 在存在纹理时安装，冲突保留外部 Hook 并在后续绘制重试。
 
@@ -44,19 +44,19 @@ MenuManager 全局指针 RVA `0x7fd688`，页字段 `+0x38`；标题、存档、
 
 [房间绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/rooms.cpp)向[共享调度](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/rooms.cpp)提供原版入口、布局和少量 ABI 适配。Room 大小为 `0x777c`，构造／析构入口为 `0x3a80f0/0x3a89f0`；分配与释放沿用游戏 CRT。PlayerManager 位于 `Game+0x1ba40`，名单向量位于管理器 `+0x10`，不能把名单头作为管理器接收对象。备用身体通过 `0x518ab0` 注销名单，只搬移指针、不析构角色；销毁角色使用 `0x518af0`，接收角色指针和布尔参数并清栈八字节。
 
-每个房间持有 Ambush `+0xc` 起的待执行波次向量及后续标量，根对象为 `Game+0x1c31b8`；前置 XML 配置保持游戏所有权。27 个进程渲染纹理句柄按原生双指针对整体交换和释放，不能只交换资源地址。 原版构造函数创建这些进程纹理，但此时仍是离开房间的作用域；目的房间激活后、原生 `Room::Init` 之前，解析边界调用 `0x3a91c0`（cdecl、无参数）补齐空槽。该入口按现有屏幕尺寸分配原生表面和引用所有者，保留非空句柄；已驻留房间、未受调度的原生换房和存储壳不额外调用。纹理创建失败时跳过原生初始化并把异常交还调度，不在下一帧绘制时补救已经使用的空纹理。原版 Boss 血条缓存为 `Game+0x1018f0/+0x1018f4/+0x1018f8`；没有 J510 `Game+0x1ad90` 的换房 Boss 缓存，也没有其结束／恢复控制使用的状态门，缺失槽不读写原生内存。
+每个房间持有 Ambush `+0xc` 起的待执行波次向量及后续标量，根对象为 `Game+0x1c31b8`；前置 XML 配置保持游戏所有权。27 个进程渲染纹理句柄按原生双指针对整体交换和释放，不能只交换资源地址。 原版构造函数创建这些进程纹理，但此时仍是离开房间的作用域；目的房间激活后、原生 `Room::Init` 之前，解析边界调用 `0x3a91c0`（cdecl、无参数）补齐空槽。该入口按现有屏幕尺寸分配原生表面和引用所有者，保留非空句柄；已驻留房间、未受调度的原生换房和存储壳不额外调用。纹理创建失败时跳过原生初始化并把异常交还调度，不在下一帧绘制时补救已经使用的空纹理。原版 Boss 血条缓存为 `Game+0x1018f0/+0x1018f4/+0x1018f8`；没有 J511 `Game+0x1ad90` 的换房 Boss 缓存，也没有其结束／恢复控制使用的状态门，缺失槽不读写原生内存。
 
 上层转场 `0x2d07d0` 与底层 `RoomTransition::Start` `0x3e9650` 均使用 thiscall、五个栈参数和二十字节清栈；后者以 RoomTransition 为接收对象。原版 Mom's Hand、Dogma 和死亡证明直接调用底层入口，仍须提交到房间调度；上层原函数转入底层时不重复拦截。迷宫等目的地解析继续由 `Level::ChangeRoom` 执行。
 
 原版 `PlayerManager::NewRoom` 内联分派跟班 Variant 203／221，分别调用 `0x21f500/0x21f790`，均为无栈参数的 thiscall；其他跟班不调用这些方法。到达后的通用状态清理由 `Familiar::ResetRoomState`（`0x20b140`）执行。Dogma 过场使用 `0x4b3800`，stdcall 接收编号 25、cleanup=false，清栈八字节。
 
-原生价格 `0x3d0950` 接收 Variant、SubType、ShopItemId，折扣 `0x3d16f0` 接收 ShopItemId、基础价格，分别清栈十二和八字节。两者均通过当前借用名单识别买家，没有 J510 的显式买家参数；适配只在所属房间的买家作用域中调用，保留原生负价格和折扣结果。
+原生价格 `0x3d0950` 接收 Variant、SubType、ShopItemId，折扣 `0x3d16f0` 接收 ShopItemId、基础价格，分别清栈十二和八字节。两者均通过当前借用名单识别买家，没有 J511 的显式买家参数；适配只在所属房间的买家作用域中调用，保留原生负价格和折扣结果。
 
 ## 房间描述符与地图缓存
 
 [楼层转场 Lua 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/stage_transition_binding.h)修正原生注册的参数数量：`Game::StartStageTransition`（RVA `0x2d0aa0`）实际使用 thiscall 接收 bool、int、Player 指针并清栈十二字节，原绑定 `0x453660` 只压入两个参数。适配复用 `0x4536e0` 的三参数原生包装和闭包自身的方法指针；省略第四个 Lua 值时补 nil，显式玩家及额外参数保持不变。Hook 不持有 Lua 状态或角色，安装失败清理自身资源，状态重建后仍读取新闭包。
 
-[房间数据绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/room_data.cpp)使用[共享组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/room_data.cpp)。编码、校验、稳定配置存储和缓存借用见[房间数据契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#房间描述符与地图缓存)。原生描述符查询 RVA `0x30e0f0` 使用 thiscall 接收索引、维度，清栈 8 字节；特殊房间只支持 `-18..-1`，更小索引在调用前拒绝，不能按 J510 范围写原生共享占位对象。
+[房间数据绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/room_data.cpp)使用[共享组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/room_data.cpp)。编码、校验、稳定配置存储和缓存借用见[房间数据契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#房间描述符与地图缓存)。原生描述符查询 RVA `0x30e0f0` 使用 thiscall 接收索引、维度，清栈 8 字节；特殊房间只支持 `-18..-1`，更小索引在调用前拒绝，不能按 J511 范围写原生共享占位对象。
 
 普通描述符数组为 `Game+0x14`、步长 `0xb8`；格子映射为 `+0x1796c`，房间数量为 `+0x1815c`。当前房间／索引／维度为 `+0x18190/+0x18194/+0x1819c`。描述符与配置标量偏移同上方契约，但保存实体记录步长是 `0x68`；小地图只读取六个具名字段，其余位置保持零值，不复制原生对象。别名或嵌套缓存逆序恢复借用，接收更新与换层清理不会提前释放正在绘制的记录。
 
@@ -64,7 +64,7 @@ MenuManager 全局指针 RVA `0x7fd688`，页字段 `+0x38`；标题、存档、
 
 ## 角色附属状态
 
-[角色查询绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/room_queries.cpp)调用 `PlayerManager::HasPlayerType`（RVA `0x1ef580`），ECX 接收管理器，栈上接收角色类型并清栈四字节，结果仅取 AL。原生查询遍历管理器 `+0x10/+0x14` 的名单并排除非零 Variant；不能按 J510 的玩家指针返回值解释 EAX，也不额外改变原版的幽灵筛选规则。[共享查询组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/room_queries.cpp)让房间策略按调用来源临时借用队伍名单，嵌套调用及异常均恢复外层状态；直接查询只使用当前名单，不重复进入共享策略。安装冲突保留外部 Hook，失败后可重试。该组件由完整房间调度装配。
+[角色查询绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/room_queries.cpp)调用 `PlayerManager::HasPlayerType`（RVA `0x1ef580`），ECX 接收管理器，栈上接收角色类型并清栈四字节，结果仅取 AL。原生查询遍历管理器 `+0x10/+0x14` 的名单并排除非零 Variant；不能按 J511 的玩家指针返回值解释 EAX，也不额外改变原版的幽灵筛选规则。[共享查询组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/room_queries.cpp)让房间策略按调用来源临时借用队伍名单，嵌套调用及异常均恢复外层状态；直接查询只使用当前名单，不重复进入共享策略。安装冲突保留外部 Hook，失败后可重试。该组件由完整房间调度装配。
 
 [遗骸形态绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/forgotten_form.h)使用[共享形态恢复组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/forgotten_form.h)。原生切换入口 `0x38df20` 以 ECX 接收角色、栈上接收强制切换和播放效果两个布尔参数，清栈八字节。恢复只接受遗骸／游魂的有效配对，类型、合作幽灵和配对指针分别读取 `Player+0x130c/+0x1f88/+0x1cb8`；目标形态相同不重复调用，配对对象仍由游戏持有。该能力由房间组件调用。
 
@@ -110,7 +110,7 @@ TNT 更新入口为 `0x2ee310`，以 ECX 接收网格、无栈参数，受启动
 
 ## 跟班组件与实体绘制准备
 
-[版本绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/entity_visuals.cpp)向[共享实体视图](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/entity_visuals.cpp)提供跟班组件与 Needle 绘制准备入口。Lua 名称、编码和权限遵循[能力契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#实体引用与房间数据)，不改变同步字段。实体身份来自 `Entity+0x3c` 的 8 字节借用 Sprite；附加数据位于 `Familiar+0xe18`，不能沿用 J510 的 `+0xee0`。
+[版本绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/entity_visuals.cpp)向[共享实体视图](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/entity_visuals.cpp)提供跟班组件与 Needle 绘制准备入口。Lua 名称、编码和权限遵循[能力契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#实体引用与房间数据)，不改变同步字段。实体身份来自 `Entity+0x3c` 的 8 字节借用 Sprite；附加数据位于 `Familiar+0xe18`，不能沿用 J511 的 `+0xee0`。
 
 | 对象或入口 | J835 布局与 ABI |
 | --- | --- |
@@ -142,7 +142,7 @@ Hornfel／Horny Boys 的持有炸弹容器位于 `NPC+0xb40`，分别限定两�
 | 房间入场来源 | Boss ID 为 `Room+0x1d1c/+0x1d20`，存活／延迟敌人数为 `+0x12c8/+0x12cc`；特殊房间入口遵循原生描述符检查 |
 | 小夜灯本机查询 | 只筛选 `Room::Render` 内 RVA `0x3cc985` 对 `HasCollectible(425, false)` 的调用；按当前房间观看名单过滤，其他调用者与道具完整透传 |
 
-回放前将转场目标 `+0x14/+0x18` 设置为当前房间／维度，角色按当前名单通过原生引用接口登记。入场推进只在主机、本机房间、状态就绪且未暂停时执行；同步房间模拟期间暂时隐藏模式，正常返回或异常离开恢复，不能覆盖新转场或已释放的 Game。客机完成确认只在事件原房间和非结束状态下恢复对应角色的控制；断线与超时释放等待。J835 不使用 J510 的附加控制保护字段。
+回放前将转场目标 `+0x14/+0x18` 设置为当前房间／维度，角色按当前名单通过原生引用接口登记。入场推进只在主机、本机房间、状态就绪且未暂停时执行；同步房间模拟期间暂时隐藏模式，正常返回或异常离开恢复，不能覆盖新转场或已释放的 Game。客机完成确认只在事件原房间和非结束状态下恢复对应角色的控制；断线与超时释放等待。J835 不使用 J511 的附加控制保护字段。
 
 HUD 桥接从 `Game+0x3da4c` 取得借用对象，使用下方的原版坐标规则；小地图只发布前端实际绘制观察到的普通值。两处演出 Hook 成组创建，冲突只撤销本组件 Hook；道具、百宝袋、挑战 HUD 和胜利圈提示各自管理安装，任一失败由启动装配中止。上述组件由共享房间调度和启动装配连接。
 
@@ -150,7 +150,7 @@ HUD 桥接从 `Game+0x3da4c` 取得借用对象，使用下方的原版坐标规
 
 ## 玩家轮廓
 
-[J835 轮廓后端](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/player_outlines.cpp)与 J510 共用[绘制作用域及配色](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/player_outlines.cpp)。只在本机房间绘制的 `withPlayers` 作用域内启用，至少两个在线槽位，角色 `+0x154c` 的控制器须属于在线槽位；嵌套调用、断开和异常离开均恢复外层名单。
+[J835 轮廓后端](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/player_outlines.cpp)与 J511 共用[绘制作用域及配色](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/player_outlines.cpp)。只在本机房间绘制的 `withPlayers` 作用域内启用，至少两个在线槽位，角色 `+0x154c` 的控制器须属于在线槽位；嵌套调用、断开和异常离开均恢复外层名单。
 
 普通身体资格边界为 `0x353a89`、颜色栈调用为 `0x353aef`；特殊精灵分别为 `0x35382e/0x353894`。EDI 是玩家，`[EBP+0xc]` 是主绘制标记，`[EBP-0x79]` 是全息分身标记。符合条件时只填写 `[EBP-0x3c]` 的 44 字节临时 ColorMod，将 ECX 指向它并继续原生颜色压栈。四方向身体、头部与装扮绘制及颜色出栈保留原生实现；全息分身、残影和作用域外调用沿用原生资格判断。
 
@@ -202,15 +202,15 @@ HUD 桥接从 `Game+0x3da4c` 取得借用对象，使用下方的原版坐标规
 
 [胜利圈绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/victory_prompt.cpp) 使用[共享提示组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/victory_prompt.cpp)。原生 Controls、Render、Hide 的 RVA 分别为 `0x3f21f0/0x3f1f30/0x3f2340`，均以 ECX 接收提示对象，无栈参数。只拦截当前 `Game+0x1c33fc` 的胜利圈提示；其他提示和单人会话保留原函数。
 
-动画与播放位为提示对象的 `+0x34/+0x44`，选择和结果为 `+0x80218/+0x8021c`。动画名借用原生字符串，长度为 4 且内容为 `Idle` 才能确认；内联与堆字符串只读。原版没有 Steam 投票字段，不能访问 J510 的 `+0x130`。组件每次查询当前 Game，不缓存对象指针或接管动画、字体和字符串的所有权。
+动画与播放位为提示对象的 `+0x34/+0x44`，选择和结果为 `+0x80218/+0x8021c`。动画名借用原生字符串，长度为 4 且内容为 `Idle` 才能确认；内联与堆字符串只读。原版没有 Steam 投票字段，不能访问 J511 的 `+0x130`。组件每次查询当前 Game，不缓存对象指针或接管动画、字体和字符串的所有权。
 
 普通联机只由主机的已锁存菜单输入改变选择，结果 1 接受、2 拒绝，随后调用原生 Hide；客机不消费选择输入、不绘制该提示。联机挑战在各端等待 Idle 后拒绝，保持原生动画更新。对 Lua 的五个返回值依次为打开、选择、结果、原生投票、Idle，原版投票值恒为 false。两个 Hook 成组安装，失败仅清理本组件创建的 Hook，保留外部 Hook 并允许重试；重复安装被拒绝。换层与胜利圈推进仍由会话同步负责。
 
 ## 挑战目标 HUD
 
-[目标绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/challenge_hud.cpp) 与 J510 共用[显示组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/challenge_hud.cpp)。目标由会话的挑战定义提供；原生 Game／每日挑战参数保持原样，借用视图仅供当前 HUD 绘制消费，不包含拥有所有权的字符串或容器。
+[目标绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/challenge_hud.cpp) 与 J511 共用[显示组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/challenge_hud.cpp)。目标由会话的挑战定义提供；原生 Game／每日挑战参数保持原样，借用视图仅供当前 HUD 绘制消费，不包含拥有所有权的字符串或容器。
 
-`HUD::Render` 的存在位边界为 RVA `0x5050ab`，使用 DL 和栈帧 `EBP-0x99` 的无解锁标志。原生普通挑战和每日挑战分支在 `0x505584` 汇合，ECX 指向参数对象；此处替换为扩展持有的 164 字节标量视图，不 Hook 全局查询函数。终点为 `+0x40`，备用路线和秘密路线分别是字节 `+0x6d/+0x88`，对应 J510 目标类型 1／2；其余字段清零。J835 `+0x80` 属于诅咒掩码，不能按 J510 的路线类型写入。
+`HUD::Render` 的存在位边界为 RVA `0x5050ab`，使用 DL 和栈帧 `EBP-0x99` 的无解锁标志。原生普通挑战和每日挑战分支在 `0x505584` 汇合，ECX 指向参数对象；此处替换为扩展持有的 164 字节标量视图，不 Hook 全局查询函数。终点为 `+0x40`，备用路线和秘密路线分别是字节 `+0x6d/+0x88`，对应 J511 目标类型 1／2；其余字段清零。J835 `+0x80` 属于诅咒掩码，不能按 J511 的路线类型写入。
 
 两个边界保存标志、整数寄存器、SSE、x87 与控制字，只修改目标所需的保存槽。未启用联机挑战时保留原生指针与帧数据。Hook 成组安装，冲突撤销已创建的本组件 Hook，保留外部 Hook；重复安装被拒绝。此接口不改变挑战解锁、路线选择或通关条件。
 
@@ -236,7 +236,7 @@ J835 没有独立的布局／坐标查询方法；`HUD::Render` 在心形绘制�
 
 ## 百宝袋与副手 HUD
 
-[百宝袋绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/crafting_hud.cpp) 复用[共享选择与绘制组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/crafting_hud.cpp)。八个 PlayerHUD 的步长是 `0x6b0`，`+0/+4` 借用玩家和所属 HUD，`+8` 是原生 short 索引。控制器和幽灵标志为 `Player+0x154c/+0x1f88`；`GetActiveItem` RVA `0xf3f10` 使用 thiscall 接收槽号并清栈 4 字节，查询 `Player+0x14c4+slot*0x1c`。适配只查询四个有效槽，不依赖 J510 的槽号保护。
+[百宝袋绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/crafting_hud.cpp) 复用[共享选择与绘制组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/crafting_hud.cpp)。八个 PlayerHUD 的步长是 `0x6b0`，`+0/+4` 借用玩家和所属 HUD，`+8` 是原生 short 索引。控制器和幽灵标志为 `Player+0x154c/+0x1f88`；`GetActiveItem` RVA `0xf3f10` 使用 thiscall 接收槽号并清栈 4 字节，查询 `Player+0x14c4+slot*0x1c`。适配只查询四个有效槽，不依赖 J511 的槽号保护。
 
 | 绘制 | J835 ABI | 借用边界 |
 | --- | --- | --- |
@@ -256,13 +256,13 @@ J835 没有独立的布局／坐标查询方法；`HUD::Render` 在心形绘制�
 | 采集 | `thiscall void(Game*, GameState*)`，RVA `0x2cc850` | 默认目标为 `Manager+0xf34`；包含玩家离房处理，调用方须配对恢复进房临时状态 |
 | 清理 | `thiscall void(GameState*)`，RVA `0x520160` | 解码前清理已有原生内容；不替换对象本身 |
 | 编码 | `thiscall bool(GameState*, Context*)`，RVA `0x521a00` | 临时流字段为 `GameState+0x1fac8`，输出上限 8 MiB |
-| 解码 | `thiscall bool(GameState*, Context*)`，RVA `0x524320` | 仅一个栈参数，被调方清理 4 字节；J510 的额外布尔参数不适用 |
+| 解码 | `thiscall bool(GameState*, Context*)`，RVA `0x524320` | 仅一个栈参数，被调方清理 4 字节；J511 的额外布尔参数不适用 |
 
 两版共用 [x86 内存流](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/save_stream.h)，`Context` 为 28 字节，原生读写回调返回元素个数。流与字节缓冲由扩展持有，不能交给游戏释放；越界寻址、短读、只读流写入和分配失败会使整个操作失败，流指针在返回和 C++ 异常退出时恢复。
 
 原版退出且不保存时会直接调用 `GameState::DeleteFile`（RVA `0x520ac0`，`thiscall void(GameState*)`）。联机存档保护生效且接收对象为当前 Manager 的活动存档时，只调用该对象原生的内存清理。引擎退出时随后将 `Manager+0xf28` 的磁盘校验和清零。会话在联机开局前保存该值，在个人进度写盘和菜单重新读取单人存档前恢复它。单人和其他存档对象仍使用原版文件操作。
 
-原生解码失败处理可能请求删除存档文件。[文件名作用域](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/save_file_names.h) 在内存流解码期间临时清空四个本地／Steam 文件名槽，随后逐字节恢复原生字符串和其所有权。文件名偏移在 [layout.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/layout.h) 中集中声明。原版读取还强制比较上次本机磁盘存档的校验值，没有 J510 的禁用进度匹配参数；内存恢复期间临时将 `Manager+0xf28` 设为载荷尾四字节异或 `0x96696996`，返回或异常时恢复原值。原生仍计算并校验载荷正文与尾部，损坏数据照常失败；不修改磁盘存档或持久化进度。此保护不提供 GameState 内容回滚：失败后会话必须中止恢复，不能把部分加载状态视为完成。
+原生解码失败处理可能请求删除存档文件。[文件名作用域](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/save_file_names.h) 在内存流解码期间临时清空四个本地／Steam 文件名槽，随后逐字节恢复原生字符串和其所有权。文件名偏移在 [layout.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/layout.h) 中集中声明。原版读取还强制比较上次本机磁盘存档的校验值，没有 J511 的禁用进度匹配参数；内存恢复期间临时将 `Manager+0xf28` 设为载荷尾四字节异或 `0x96696996`，返回或异常时恢复原值。原生仍计算并校验载荷正文与尾部，损坏数据照常失败；不修改磁盘存档或持久化进度。此保护不提供 GameState 内容回滚：失败后会话必须中止恢复，不能把部分加载状态视为完成。
 
 进度位于 `Manager+0x14`；成就数组从 `+0x38` 开始，共 638 字节，计数数组从 `+0x2b8` 开始，共 496 个 uint32。[进度复制组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/progress.h) 只读写这些元素，共同网络结构的剩余元素补零，不触及相邻收藏记录或按忏悔＋的数组长度访问原版对象。
 
@@ -285,7 +285,7 @@ J835 没有独立的布局／坐标查询方法；`HUD::Render` 在心形绘制�
 
 两个原生缓冲区从 `Game+0x243648` 开始，步长 `0x20298`；选择编号为 `Game+0x283b78`。缓冲区有效位为 `+0`，GameState 为 `+4`，门、帧和计数数组分别为 `+0x1fad0/+0x1fad4/+0x1fad8`。只复制 496 个计数，既有网络载荷的剩余 27 项补零；接收非零尾项在原生写入前失败。恢复使第一缓冲区有效、第二缓冲区无效并选择第一项，不复制原生容器或代管析构。使用者的两个沙漏计数字段为 `Player+0x1cc8/+0x1ccc`，由原生恢复继续处理各主动槽与库存副作用。
 
-主机先恢复完整名单和使用者的来源房上下文，再恢复 GameState 并调用原生选路。Home 只发布换层事务；其他结果记录 RoomTransition 的实际索引、方向、动画和维度，客机调用下层入口回放，不再按本机视角选路。只有原生动画 12 恢复检查点中的玩家位置，其他动画或原生提前返回保持实际落点。在贪婪和贪婪＋首访起始房使用沙漏时，J835 执行普通回退，双方恢复检查点保存的房间、库存与血量。Home 目的地也由游戏自行选择。J835 回放结束后直接交还游戏，转场尾部字段仅由 J510 后端维护。
+主机先恢复完整名单和使用者的来源房上下文，再恢复 GameState 并调用原生选路。Home 只发布换层事务；其他结果记录 RoomTransition 的实际索引、方向、动画和维度，客机调用下层入口回放，不再按本机视角选路。只有原生动画 12 恢复检查点中的玩家位置，其他动画或原生提前返回保持实际落点。在贪婪和贪婪＋首访起始房使用沙漏时，J835 执行普通回退，双方恢复检查点保存的房间、库存与血量。Home 目的地也由游戏自行选择。J835 回放结束后直接交还游戏，转场尾部字段仅由 J511 后端维护。
 
 全部载荷、校验和、位置与转场范围在原生恢复前检查；GameState 部分恢复仍不提供回滚，失败交给运行层中止。检查点重置只清除持有的字节与位置，不破坏调用栈内的 Home 捕获作用域。采集 Hook 在虚拟房间运行时阻止其他房间替换全局缓冲区，显式采集通过原函数执行；单人完整透传，安装失败只清理自己的 Hook 并允许重试。该组件不提供完整房间后端，实际使用仍依赖来源房激活和转场完成调度。
 
@@ -305,7 +305,7 @@ J835 没有独立的布局／坐标查询方法；`HUD::Render` 在心形绘制�
 
 插值位置恢复沿 `Room+0x125c/+0x1264` 的渲染数组遍历，仅在 `Entity+0x16d` 为真时将 `+0x29c/+0x2a0` 复制回 `+0x294/+0x298` 并清除标记。无当前 Game／Room／数组时返回，不持有实体或数组指针。房间进入帧位于 `Room+0x11f0`，使用与游戏帧相同的 uint32 回绕语义。
 
-诊断接口 `audit` 与 `trace_callback` 可核对当前楼层、房间、帧数、人数及有界回调栈；它们不控制正常玩法。J510 的独立双房间实验仍由 [room_probe.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j510/room_probe.cpp) 管理原生对象，J835 不注册尚未适配的实验接口。正式房间调度由原版绑定和共享调度组件提供。
+诊断接口 `audit` 与 `trace_callback` 可核对当前楼层、房间、帧数、人数及有界回调栈；它们不控制正常玩法。J511 的独立双房间实验仍由 [room_probe.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j511/room_probe.cpp) 管理原生对象，J835 不注册尚未适配的实验接口。正式房间调度由原版绑定和共享调度组件提供。
 
 ## 会话原生绑定
 
@@ -341,7 +341,7 @@ Seeds 含游戏管理的容器；传值调用由原生入口消费一次，扩�
 
 两版游戏自带枚举中的前十六个动作与菜单方向 `20..23` 相同；原版重开为 `16`，没有原生表情动作。差异集中在 [input_actions.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/input_actions.h)，不能把忏悔＋的 UI 动作编号直接传给原版。[共享输入路由](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/input.cpp) 通过 [J835 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/input.cpp) 使用上述组件：物理采集、虚拟 XInput、权威输入、按键沿消费、暂停意图、呈现预测和退出恢复共用实现。上层请求的重开动作映射为原版 `16`，不存在的表情动作直接返回未触发；原生进入路由的动作编号保持原样，不做二次映射。采集以 `Manager+0x4a264` 的渲染帧编号去重，网络输入仍使用相同的十六动作与世界坐标鼠标目标契约。
 
-原版按钮提示只由 `MenuManager::RenderButtonLayout` 绘制；原生开局清理会销毁该菜单，Manager 内没有 J510 的持久提示组。因此原版菜单提示重置适配不访问额外对象。共享输入组件由房间和启动后端装配，按当前视图借用名单。
+原版按钮提示只由 `MenuManager::RenderButtonLayout` 绘制；原生开局清理会销毁该菜单，Manager 内没有 J511 的持久提示组。因此原版菜单提示重置适配不访问额外对象。共享输入组件由房间和启动后端装配，按当前视图借用名单。
 
 [鼠标适配](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/mouse_input.cpp) 只借入 `Player::Controls` 内联鼠标块的 `0x3439ac`／`0x343ca2` 两个边界，保留其余玩家控制流程。该块以 EDI 接收角色、EBP 指向局部帧，鼠标生效位为 `EBP-0x150`，输出为 `-0x15c/-0x158`。物理查询借用独立的有界局部帧运行原生鼠标块，在结束边界直接返回，不继续执行玩家控制；嵌套查询按线程恢复前一借用帧。适配器不分配原生角色、不修改控制器身份，也不持有角色指针。
 
@@ -361,7 +361,7 @@ Seeds 含游戏管理的容器；传值调用由原生入口消费一次，扩�
 
 | 能力 | J835 原生入口与约束 |
 | --- | --- |
-| 发放道具 | `0x32b260`，`thiscall void(Player*, int id, int charge, bool first, int slot, int data)`，清栈 20 字节；与 J510 的六个栈参数不同 |
+| 发放道具 | `0x32b260`，`thiscall void(Player*, int id, int charge, bool first, int slot, int data)`，清栈 20 字节；与 J511 的六个栈参数不同 |
 | 拾取入队 | `0x32a500`，`thiscall void(Player*, ItemConfig*, int charge, uint8 flags, int data)`，清栈 16 字节；仅确认拾取返回点 `0x2c1610` 可通知上层分配策略，其他调用和饰品沿用原生队列 |
 | 开局奖励 | 仅原生祝福发放返回点 `0x382207` 记录奖励；共享策略决定是否及向哪些槽位发放。重复加入不重复发放，开始失败清除部分记录 |
 | 移除／重新发放 | 持有查询 `0x33af30` 接收道具与忽略变形标志；掉落 `0x3570e0` 接收道具、已有掉落物指针及移除变形标志，清栈 12 字节。临时掉落物由虚表 `+0x28` 的原生 Remove 管理，组件只复制 `+0x474` 充能与 `+0x4e8` VarData |
@@ -386,7 +386,7 @@ Seeds 含游戏管理的容器；传值调用由原生入口消费一次，扩�
 
 ## 房间进入与混乱诅咒边界
 
-[房间边界绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/room_routing.cpp) 连接[共享回调组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/room_routing.cpp)。`Level::ChangeRoom` 的 RVA `0x30d7fe` 位于最终索引、维度与入口确定之后，原生混乱诅咒的临时容器已经销毁，目的房间尚未初始化。回调读取 `Game+0x18194/+0x1819c/+0x181ac`；原生改送标志来自当前 `EBP+0xf`，不能使用 J510 的 `EBP+0xb`，也不能由标准房间索引变化推断。
+[房间边界绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/room_routing.cpp) 连接[共享回调组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/room_routing.cpp)。`Level::ChangeRoom` 的 RVA `0x30d7fe` 位于最终索引、维度与入口确定之后，原生混乱诅咒的临时容器已经销毁，目的房间尚未初始化。回调读取 `Game+0x18194/+0x1819c/+0x181ac`；原生改送标志来自当前 `EBP+0xf`，不能使用 J511 的 `EBP+0xb`，也不能由标准房间索引变化推断。
 
 回调只在当前主线程的同步调用中借用，返回 true 继续原生初始化；false 跳至 `0x30db01`，由原生公共尾部恢复 SEH 栈并清理两个栈参数。已加载房间的进入效果由调用方负责。缺失边界、缺失 Game 和回调异常在原生调用退出后报告；不跨原生帧展开 C++ 异常，不保留回调或游戏对象。拦截保存通用寄存器、标志、SSE／x87 状态及控制字。
 
@@ -416,7 +416,7 @@ Music 位于 `Manager+0x29a78`，当前／排队曲目 ID 为 `+0x30c/+0x310`。
 | 泪弹 `Height`／`Scale` | `0x2500f0`／`0x250250`，`thiscall void(Tear*, float)`；保留高度及精灵缩放的副作用 |
 | 掉落物 `Price` | `0x2b91e0`，`thiscall void(Pickup*, int)`；重复价格仍执行原生显示更新 |
 | `SortingLayer`／`RenderZOffset` | `Entity+0x2b4/+0x2ac` 的 int32；不改变实体所属列表 |
-| 掉落物 `ShopItemId` | Lua setter 直接写入 `Pickup+0x488` 的 int32；J510 的 -2 至 7 限制不适用 |
+| 掉落物 `ShopItemId` | Lua setter 直接写入 `Pickup+0x488` 的 int32；J511 的 -2 至 7 限制不适用 |
 
 完整属性偏移集中在 [layout.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/layout.h)。实体借用 Sprite 位于 `Entity+0x3c`，存活字节为 `+0x16a`；实体帧数为 `Game+0x1a30dc` 减 `Entity+0x280`，保留 uint32 回绕和有符号返回语义。身份、帧数、标志和精灵名称仍为只读字段。
 
@@ -463,4 +463,4 @@ NPC 身份通过 RVA `0x5ec34c` 的 MSVC `__RTDynamicCast` 导入跳板判定，
 
 局域网界面跟随游戏语言，中文使用 `resources-dlc3.zh/font/` 下的 TeamMeatFontExtended，英文使用 `font/` 下的 TeamMeatFont。其他游戏语言使用英文。两套官方字体均使用 10、12 和 16Bold 三种字号。聊天使用能显示中文的官方扩展字体。主菜单标题的 ANM2 描述只记录官方字形的位置，字体图像由游戏提供，渲染时整行旋转。大厅使用挑战菜单的图钉纸、种子菜单的便签和勾选标记，以及主菜单的指针。角色画像与完成标记沿用游戏资源。官方在线服务和原生表情轮盘按版本能力显示。
 
-候选入口可以参考 [REPENTOGON 1.0.12e](https://github.com/TeamREPENTOGON/REPENTOGON/tree/1.0.12e/libzhl/functions)，但参考特征码不是当前游戏的 ABI 保证。审计必须保留多重匹配并核对实际调用点、参数、返回值、对象布局与所有权；不把 J510 地址或字段偏移套入 J835。离线与实机边界见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。
+候选入口可以参考 [REPENTOGON 1.0.12e](https://github.com/TeamREPENTOGON/REPENTOGON/tree/1.0.12e/libzhl/functions)，但参考特征码不是当前游戏的 ABI 保证。审计必须保留多重匹配并核对实际调用点、参数、返回值、对象布局与所有权；不把 J511 地址或字段偏移套入 J835。离线与实机边界见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。

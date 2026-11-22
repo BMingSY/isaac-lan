@@ -4,7 +4,7 @@
 #ifdef ISAAC_LAN_TEST_J835
 #include "engine/versions/j835/entrypoints.h"
 #else
-#include "engine/versions/j510/entrypoints.h"
+#include "engine/versions/j511/entrypoints.h"
 #endif
 #define WIN32_LEAN_AND_MEAN
 #ifndef NOMINMAX
@@ -26,11 +26,11 @@ constexpr unsigned playersOffset = 0x1ba50, controllerOffset = 0x154c;
 constexpr unsigned managerOptions = 0x29df8;
 constexpr int resumeSelection = 1, exitSelection = 2;
 #else
-namespace backend = isaac::engine::j510;
+namespace backend = isaac::engine::j511;
 constexpr unsigned pauseOffset = 0x23a7c, optionsOffset = 0x5b0;
 constexpr unsigned optionsSelection = 8, optionsEntries = 0x27c;
 constexpr unsigned playersOffset = 0x1baa8, controllerOffset = 0x161c;
-constexpr unsigned managerOptions = 0x2a614;
+constexpr unsigned managerOptions = 0x2a60c;
 constexpr int resumeSelection = 0, exitSelection = 3;
 #endif
 using Address = std::uintptr_t;

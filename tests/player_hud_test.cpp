@@ -1,4 +1,4 @@
-#include "engine/versions/j510/player_hud.h"
+#include "engine/versions/j511/player_hud.h"
 #include "engine/versions/j835/player_hud.h"
 #include <vector>
 #include <array>
@@ -77,7 +77,7 @@ void checkJ835() {
 }
 } // namespace
 int main() {
-    using isaac::engine::j510::player_hud::anchor;
+    using isaac::engine::j511::player_hud::anchor;
     alignas(std::uintptr_t) std::array<std::byte, 0x54d0> hudBytes{};
     alignas(std::uintptr_t) std::array<std::byte, 0x1620> playerBytes{};
     const auto hud = reinterpret_cast<std::uintptr_t>(hudBytes.data());
@@ -133,7 +133,7 @@ int main() {
                               std::numeric_limits<float>::quiet_NaN()})
             require(!anchor(hud, 0, invalid, 270, layout, position) &&
                         !anchor(hud, 0, 480, invalid, layout, position),
-                    "J510 invalid viewport accepted");
+                    "J511 invalid viewport accepted");
         write(hud, 0x54cc, false);
         require(!get(hud, 0), "HUD hide retained a visible anchor");
         std::cout << "PASS both native player HUD layouts, heart coordinates, identity and "

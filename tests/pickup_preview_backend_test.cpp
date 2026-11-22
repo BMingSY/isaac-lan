@@ -6,8 +6,8 @@
 namespace backend = isaac::engine::j835;
 constexpr unsigned roomOffset = 0x18190, existsOffset = 0x16a;
 #else
-#include "engine/versions/j510/entrypoints.h"
-namespace backend = isaac::engine::j510;
+#include "engine/versions/j511/entrypoints.h"
+namespace backend = isaac::engine::j511;
 constexpr unsigned roomOffset = 0x18300, existsOffset = 0x172;
 #endif
 #include <MinHook.h>

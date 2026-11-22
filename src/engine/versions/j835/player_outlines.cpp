@@ -64,7 +64,7 @@ extern "C" {
 __attribute__((used, force_align_arg_pointer)) void __cdecl isaac_lan_j835_outline_prepare(
     Address* registers, unsigned index) {
     // pushad saves EDI, ESI, EBP, ESP, EBX, EDX, ECX, EAX, flags, continuation.
-    // J835 owns EDI=player and ESI=render offset, unlike J510's EBX player.
+    // J835 owns EDI=player and ESI=render offset, unlike Repentance+'s EBX player.
     enum Register : unsigned { player = 0, offset = 1, frame = 2, receiver = 6, continuation = 9 };
     const auto& boundary = boundaries[index];
     registers[continuation] = reinterpret_cast<Address>(boundary.original);

@@ -33,7 +33,7 @@ bool introMarker(Address transition) {
     return at<bool>(transition, layout::roomTransition::bossIntro);
 }
 bool canRestoreControls(Address) {
-    // J510's extra native control-state object does not exist in J835.
+    // Repentance+'s extra native control-state object does not exist in J835.
     // The shared caller still checks the room identity and LAN ending state.
     return true;
 }

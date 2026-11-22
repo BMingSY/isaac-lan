@@ -24,7 +24,7 @@ void familiarNewRoom(std::uintptr_t image, std::uintptr_t familiar) {
 }
 int pickupPrice(std::uintptr_t image, std::uintptr_t room, int variant, int subtype, int shopItem) {
     // Both J835 queries use the borrowed roster. They have no explicit buyer
-    // parameter and pop four fewer bytes than the J510 methods.
+    // parameter and pop four fewer bytes than the Repentance+ methods.
     using Price = int(__attribute__((thiscall))*)(void*, int, int, int);
     using Discount = int(__attribute__((thiscall))*)(void*, int, int);
     auto* target = reinterpret_cast<void*>(room);
@@ -283,7 +283,7 @@ const Bindings bindings{
     },
     .contextOffsets = {
         0x18194, 0x18198, 0x1819c, 0x181a0, 0x181a8, 0x181ac, 0x18158,
-        // J835 Game::ChangeRoom has no J510 last-boss cache (Game+0x1ad90).
+        // J835 Game::ChangeRoom has no Repentance+ last-boss cache (Game+0x1ad90).
         std::nullopt,
         0x181b0, 0x181b4, 0x181b8, 0x1018f0, 0x1018f4, 0x1018f8,
         0x283b80, 0x283b84, 0x283b88, 0x283b8c, 0x283b90, 0x283b94, 0x283b98,

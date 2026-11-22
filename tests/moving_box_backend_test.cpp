@@ -6,8 +6,8 @@
 namespace backend = isaac::engine::j835;
 constexpr unsigned seedOffset = 0x344, beginOffset = 0x1c9c, endOffset = 0x1ca0, playerRegister = 0;
 #else
-#include "engine/versions/j510/entrypoints.h"
-namespace backend = isaac::engine::j510;
+#include "engine/versions/j511/entrypoints.h"
+namespace backend = isaac::engine::j511;
 constexpr unsigned seedOffset = 0x3ec, beginOffset = 0x1d7c, endOffset = 0x1d80, playerRegister = 6;
 #endif
 #include <windows.h>

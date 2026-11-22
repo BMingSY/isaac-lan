@@ -7,8 +7,8 @@ namespace backend = isaac::engine::j835;
 constexpr unsigned roomOffset = 0x18194, dimensionOffset = 0x1819c, doorOffset = 0x181ac;
 constexpr unsigned seedCursesOffset = 0x1c3170, redirectOffset = 0xf;
 #else
-#include "engine/versions/j510/entrypoints.h"
-namespace backend = isaac::engine::j510;
+#include "engine/versions/j511/entrypoints.h"
+namespace backend = isaac::engine::j511;
 constexpr unsigned roomOffset = 0x18304, dimensionOffset = 0x1830c, doorOffset = 0x1831c;
 constexpr unsigned seedCursesOffset = 0x26560, redirectOffset = 0xb;
 #endif

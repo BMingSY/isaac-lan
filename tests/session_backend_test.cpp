@@ -5,8 +5,8 @@
 #include "engine/versions/j835/entrypoints.h"
 namespace backend = isaac::engine::j835;
 #else
-#include "engine/versions/j510/entrypoints.h"
-namespace backend = isaac::engine::j510;
+#include "engine/versions/j511/entrypoints.h"
+namespace backend = isaac::engine::j511;
 #endif
 #define WIN32_LEAN_AND_MEAN
 #ifndef NOMINMAX
@@ -62,9 +62,9 @@ constexpr unsigned fadeAction = 0x1c31b0, fadeAlpha = 0x1c31a8, heldFrames = 0x1
 constexpr unsigned achievementCount = 638, counterCount = 496, countersOffset = 0x2b8;
 constexpr int restartAction = 4, heldAction = 5;
 #else
-constexpr unsigned stateOffset = 0xfcc, continueFlag = 0x20f1c, continueIntent = 0x4b409;
-constexpr unsigned deleteIntent = 0x4b55c, cinematicIntent = 0x21768;
-constexpr unsigned menuIntent = 0x4b560, menuTarget = 0x4b564;
+constexpr unsigned stateOffset = 0xfcc, continueFlag = 0x20f1c, continueIntent = 0x4b401;
+constexpr unsigned deleteIntent = 0x4b554, cinematicIntent = 0x21760;
+constexpr unsigned menuIntent = 0x4b558, menuTarget = 0x4b55c;
 constexpr unsigned pauseOffset = 0x23a7c, consoleOffset = 0x69468, consoleState = 0;
 constexpr unsigned floorSeeds = 0x1bb84, stateFlags = 0x26558;
 constexpr unsigned fadeAction = 0x265cc, fadeAlpha = 0x265c0, heldFrames = 0x265d4;

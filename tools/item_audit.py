@@ -71,7 +71,7 @@ def unexpected_peer_failure(host_markers, client_events):
     return None
 
 
-def catalog_from_log(text):
+def catalog_from_log(text, game_build):
     records = [event["item"] for event in events(text) if event["event"] == "catalog"]
     keys = [record["key"] for record in records]
     if not records or len(set(keys)) != len(keys):
@@ -81,7 +81,7 @@ def catalog_from_log(text):
         raise ValueError("Runtime catalog is truncated")
     if {record["kind"] for record in records} != set(KINDS):
         raise ValueError("Runtime catalog is missing an item category")
-    return {"game": "1.9.7.19.J510", "source": "Isaac.GetItemConfig", "items": records}
+    return {"game": game_build, "source": "Isaac.GetItemConfig", "items": records}
 
 
 def lua(value):

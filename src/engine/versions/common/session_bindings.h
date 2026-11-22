@@ -5,7 +5,7 @@
 namespace isaac::engine::native_session {
 // Private native bindings. Public session callbacks retain no game addresses.
 // Start entries consume a 0x5c-byte Seeds value and pop 0x68 stack bytes. J835
-// ignores ECX at these entries; J510 receives the object in ECX.
+// ignores ECX at these entries; Repentance+ receives the object in ECX.
 struct Entries {
     std::uint32_t save, deleteSave, saveRerun, executeMenu, serializeProgress;
     std::uint32_t start, executeStart, update, consoleUpdate, consoleCommand, consolePrint,

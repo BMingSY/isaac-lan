@@ -611,7 +611,7 @@ void poopState() {
 }
 void logRecord() {
     using namespace isaac::logging;
-    require(level("game_compatibility=PASS build=J510") == Level::info,
+    require(level("game_compatibility=PASS build=J511") == Level::info,
             "Startup record lost its info level");
     require(level("network_failure=Cannot apply replica") == Level::error &&
                 level("native_exception code=0xc0000005") == Level::error &&

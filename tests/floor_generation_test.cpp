@@ -6,8 +6,8 @@
 namespace backend = isaac::engine::j835;
 constexpr unsigned challengeOffset = 0x1c319c;
 #else
-#include "engine/versions/j510/entrypoints.h"
-namespace backend = isaac::engine::j510;
+#include "engine/versions/j511/entrypoints.h"
+namespace backend = isaac::engine::j511;
 constexpr unsigned challengeOffset = 0x26594;
 #endif
 #include <windows.h>

@@ -12,8 +12,8 @@ constexpr unsigned controllerOffset = 0x154c, ghostOffset = 0x1f88;
 constexpr unsigned activeBase = 0x14c4, activeStride = 0x1c;
 constexpr unsigned hudSize = 0x6b0, rootSize = hudSize * 8;
 #else
-#include "engine/versions/j510/entrypoints.h"
-namespace backend = isaac::engine::j510;
+#include "engine/versions/j511/entrypoints.h"
+namespace backend = isaac::engine::j511;
 constexpr unsigned controllerOffset = 0x161c, ghostOffset = 0x20a9;
 constexpr unsigned activeBase = 0x1580, activeStride = 0x20;
 constexpr unsigned hudSize = 0x6dc, rootSize = 0x5954;

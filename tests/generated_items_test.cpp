@@ -4,7 +4,7 @@
 #ifdef ISAAC_LAN_TEST_J835
 #include "engine/versions/j835/entrypoints.h"
 #else
-#include "engine/versions/j510/entrypoints.h"
+#include "engine/versions/j511/entrypoints.h"
 #endif
 #include <array>
 #include <cstdio>
@@ -16,7 +16,7 @@ namespace backend = isaac::engine::j835;
 constexpr unsigned registryOffset = 0x283c20, inventoryHead = 0x1ec4, inventorySize = 0x1ec8;
 constexpr unsigned playersOffset = 0x1ba50, spriteOffset = 0x3c;
 #else
-namespace backend = isaac::engine::j510;
+namespace backend = isaac::engine::j511;
 constexpr unsigned registryOffset = 0x67e48, inventoryHead = 0x1fcc, inventorySize = 0x1fd0;
 constexpr unsigned playersOffset = 0x1baa8, spriteOffset = 0x48;
 #endif

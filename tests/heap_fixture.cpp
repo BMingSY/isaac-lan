@@ -12,7 +12,7 @@ int main() {
     const auto lab = std::filesystem::path(executable).parent_path().parent_path();
     if (!std::filesystem::exists(lab / ".isaac-lan-lab"))
         return 2;
-    // The real J510 executable can reserve more than 2 GiB. Reserve a sparse
+    // The real J511 executable can reserve more than 2 GiB. Reserve a sparse
     // region to exercise dump metadata without allocating that much RAM.
     const auto first = VirtualAlloc(nullptr, 0x50000000, MEM_RESERVE, PAGE_NOACCESS);
     const auto second = VirtualAlloc(nullptr, 0x50000000, MEM_RESERVE, PAGE_NOACCESS);

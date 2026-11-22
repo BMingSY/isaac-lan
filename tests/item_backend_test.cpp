@@ -3,7 +3,7 @@
 #ifdef ISAAC_LAN_TEST_J835
 #include "engine/versions/j835/entrypoints.h"
 #else
-#include "engine/versions/j510/entrypoints.h"
+#include "engine/versions/j511/entrypoints.h"
 #endif
 #include <vector>
 
@@ -22,11 +22,11 @@ constexpr unsigned playersOffset = 0x1ba50, beamOffset = 0x13a0, durationOffset 
 constexpr unsigned chargeOffset = 0x474, dataOffset = 0x4e8, stringTableOffset = 0x4a234;
 constexpr int forwardedPool = 0;
 #else
-namespace backend = isaac::engine::j510;
+namespace backend = isaac::engine::j511;
 constexpr unsigned spriteOffset = 0x48, seedOffset = 0x3ec, activeOffset = 0x172;
 constexpr unsigned controllerOffset = 0x161c, activeItemOffset = 0x1580, activeStride = 0x20;
 constexpr unsigned playersOffset = 0x1baa8, beamOffset = 0x1458, durationOffset = 0x18f4;
-constexpr unsigned chargeOffset = 0x524, dataOffset = 0x59c, stringTableOffset = 0x4abf8;
+constexpr unsigned chargeOffset = 0x524, dataOffset = 0x59c, stringTableOffset = 0x4abf0;
 constexpr unsigned poolOffset = 0x530;
 constexpr int forwardedPool = 10;
 #endif
@@ -434,11 +434,11 @@ bool install(std::uintptr_t) {
 }
 } // namespace isaac::engine::native_certificate_return
 #ifndef ISAAC_LAN_TEST_J835
-namespace isaac::engine::j510 {
+namespace isaac::engine::j511 {
 namespace cursed_mist {
 bool install(std::uintptr_t) {
     return true;
 }
 } // namespace cursed_mist
-} // namespace isaac::engine::j510
+} // namespace isaac::engine::j511
 #endif

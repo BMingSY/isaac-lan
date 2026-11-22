@@ -11,8 +11,8 @@ function Get-LabObservationLayout([System.Diagnostics.Process]$GameProcess) {
         '1.7.9b.J835' {
             'j835'
         }
-        '1.9.7.19.J510' {
-            'j510'
+        '1.9.7.19.J511' {
+            'j511'
         }
         default {
             throw 'Unsupported isolated game layout.'

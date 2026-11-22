@@ -9,7 +9,7 @@ constexpr unsigned sampleStateOffset = 0x3ad, samplesOffset = 0x3cc;
 constexpr std::array<unsigned, 6> valueOffsets{0x3b8, 0x3bc, 0x3c0, 0x3c4, 0x3c8, 0x430};
 constexpr std::array<unsigned, 2> pathOffsets{0x3d0, 0x3dc};
 #else
-constexpr unsigned allocateEntry = 0x628890, deleteEntry = 0x70f9f9, spriteOffset = 0x48;
+constexpr unsigned allocateEntry = 0x628740, deleteEntry = 0x70f939, spriteOffset = 0x48;
 constexpr unsigned sampleStateOffset = 0x45d, samplesOffset = 0x47c;
 constexpr std::array<unsigned, 6> valueOffsets{0x468, 0x46c, 0x470, 0x474, 0x478, 0x4e0};
 constexpr std::array<unsigned, 2> pathOffsets{0x480, 0x48c};

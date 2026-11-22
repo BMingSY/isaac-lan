@@ -10,7 +10,7 @@
 namespace {
 namespace fs = std::filesystem;
 using namespace isaac::updates;
-constexpr auto gameBuild = "1.9.7.19.J510";
+constexpr auto gameBuild = "1.9.7.19.J511";
 fs::path sourceToChange;
 void require(bool value, const char* message) {
     if (!value)

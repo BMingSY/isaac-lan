@@ -1,5 +1,5 @@
 #include "test_support.h"
-#include "engine/versions/j510/layout.h"
+#include "engine/versions/j511/layout.h"
 #include "engine/versions/j835/layout.h"
 #include <algorithm>
 #include <array>
@@ -40,13 +40,13 @@ void check(const isaac::engine::native_progress::Layout& layout, unsigned achiev
                 "Missing native counters must be zero-filled on the wire");
     require(memory == expected, "Reading progression mutated native state");
 }
-void j510() {
-    check(isaac::engine::j510::layout::progress::fields, 642, 523, 0x2bc);
+void j511() {
+    check(isaac::engine::j511::layout::progress::fields, 642, 523, 0x2bc);
 }
 void j835() {
     check(isaac::engine::j835::layout::progress::fields, 638, 496, 0x2b8, true);
 }
 } // namespace
 int main(int argc, char** argv) {
-    return runTests(argc, argv, {{"j510", j510}, {"j835", j835}});
+    return runTests(argc, argv, {{"j511", j511}, {"j835", j835}});
 }

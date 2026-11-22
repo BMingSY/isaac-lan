@@ -1,12 +1,12 @@
-#include "engine/versions/j510/cursed_mist.h"
+#include "engine/versions/j511/cursed_mist.h"
 #include "test_support.h"
 #include <algorithm>
 #include <array>
 #include <map>
 #include <vector>
 
-using namespace isaac::engine::j510::cursed_mist;
-namespace entry = isaac::engine::j510::entry;
+using namespace isaac::engine::j511::cursed_mist;
+namespace entry = isaac::engine::j511::entry;
 constexpr int familiarType = 3, abyssLocust = 231, wisp = 88;
 constexpr Address host = 1, guest = 2, subplayer = 3;
 struct Familiar {

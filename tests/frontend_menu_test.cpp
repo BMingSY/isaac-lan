@@ -112,8 +112,8 @@ void checkPaperDrawing(Address image, Address menus) {
             "Incomplete menu art did not use one unmodified native draw");
 }
 #else
-constexpr unsigned managerGlobal = 0x89a0d4, menusGlobal = 0x89a8e4;
-constexpr unsigned pageOffset = 0x40, blockedOffset = 0xd, managerBlock = 0x4d44c;
+constexpr unsigned managerGlobal = 0x89a094, menusGlobal = 0x89a8a4;
+constexpr unsigned pageOffset = 0x40, blockedOffset = 0xd, managerBlock = 0x4d444;
 
 #endif
 } // namespace

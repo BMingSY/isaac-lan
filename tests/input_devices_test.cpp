@@ -3,7 +3,7 @@
 #ifdef ISAAC_LAN_TEST_J835
 #include "engine/versions/j835/entrypoints.h"
 #else
-#include "engine/versions/j510/entrypoints.h"
+#include "engine/versions/j511/entrypoints.h"
 #endif
 #define WIN32_LEAN_AND_MEAN
 #ifndef NOMINMAX
@@ -24,8 +24,8 @@ namespace backend = isaac::engine::j835;
 constexpr unsigned managerOffset = 0x7e7c98, beginOffset = 4, endOffset = 8;
 constexpr unsigned stride = 4, idOffset = 8, updateEntry = 0x56a150;
 #else
-namespace backend = isaac::engine::j510;
-constexpr unsigned managerOffset = 0x87f0a8, beginOffset = 8, endOffset = 12;
+namespace backend = isaac::engine::j511;
+constexpr unsigned managerOffset = 0x87f068, beginOffset = 8, endOffset = 12;
 constexpr unsigned stride = 8, idOffset = 12, updateEntry = 0;
 #endif
 constexpr unsigned imageSize = privateGameImageBytes;

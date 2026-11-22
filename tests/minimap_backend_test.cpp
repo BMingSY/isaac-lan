@@ -10,10 +10,10 @@ constexpr unsigned roomOffset = 0x18194, dimensionOffset = 0x1819c;
 constexpr unsigned widthOffset = 0x80, heightOffset = 0x84, textureEntry = 0x55f990;
 constexpr std::array<unsigned, 4> entries{0x4e55f0, 0x4e5e50, 0x4e2e40, 0x565030};
 #else
-constexpr unsigned gameGlobal = 0x899538, renderer = 0x89e890, mapOffset = 0x25edc;
+constexpr unsigned gameGlobal = 0x8994f8, renderer = 0x89e850, mapOffset = 0x25edc;
 constexpr unsigned roomOffset = 0x18304, dimensionOffset = 0x1830c;
 constexpr unsigned widthOffset = 0x10, heightOffset = 0x14, textureEntry = 0x1000;
-constexpr std::array<unsigned, 4> entries{0x5a4d80, 0x5a56c0, 0x5a2800, 0x632700};
+constexpr std::array<unsigned, 4> entries{0x5a4bd0, 0x5a5510, 0x5a2650, 0x6325d0};
 #endif
 namespace {
 namespace map = isaac::engine::native_minimap;
@@ -66,11 +66,11 @@ void* __attribute__((fastcall)) textureNative(void* value, void*, const float* q
                                               const float* c, const float* d) {
     require(a == colors[0].data() && b == colors[1].data() && c == colors[2].data() &&
                 d == colors[3].data(),
-            "J835 draw lost a corner color or used the J510 ABI");
+            "J835 draw lost a corner color or used the J511 ABI");
 #else
 void* __attribute__((fastcall)) textureNative(void* value, void*, const void* quad,
                                               const void* dest, bool transparent) {
-    require(transparent, "J510 draw lost transparency argument");
+    require(transparent, "J511 draw lost transparency argument");
 #endif
     require(value == texture.data() && quad == source.data() && dest == destination.data(),
             "Texture draw changed borrowed inputs");

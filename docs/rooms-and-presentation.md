@@ -4,7 +4,7 @@
 
 ## 房间上下文与所有权
 
-原生游戏使用进程级当前房间。分房后，以 `(dimension, roomIndex)` 标识房间，通过 [J510 Room Scope](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j510/rooms.cpp) 临时切换房间、玩家名单、渲染资源和音频上下文，退出时恢复外层上下文。
+原生游戏使用进程级当前房间。分房后，以 `(dimension, roomIndex)` 标识房间，通过 [J511 Room Scope](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j511/rooms.cpp) 临时切换房间、玩家名单、渲染资源和音频上下文，退出时恢复外层上下文。
 
 - 房主更新所有有在线玩家的房间；最后一名玩家离开后，通过原生 `RoomDescriptor` 保存并卸载，再次进入走原生初始化。
 - 单个房间因进场演出等待而暂停时，其房龄也暂停；其他房间继续推进。首次恢复更新仍保留原生首帧语义，重复更新同一游戏帧不会重复补偿计时。

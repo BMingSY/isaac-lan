@@ -36,7 +36,7 @@ def fixture_profile():
 
 
 def test_generated_profile_and_header_use_the_selected_backend(tmp_path):
-    profile = generate("j510", tmp_path)
+    profile = generate("j511", tmp_path)
     assert build_profile(tmp_path) == source_profile() == profile
     assert profile["signatures"] and profile["capabilities"]["native_emotes"]
     # Compile the generated descriptor and observe its public values and catalog.
@@ -81,7 +81,31 @@ int main() {
     ]
 
 
-@pytest.mark.parametrize("backend", ["j835", "j510"])
+def test_j511_manager_fields_match_checked_game_instructions(tmp_path):
+    signatures = {entry["name"]: entry for entry in source_profile("j511")["signatures"]}
+    source = tmp_path / "manager.cpp"
+    lines = ['#include "engine/versions/j511/layout.h"', "using namespace isaac::engine::j511;"]
+    for signature, start, field in (
+        ("Manager.CharacterConfigVector", 2, "layout::manager::characterConfigs"),
+        ("Manager.CharacterConfigVector", 8, "layout::manager::characterConfigs + 4"),
+        (
+            "Game.Update.focusPauseOption",
+            2,
+            "layout::manager::options + layout::options::pauseOnFocusLost",
+        ),
+    ):
+        entry = signatures[signature]
+        # The game checker must compare all four bytes of the x86 displacement.
+        assert (entry["mask"] >> start) & 0xF == 0xF
+        offset = int.from_bytes(bytes.fromhex(entry["bytes"])[start : start + 4], "little")
+        lines.append(f"static_assert({field} == {offset:#x});")
+    source.write_text("\n".join(lines))
+    subprocess.run(
+        ["c++", "-std=c++20", "-fsyntax-only", "-I", str(ROOT / "src"), str(source)], check=True
+    )
+
+
+@pytest.mark.parametrize("backend", ["j835", "j511"])
 def test_lab_observations_read_the_selected_backend_layout(backend, tmp_path):
     directory = ROOT / "src/engine/versions" / backend
     values = dict(
@@ -154,7 +178,7 @@ def test_lab_uses_its_profile_and_refuses_an_unaudited_progress_fixture(tmp_path
     with pytest.raises(ValueError, match="No audited progress fixture"):
         prepare(tmp_path, host=True)
     assert save.read_bytes() == b"preserve another version's save"
-    # A malformed explicit profile must not fall back to J510.
+    # A malformed explicit profile must not fall back to J511.
     (tmp_path / "game-profile.json").write_text("{}")
     with pytest.raises(ValueError):
         lab_profile(tmp_path)
@@ -172,7 +196,7 @@ def test_unknown_backend_is_rejected_before_generating_files(tmp_path):
     with pytest.raises(FileNotFoundError):
         generate("unimplemented", tmp_path / "out")
     assert not (tmp_path / "out").exists()
-    for name in ("../j510", "j510/../j510", "j510;main"):
+    for name in ("../j511", "j511/../j511", "j511;main"):
         with pytest.raises(ValueError):
             source_profile(name)
 
@@ -265,7 +289,7 @@ def test_metadata_alone_cannot_enable_an_incomplete_native_backend(tmp_path):
 def test_resource_fixtures_match_each_backends_metadata():
     # Execute the Lua fixture and compare values; the fixture's version branch
     # must not drift from the metadata that the native bridge actually exports.
-    for backend, vanilla in [("j510", False), ("j835", True)]:
+    for backend, vanilla in [("j511", False), ("j835", True)]:
         script = f'''
 local r = dofile("{ROOT}/tests/fixtures/presentation_assets.lua")({str(vanilla).lower()})
 print(tostring(r.native_lobby))

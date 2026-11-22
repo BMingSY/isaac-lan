@@ -7,8 +7,8 @@
 #include "engine/versions/j835/entrypoints.h"
 #include "engine/versions/j835/layout.h"
 #else
-#include "engine/versions/j510/entrypoints.h"
-#include "engine/versions/j510/layout.h"
+#include "engine/versions/j511/entrypoints.h"
+#include "engine/versions/j511/layout.h"
 #endif
 #include "compat/game_ids.h"
 #include <algorithm>
@@ -26,7 +26,7 @@ constexpr unsigned counterCount = 496, controllerOffset = 0x154c, playersOffset 
 constexpr unsigned usesOffset = 0x1cc8, floorUsesOffset = 0x1ccc;
 constexpr bool originalRepentance = true;
 #else
-namespace native = isaac::engine::j510;
+namespace native = isaac::engine::j511;
 constexpr unsigned bufferOffset = 0x26e8c, bufferStride = 0x20788;
 constexpr unsigned selectedBuffer = 0x67d9c, transitionOffset = 0x1b83c;
 constexpr unsigned doorOffset = 0x1ff54, tickOffset = 0x1ff58, countersOffset = 0x1ff5c;
@@ -829,7 +829,7 @@ void put32(std::vector<std::uint8_t>& bytes, unsigned offset, std::uint32_t valu
 void wireCompatibilityAndCounterBounds() {
     Fixture f;
     const auto plain = f.payload(), selected = f.payload(f.chosenTransition());
-    // Frozen from the pre-refactor J510 production encoder. J835 differs only
+    // Frozen from the pre-refactor J511 production encoder. J835 differs only
     // by zeroing the 27 counters absent from its native progress array.
     require(plain.size() == 2160 && selected.size() == 2176 &&
                 isaac::lan::snapshotHash(plain) ==
@@ -892,7 +892,7 @@ void nativeFailureAndMissingContext() {
 }
 void versionNativeHomeDecision() {
     // J835's native first-stage / state-flag decision is independent of the
-    // J510 first-visit, starting-room and Greed guards. Neither is reselected
+    // J511 first-visit, starting-room and Greed guards. Neither is reselected
     // by the common adapter or the replica.
     for (unsigned difficulty : {0, 1, 2, 3}) {
         Fixture f;

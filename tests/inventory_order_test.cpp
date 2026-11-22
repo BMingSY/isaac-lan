@@ -1,5 +1,5 @@
 #include "test_support.h"
-#include "engine/versions/j510/inventory_order.h"
+#include "engine/versions/j511/inventory_order.h"
 #include <algorithm>
 #include <cstdio>
 #include <vector>
@@ -7,7 +7,7 @@
 using isaac::engine::native_inventory_order::field;
 int main() {
     try {
-        using namespace isaac::engine::j510;
+        using namespace isaac::engine::j511;
         using namespace inventory_order;
         std::vector<std::uint8_t> bytes(0x2200), history(6 * layout::historyItem::size),
             gameBytes(0x24000);

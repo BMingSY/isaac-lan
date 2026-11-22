@@ -1,10 +1,10 @@
 // Private x86 objects and real calling conventions, without a game process.
 #include "test_support.h"
-#include "engine/versions/j510/entity_size.h"
+#include "engine/versions/j511/entity_size.h"
 #include <array>
 
 namespace {
-namespace native = isaac::engine::j510;
+namespace native = isaac::engine::j511;
 namespace size = native::entity_size;
 using Address = std::uintptr_t;
 std::array<std::uint8_t, 0x400> entity{};

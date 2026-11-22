@@ -5,7 +5,7 @@
 #ifdef ISAAC_LAN_TEST_J835
 #include "engine/versions/j835/entrypoints.h"
 #else
-#include "engine/versions/j510/entrypoints.h"
+#include "engine/versions/j511/entrypoints.h"
 #endif
 #include <MinHook.h>
 #include <array>
@@ -55,9 +55,9 @@ constexpr unsigned rosterOffset = 0x1ba50, controllerOffset = 0x154c, pauseOffse
 constexpr unsigned frameOffset = 0x4a264, xOffset = 0x294, yOffset = 0x298;
 constexpr int keyboardDevice = 0, restartAction = 16, resumeSelection = 1;
 #else
-namespace backend = isaac::engine::j510;
+namespace backend = isaac::engine::j511;
 constexpr unsigned rosterOffset = 0x1baa8, controllerOffset = 0x161c, pauseOffset = 0x23a7c;
-constexpr unsigned frameOffset = 0x4ae94, xOffset = 0x33c, yOffset = 0x340;
+constexpr unsigned frameOffset = 0x4ae8c, xOffset = 0x33c, yOffset = 0x340;
 constexpr int keyboardDevice = -2, restartAction = 18, resumeSelection = 0;
 #endif
 using Address = std::uintptr_t;
