@@ -231,6 +231,11 @@ hits.present = performance.wrap("present.hits", hits.present)
 state.filterInput = doorPresentation.filterInput
 local motionPresentation = component("presentation/motion")(native, actorsPresentation, {
     doors = doorPresentation,
+    walkCollision = modules["presentation/walk_collision"](
+        Vector,
+        GridCollisionClass,
+        GridEntityType
+    ),
     timeline = presentationTimeline,
     metrics = performance,
     predictMovement = function(player, room)
@@ -339,7 +344,7 @@ local replica = component("sync/replica")({
     performance = performance,
     entityCodec = entityCodec,
     vec = vec,
-    prediction = prediction,
+    prediction = native.movement_prediction ~= false and prediction,
     pointer = function(entity)
         return EntityPtr(entity)
     end,

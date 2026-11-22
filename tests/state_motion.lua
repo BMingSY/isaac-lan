@@ -3,6 +3,10 @@ local owner = { Name = "Isolated authoritative state regression" }
 local host, port
 if _IsaacLanTest then
     host, port = _IsaacLanTest.host, _IsaacLanTest.port
+    assert(
+        native.movement_prediction == _IsaacLanTest.movementPrediction,
+        "Guest prediction setting did not reach presentation"
+    )
 else
     local f = assert(io.open("./lan-test-role.txt", "r"))
     host = f:read("*l") == "host"
@@ -20,35 +24,53 @@ if not host and io then
     motionFile = assert(io.open("./lan-test-digest-motion.csv", "w"))
 end
 local lastAuthority, wallFrames, settledFrames = nil, 0, 0
-local gridCases = {
-    {
-        prepare = 1040,
-        move = 1060,
-        turn = 1100,
-        reverse = 1140,
-        stop = 1180,
-        kind = GridEntityType.GRID_POOP,
-        size = 10,
-    },
-    {
-        prepare = 1220,
-        move = 1240,
-        turn = 1280,
-        reverse = 1320,
-        stop = 1360,
-        kind = GridEntityType.GRID_ROCK,
-        size = 10,
-    },
+local fixtureEntity, grantedFlight
+local fixtureGrids = {}
+local caseInterval, firstGridTick = 180, 1040
+local pot = { kind = GridEntityType.GRID_ROCK_ALT }
+local flyingPit = { kind = GridEntityType.GRID_PIT, flying = true }
+local obstacleCases = {
+    { kind = GridEntityType.GRID_POOP },
+    { kind = GridEntityType.GRID_ROCK },
+    { kind = GridEntityType.GRID_PIT },
+    { kind = GridEntityType.GRID_PIT, bridge = true },
+    { kind = GridEntityType.GRID_LOCK },
+    { kind = GridEntityType.GRID_TNT },
+    { kind = GridEntityType.GRID_PILLAR },
+    { kind = GridEntityType.GRID_ROCKB },
+    { kind = GridEntityType.GRID_ROCKT },
+    { kind = GridEntityType.GRID_ROCK_BOMB },
+    { kind = GridEntityType.GRID_ROCK_SS },
+    { kind = GridEntityType.GRID_ROCK_SPIKED },
+    { kind = GridEntityType.GRID_ROCK_ALT2 },
+    { kind = GridEntityType.GRID_ROCK_GOLD },
+    { entity = EntityType.ENTITY_STONEHEAD },
+    pot,
+    flyingPit,
 }
+local prepare = firstGridTick
+for _, case in ipairs(obstacleCases) do
+    case.prepare, case.move, case.turn = prepare, prepare + 20, prepare + 60
+    case.reverse, case.stop = prepare + 100, prepare + 140
+    prepare = case == pot and case.stop + 140 or prepare + caseInterval
+end
 local gridCenter, gridStart = Vector(360, 280), Vector(300, 280)
 local pad = { up = 1, down = 2, left = 4, right = 8 }
-local finishTick, breakTick, walkThroughTick, stopAfterBreak = 1500, 1380, 1400, 1440
+local breakTick, walkThroughTick, stopAfterBreak, finishTick =
+    pot.stop + 20, pot.stop + 40, pot.stop + 80, flyingPit.stop + 40
+local landingTick, flightRemovalTick = flyingPit.stop + 10, flyingPit.stop + 20
 local contactLeadTicks, settledLeadTicks = 20, 20
 local gridRemovalLeadTicks = 10
 local maximumAllowedContactSpeed, minimumContactSamples = 450, 100
 local contactSamples, maximumContactSpeed, brokenGridSamples = {}, 0, 0
 local previousContact, previousContactTime, previousContactCase
 local fixtureRoom, fixtureDoors = nil, {}
+local function removeFlight()
+    if grantedFlight then
+        Isaac.GetPlayer(1):RemoveCollectible(CollectibleType.COLLECTIBLE_TRANSCENDENCE)
+        grantedFlight = false
+    end
+end
 local function checkRoom()
     local locations = native.rooms_positions()
     if not fixtureRoom and locations["0"] then
@@ -103,7 +125,7 @@ function _IsaacLanFrame()
     end
     local buttons = moveSign == 1 and pad.right or moveSign == -1 and pad.left or 0
     if not host then
-        for _, case in ipairs(gridCases) do
+        for _, case in ipairs(obstacleCases) do
             if samples >= case.move and samples < case.stop then
                 buttons = samples < case.turn and pad.right
                     or samples < case.reverse and (pad.right | pad.down)
@@ -121,10 +143,10 @@ function _IsaacLanFrame()
                 wallFrames > 20 and settledFrames > 20,
                 "Wall and stop checks were not exercised"
             )
-            for index in ipairs(gridCases) do
+            for index in ipairs(obstacleCases) do
                 assert(
                     (contactSamples[index] or 0) > minimumContactSamples,
-                    "Round-grid contact was not exercised"
+                    "Obstacle contact was not exercised"
                 )
             end
             assert(brokenGridSamples > 20, "Broken-grid passage was not exercised")
@@ -188,36 +210,79 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         if t == 580 then
             local room = Game():GetRoom()
             for y = 240, 320, 40 do
-                room:SpawnGridEntity(
-                    room:GetGridIndex(Vector(560, y)),
-                    GridEntityType.GRID_ROCK,
-                    0,
-                    1,
-                    0
-                )
+                local index = room:GetGridIndex(Vector(560, y))
+                assert(room:SpawnGridEntity(index, GridEntityType.GRID_ROCK, 0, 1, 0))
+                fixtureGrids[index] = GridEntityType.GRID_ROCK
             end
         end
-        for _, case in ipairs(gridCases) do
+        for _, case in ipairs(obstacleCases) do
             if t == case.prepare - gridRemovalLeadTicks then
                 local room = Game():GetRoom()
                 room:RemoveGridEntity(room:GetGridIndex(gridCenter), 0, false)
+                if fixtureEntity then
+                    fixtureEntity:Remove()
+                    fixtureEntity = nil
+                end
             end
             if t == case.prepare then
                 local room = Game():GetRoom()
                 local index = room:GetGridIndex(gridCenter)
-                room:SpawnGridEntity(index, case.kind, 0, 1, 0)
-                local grid = room:GetGridEntity(index)
-                assert(grid and grid:GetType() == case.kind, "Contact grid was not created")
+                if case.entity then
+                    fixtureEntity = Isaac.Spawn(case.entity, 0, 0, gridCenter, Vector.Zero, nil)
+                    fixtureEntity:ClearEntityFlags(EntityFlag.FLAG_APPEAR)
+                else
+                    assert(room:SpawnGridEntity(index, case.kind, 0, 1, 0))
+                    fixtureGrids[index] = case.kind
+                    local grid = room:GetGridEntity(index)
+                    assert(grid and grid:GetType() == case.kind, "Contact grid was not created")
+                    if case.kind == GridEntityType.GRID_PIT then
+                        grid.State = 0
+                        grid.CollisionClass = GridCollisionClass.COLLISION_PIT
+                        if case.bridge then
+                            grid:ToPit():MakeBridge(nil, 0)
+                        end
+                    end
+                end
                 local player = Isaac.GetPlayer(1)
+                if case.flying then
+                    player:AddCollectible(CollectibleType.COLLECTIBLE_TRANSCENDENCE, 0, false)
+                    grantedFlight = true
+                end
                 player.Position, player.Velocity = gridStart, Vector.Zero
-                report("GRID_CONTACT kind=" .. case.kind .. " size=" .. player.Size)
+                report(
+                    "WALK_CONTACT "
+                        .. (case.kind and "grid=" .. case.kind or "entity=" .. case.entity)
+                )
+            elseif t == case.move then
+                assert(
+                    Isaac.GetPlayer(1).CanFly == (case.flying == true),
+                    "Unexpected flight at contact"
+                )
+                if case.kind then
+                    local passable = Game():GetRoom():GetGridCollisionAtPos(gridCenter)
+                        == GridCollisionClass.COLLISION_NONE
+                    assert(
+                        passable == (case.bridge == true),
+                        "Unexpected collision for grid " .. case.kind
+                    )
+                end
             end
         end
         if t == breakTick then
             local room = Game():GetRoom()
-            room:RemoveGridEntity(room:GetGridIndex(gridCenter), 0, false)
+            assert(
+                room:DestroyGrid(room:GetGridIndex(gridCenter), true),
+                "The pot could not be broken"
+            )
             local player = Isaac.GetPlayer(1)
             player.Position, player.Velocity = gridStart, Vector.Zero
+        elseif t == landingTick then
+            -- Land on bare floor before taking away flight. Losing it over
+            -- a blocked tile can grant native safety wings for this room.
+            local player = Isaac.GetPlayer(1)
+            player.Position, player.Velocity = gridStart, Vector.Zero
+        elseif t == flightRemovalTick then
+            removeFlight()
         end
         if t % 120 == 0 then
             report("HOST tick=" .. t)
@@ -288,6 +353,12 @@ Isaac.AddCallback(owner, ModCallbacks.MC_POST_RENDER, function()
     if not p then
         return
     end
+    if not native.movement_prediction and lastAuthority then
+        assert(
+            p.Position:Distance(lastAuthority) < 0.01,
+            "Disabled movement predicted beyond the confirmed position"
+        )
+    end
     motionSamples = motionSamples + 1
     if motionFile then
         motionFile:write(
@@ -308,20 +379,29 @@ Isaac.AddCallback(owner, ModCallbacks.MC_POST_RENDER, function()
         assert(p.Position.X < 540, "Prediction crossed the rock barrier")
         wallFrames = wallFrames + 1
     end
-    if samples >= 950 and samples < gridCases[1].prepare and lastAuthority then
+    if samples >= 950 and samples < obstacleCases[1].prepare and lastAuthority then
         assert(
             p.Position:Distance(lastAuthority) < 0.5,
             "Stopped prediction did not converge to authority"
         )
         settledFrames = settledFrames + 1
     end
-    for index, case in ipairs(gridCases) do
+    for index, case in ipairs(obstacleCases) do
         if samples >= case.move + contactLeadTicks and samples < case.stop then
             local grid = Game():GetRoom():GetGridEntityFromPos(gridCenter)
-            assert(grid and grid:GetType() == case.kind, "Contact grid was not restored")
-            assert(math.abs(p.Size - case.size) < 0.01, "Contact body size was not restored")
+            if case.entity then
+                assert(#Isaac.FindByType(case.entity) > 0, "Contact entity was not restored")
+            else
+                assert(grid and grid:GetType() == case.kind, "Contact grid was not restored")
+            end
+            assert(math.abs(p.Size - 10) < 0.01, "Contact body size was not restored")
             local now = Isaac.GetTime() / 1000
-            if previousContact and previousContactCase == index and now > previousContactTime then
+            if
+                native.movement_prediction
+                and previousContact
+                and previousContactCase == index
+                and now > previousContactTime
+            then
                 local speed = p.Position:Distance(previousContact) / (now - previousContactTime)
                 maximumContactSpeed = math.max(maximumContactSpeed, speed)
                 assert(
@@ -332,14 +412,41 @@ Isaac.AddCallback(owner, ModCallbacks.MC_POST_RENDER, function()
             previousContact, previousContactTime, previousContactCase = p.Position, now, index
             contactSamples[index] = (contactSamples[index] or 0) + 1
             if samples >= case.turn - 10 and samples < case.turn and lastAuthority then
+                if case.bridge or case.flying then
+                    assert(p.CanFly == (case.flying == true), "Guest flight state differs")
+                    assert(
+                        lastAuthority.X > gridCenter.X + p.Size
+                            and p.Position.X > gridCenter.X + p.Size,
+                        "The player could not cross the passable pit"
+                    )
+                else
+                    assert(
+                        lastAuthority.X > gridStart.X + p.Size and lastAuthority.X < gridCenter.X,
+                        "The host never made front contact with obstacle " .. index
+                    )
+                    assert(
+                        p.Position:Distance(lastAuthority) < 0.5,
+                        "The guest stopped away from the host at obstacle " .. index
+                    )
+                end
+            elseif samples >= case.reverse - 5 and samples < case.reverse then
                 assert(
-                    p.Position:Distance(lastAuthority) < 0.5,
-                    "Grid contact stopped short of authority"
+                    p.Position.X > gridCenter.X + p.Size and p.Position.Y > gridCenter.Y + p.Size,
+                    "The guest could not round obstacle " .. index
+                )
+                case.corner = p.Position
+            elseif samples >= case.stop - 5 then
+                assert(
+                    case.corner and p.Position.Y < case.corner.Y - p.Size,
+                    "The guest could not turn back from obstacle " .. index
                 )
             end
         end
     end
-    if samples >= stopAfterBreak + settledLeadTicks then
+    if
+        samples >= stopAfterBreak + settledLeadTicks
+        and samples < flyingPit.prepare - gridRemovalLeadTicks
+    then
         assert(p.Position.X > gridCenter.X + p.Size, "Broken grid kept blocking prediction")
         assert(p.Position:Distance(lastAuthority) < 0.5, "Broken-grid motion failed to settle")
         brokenGridSamples = brokenGridSamples + 1
@@ -352,7 +459,7 @@ return {
         return finished
     end,
     cleanup = function()
-        if next(fixtureDoors) then
+        if next(fixtureDoors) or next(fixtureGrids) then
             native.rooms_with_player(0, function()
                 local location = native.rooms_positions()["0"]
                 if
@@ -361,6 +468,16 @@ return {
                     and location.dimension == fixtureRoom.dimension
                 then
                     local room = Game():GetRoom()
+                    if fixtureEntity and fixtureEntity:Exists() then
+                        fixtureEntity:Remove()
+                    end
+                    removeFlight()
+                    for index, kind in pairs(fixtureGrids) do
+                        local grid = room:GetGridEntity(index)
+                        if grid and grid:GetType() == kind then
+                            room:RemoveGridEntity(index, 0, false)
+                        end
+                    end
                     for slot, prior in pairs(fixtureDoors) do
                         local door = room:GetDoor(slot)
                         if door then
@@ -372,7 +489,7 @@ return {
                     end
                 end
             end)
-            fixtureDoors = {}
+            fixtureDoors, fixtureGrids, fixtureEntity = {}, {}, nil
         end
         if motionFile then
             motionFile:close()

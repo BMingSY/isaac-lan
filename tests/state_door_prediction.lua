@@ -105,7 +105,14 @@ function _IsaacLanFrame()
         actor(host and t >= 350 and 0 or 1, function(p, room)
             local roomID = Game():GetLevel():GetCurrentRoomDesc().SafeGridIndex
             local now = Isaac.GetTime()
+            local pose = not host and _IsaacLanState.actorPose(p)
             if not host and t < 325 then
+                if native.movement_prediction == false then
+                    assert(
+                        pose and p.Position:Distance(Vector(pose.x, pose.y)) < 0.01,
+                        "Arrival moved away from the confirmed pose with prediction disabled"
+                    )
+                end
                 if lastRoom and lastRoom ~= roomID then
                     arrivals = arrivals + 1
                     arriving = { at = now, position = p.Position }
@@ -128,7 +135,6 @@ function _IsaacLanFrame()
                 end
                 priorPosition, priorTime = p.Position, now
             end
-            local pose = not host and _IsaacLanState.actorPose(p)
             local doors = {}
             for i = 0, 7 do
                 local d = room:GetDoor(i)
@@ -163,7 +169,12 @@ function _IsaacLanFrame()
             )
             assert(arrivals == 2, "Missing new and resident destination coverage")
             assert(invisibleDistance < 1, "Arrival moved before visibility: " .. invisibleDistance)
-            assert(fastest < 340, "Arrival replay accelerated beyond ordinary walking: " .. fastest)
+            if native.movement_prediction ~= false then
+                assert(
+                    fastest < 340,
+                    "Arrival replay accelerated beyond ordinary walking: " .. fastest
+                )
+            end
         end
         finished = true
         Isaac.DebugString("LAN_NETWORK PASS feedback observation complete")

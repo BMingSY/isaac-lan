@@ -12,6 +12,7 @@ void defaults() {
     require(parsed.warnings.empty(), "Default configuration is invalid");
     require(parsed.settings.inputHz == 60, "Default guest input rate changed");
     require(parsed.settings.otherPlayersOpacity == 100, "Default player appearance changed");
+    require(parsed.settings.movementPrediction, "Movement prediction must default to enabled");
     require(parsed.settings.chat.backgroundImage.empty() && parsed.settings.chat.opacity == 70,
             "Default chat background is not a translucent solid color");
     require(isaac::configuration::missingDefaults(parsed).empty(),
@@ -22,6 +23,14 @@ void defaults() {
 }
 void validation() {
     using isaac::configuration::parse;
+    const auto disabled = parse("[players]\nmovement_prediction=false\n");
+    require(disabled.warnings.empty() && !disabled.settings.movementPrediction &&
+                isaac::configuration::missingDefaults(disabled).find("movement_prediction =") ==
+                    std::string::npos,
+            "Opting out of movement prediction was lost in configuration migration");
+    const auto invalidPrediction = parse("[players]\nmovement_prediction=maybe\n");
+    require(invalidPrediction.warnings.size() == 1 && invalidPrediction.settings.movementPrediction,
+            "Invalid movement prediction setting did not preserve the default");
     for (const auto opacity : {0u, 50u, 100u}) {
         const auto parsed = parse("[players]\nothers_opacity=" + std::to_string(opacity));
         require(parsed.warnings.empty() && parsed.settings.otherPlayersOpacity == opacity,
@@ -119,6 +128,8 @@ void preservation() {
             "Migration replaced user values/comments or omitted new defaults");
     require(upgraded.find("others_opacity = 100") != std::string::npos,
             "Existing configuration did not acquire the other-player opacity setting");
+    require(upgraded.find("movement_prediction = true") != std::string::npos,
+            "Older configurations did not acquire the movement prediction setting");
     const auto parsed = isaac::configuration::parse(upgraded);
     require(isaac::configuration::missingDefaults(parsed).empty() && parsed.warnings.size() == 1,
             "Migration lost a known key or duplicated an existing setting");

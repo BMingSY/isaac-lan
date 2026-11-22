@@ -219,10 +219,15 @@ for _, name in ipairs({ "state_motion", "state_floor_items", "state_mod_integrat
     end
     local sandbox = setmetatable({
         io = false,
-        _IsaacLanTest = { host = false, port = "30320" },
+        _IsaacLanTest = { host = false, port = "30320", movementPrediction = true },
         _IsaacLanTestInput = testInput,
         _IsaacLanFrame = frame,
-        _IsaacLan = { net_gate = gate, api_send = function() end, api_receive = function() end },
+        _IsaacLan = {
+            net_gate = gate,
+            api_send = function() end,
+            api_receive = function() end,
+            movement_prediction = true,
+        },
         _IsaacLanModules = { ["api/codec"] = module("api/codec") },
         IsaacLAN = {
             Attach = function()
@@ -238,6 +243,7 @@ for _, name in ipairs({ "state_motion", "state_floor_items", "state_mod_integrat
         Isaac = { AddCallback = function() end },
         ModCallbacks = { MC_POST_RENDER = 1 },
         GridEntityType = { GRID_ROCK = 2, GRID_POOP = 14 },
+        EntityType = { ENTITY_STONEHEAD = 42 },
         Vector = env.Vector,
     }, { __index = _G })
     assert(loadfile(root .. "/tests/" .. name .. ".lua", "t", sandbox))()

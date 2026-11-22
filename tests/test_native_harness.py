@@ -276,8 +276,13 @@ function door:IsLocked() return self.locked end
 function door:Close(force) assert(force); self.opened = false end
 function door:Open() self.opened = true end
 function door:SetLocked(value) self.locked = value end
+local grids = {}
 local room = {
     GetGridSize = function() return 0 end,
+    GetGridIndex = function(_, point) return point.Y end,
+    SpawnGridEntity = function(_, i, kind) grids[i] = { GetType = function() return kind end }; return true end,
+    GetGridEntity = function(_, i) return grids[i] end,
+    RemoveGridEntity = function(_, i) grids[i] = nil end,
     GetDoor = function(_, slot) return slot == 2 and door or nil end,
 }
 local players = {}
@@ -286,6 +291,7 @@ for i = 0, 1 do
 end
 Vector = setmetatable({Zero = {X = 0, Y = 0}}, {__call = function(_, x, y) return {X = x, Y = y} end})
 GridEntityType = { GRID_POOP = 14, GRID_ROCK = 2 }
+EntityType = { ENTITY_STONEHEAD = 42 }
 EntityFlag = { FLAG_NO_DAMAGE_BLINK = 1 }
 ModCallbacks = { MC_POST_RENDER = 1 }
 Isaac = { GetPlayer = function(i) return players[i] end, GetRoomEntities = function() return {} end,
@@ -293,10 +299,11 @@ Isaac = { GetPlayer = function(i) return players[i] end, GetRoomEntities = funct
 Game = function() return { GetNumPlayers = function() return 2 end, GetRoom = function() return room end } end
 _IsaacLanTest = { host = """
         + lua_support.literal(host)
-        + """, port = "1234" }
+        + """, port = "1234", movementPrediction = true }
 _IsaacLanFrame = function() return status end
 local before
 _IsaacLan = {
+    movement_prediction = true,
     net_gate = function(_, callback) before = callback end, test_gamepad = noop,
     rooms_positions = function() return locations end,
     rooms_with_player = function(_, fn) fn(); return true end,
@@ -312,6 +319,8 @@ if _IsaacLanTest.host then
     _IsaacLan.net_gate(noop, noop, noop, noop, noop, noop)
     before(0, 0, "")
     assert(door.locked and not door.opened, "Motion fixture left its exit traversable")
+    before(580, 0, "")
+    assert(grids[240] and grids[280] and grids[320], "Motion fixture never built its barrier")
 end
 _IsaacLanFrame()
 locations["1"].index = 85
@@ -322,6 +331,7 @@ assert(not ok and message:find("Motion fixture left its room", 1, true),
 locations["1"].index = 84
 fixture.cleanup()
 assert(not door.locked and door.opened, "Motion fixture left a locked exit for the next scenario")
+assert(not next(grids), "Motion fixture left a barrier for the next scenario")
 """,
         tmp_path,
     )

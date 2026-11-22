@@ -303,3 +303,67 @@ end
 samples:close()
 assert(checked == 160, "Missing native walking samples")
 print("PASS native walking traces across speeds, releases, reversals and turns")
+
+-- A non-grid entity (or a script) can pin a body against a contact without
+-- populating room tiles. Repeat delayed input ACKs while holding into it.
+do
+    local contact = prediction.new(origin)
+    contact:confirm(origin, 0, stop, 0)
+    local function drive(model, held, frame, accepted, velocity)
+        if frame % 2 == 0 and frame > 8 then
+            model:confirm(accepted, frame - 8, velocity, frame)
+        end
+        return model:step(held, frame, 1, dt)
+    end
+    for frame = 1, 100 do
+        drive(contact, right, frame, origin, stop)
+    end
+    assert(
+        (contact.display - origin):LengthSquared() < 0.01,
+        "Kept walking into a confirmed entity contact"
+    )
+    for frame = 101, 107 do
+        contact:step(left, frame, 1, dt)
+    end
+    assert(
+        contact.display.X < origin.X - 1,
+        "Contact prevented reversing away before the next packet"
+    )
+    contact:reset(origin, 0, stop)
+    local diagonal = Vector(0.6, 0.8)
+    local tangent = Vector(-0.8, 0.6)
+    local function slidePoint(frame)
+        return origin + tangent * (frame * 0.5)
+    end
+    for frame = 1, 100 do
+        drive(contact, diagonal, frame, slidePoint(math.max(0, frame - 8)), tangent * 30)
+    end
+    local dx = contact.display - origin
+    assert(
+        math.abs(dx.X * diagonal.X + dx.Y * diagonal.Y) < 0.2 and dx.Y > 20,
+        "Oblique entity contact lost its tangent"
+    )
+    for frame = 101, 125 do
+        drive(
+            contact,
+            diagonal,
+            frame,
+            slidePoint(92) + diagonal * (frame - 100) * 2,
+            diagonal * 120
+        )
+    end
+    dx = contact.display - origin
+    assert(
+        dx.X * diagonal.X + dx.Y * diagonal.Y > 45,
+        "Removing an obstacle retained a stale contact"
+    )
+    contact:reset(origin, 125, stop)
+    for frame = 126, 135 do
+        contact:step(diagonal, frame, 1, dt)
+    end
+    assert(
+        contact.display.X > origin.X and contact.display.Y > origin.Y,
+        "A new room retained contact constraints"
+    )
+end
+print("PASS stationary and oblique entity contacts, immediate escape, removal and room reset")
