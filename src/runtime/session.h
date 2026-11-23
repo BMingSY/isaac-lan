@@ -29,6 +29,9 @@ void playerRoomCleared(int owner, int dimension, int index);
 bool takeCollectiblePickup(int owner, unsigned actorSeed, int item, int charge, bool touched,
                            int varData, int pool);
 std::array<int, 2> challengeDestination();
+inline bool challengeRequiresTrophy() {
+    return challengeDestination()[0] >= 0;
+}
 bool allowRoomEntry(unsigned slot, int fromDimension, int fromRoom, int dimension, int room,
                     bool teleport);
 int craftingBagViewTarget();

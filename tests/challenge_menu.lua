@@ -673,6 +673,47 @@ for _, host in ipairs({ 0, 1 }) do
     assert(selected[1] == "choose" and selected[2] == "1:0")
 end
 
+-- Starting Crime Mode uses the same seed field as an ordinary lobby.
+do
+    local lobby = {
+        phase = phaseValues.lobby,
+        hosting = 1,
+        slot = 0,
+        players = 2,
+        challenge = 1008,
+        ready0 = 1,
+        ready1 = 1,
+        eligible0 = true,
+        eligible1 = true,
+    }
+    local crime =
+        { ["1008"] = { id = 1008, name = "幺幺幺九", character = 65535, difficulty = 0 } }
+    for _, seed in ipairs({ "", "YV039KQF" }) do
+        local selected
+        local rows = model.rows(
+            { page = "lan", seed = seed, difficulty = 0 },
+            lobby,
+            { 0 },
+            crime,
+            {
+                character = tostring,
+                hide = noop,
+                command = function(action, value)
+                    assert(action == "start")
+                    selected = value
+                end,
+            }
+        )
+        for _, row in ipairs(rows) do
+            if row.label == "开始游戏" then
+                assert(row.enabled)
+                row.action()
+            end
+        end
+        assert(selected == (seed == "" and "RANDOM" or seed) .. ":0:0:0:0:0")
+    end
+end
+
 -- Save on confirmed edits/connection attempts and reconstruct a fresh menu VM.
 status = { phase = 0, hosting = 0, players = 0 }
 remembered = { "room.example.com", 31234 }

@@ -98,13 +98,17 @@ lan::RunRules rulesFor(const compat::challenges::Definition* definition) {
                                       definition->friendlyFire ? roomOptions::friendlyFire : 0}
                       : lan::RunRules{};
 }
+bool supportedChallenge(const compat::challenges::Definition& definition) {
+    return !definition.crimeMode || backend::supportsCrimeMode();
+}
 bool validRules(const lan::RunRules& rules) {
     const auto* definition = compat::challenges::find(rules.id);
     auto expected = rulesFor(definition);
     const auto requiredOptions = expected.options;
     if (!definition || !definition->roomOptionsLocked)
         expected.options = rules.options;
-    return roomOptions::valid(rules.options) && (!rules.id || definition) && rules == expected &&
+    return roomOptions::valid(rules.options) &&
+           (!rules.id || (definition && supportedChallenge(*definition))) && rules == expected &&
            (rules.options & requiredOptions) == requiredOptions;
 }
 bool remoteShooting() {
@@ -216,7 +220,8 @@ lan::LobbyAccess personalAccess() {
     std::sort(access.characters.begin(), access.characters.end());
     std::sort(access.unlockedCharacters.begin(), access.unlockedCharacters.end());
     for (const auto& definition : compat::challenges::definitions)
-        if (compat::challenges::available(definition, progress.achievements))
+        if (supportedChallenge(definition) &&
+            compat::challenges::available(definition, progress.achievements))
             access.rules.push_back({definition.id, definition.version});
     return access;
 }
@@ -1184,6 +1189,8 @@ int challengeList(lua_State* L) {
     const auto access = session ? session->localAccess() : personalAccess();
     lua.createTable(L, 0, compat::challenges::definitions.size());
     for (const auto& def : compat::challenges::definitions) {
+        if (!supportedChallenge(def))
+            continue;
         lua.createTable(L, 0, 10);
         auto integer = [&](const char* key, long long value) {
             lua.pushInteger(L, value);
@@ -1248,7 +1255,8 @@ int selectChallenge(lua_State* L) {
     auto rules = rulesFor(definition);
     if (session && (!definition || !definition->roomOptionsLocked))
         rules.options |= session->rules().options;
-    lua.pushBoolean(L, session && (id == 0 || definition) && session->configureRules(rules));
+    lua.pushBoolean(L, session && (id == 0 || (definition && supportedChallenge(*definition))) &&
+                           session->configureRules(rules));
     return 1;
 }
 int roomOptionDefinitions(lua_State* L) {
@@ -1303,7 +1311,8 @@ int configureRoomOptions(lua_State* L) {
 int finishChallenge(lua_State* L) {
     const auto* definition =
         session ? compat::challenges::find(session->settings().rules.id) : nullptr;
-    const bool allowed = definition && view.gated && session->isHost() && !view.playingEnding &&
+    const bool allowed = definition && definition->goalStage >= 0 && view.gated &&
+                         session->isHost() && !view.playingEnding &&
                          session->phase() == lan::Phase::running;
     if (allowed)
         view.pendingChallengeFinish = definition->ending;
@@ -1434,7 +1443,13 @@ int startEngine(lua_State* L) {
         }
     }
     launch.requested = true;
-    backend::start(seed, settings.characters[0], settings.difficulty);
+    const auto* definition = compat::challenges::find(settings.rules.id);
+    if (!backend::start(seed, settings.characters[0], settings.difficulty,
+                        definition && definition->crimeMode)) {
+        fail("Unsupported challenge seed effect");
+        lua.pushBoolean(L, false);
+        return 1;
+    }
     if (saves.resumingArchive || (lua.getTop(L) > 0 && lua.checkInteger(L, 1) != 0)) {
         // Same continue request byte used by the native Continue menu. The
         // manager restores its GameState through Game::RestoreState itself.

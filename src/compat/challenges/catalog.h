@@ -22,6 +22,7 @@ struct Definition {
     bool largeFloor = false;
     bool nextPlayerShooting = false;
     bool deleteThis = false;
+    bool crimeMode = false;
 };
 inline constexpr std::array definitions{
     Definition{
@@ -121,6 +122,21 @@ inline constexpr std::array definitions{
         false,
         false,
         true,
+    },
+    Definition{
+        .id = 1008,
+        .version = 1,
+        .character = unrestrictedCharacter,
+        .difficulty = 0,
+        .transient = true,
+        .name = "幺幺幺九",
+        .route = "",
+        .ending = 0,
+        .goalStage = -1,
+        .goalStageType = -1,
+        .nextBag = false,
+        .requiredAchievements = {},
+        .crimeMode = true,
     },
 };
 inline const Definition* find(unsigned id) {

@@ -198,6 +198,7 @@ struct Seeds {
     std::array<std::uint32_t, 23> words;
 };
 static_assert(sizeof(Seeds) == 0x5c);
+bool expectCrimeMode = false;
 void validateStart(int type, int challenge, const Seeds& seeds, unsigned difficulty) {
     require(type == 19 && challenge == 0 && difficulty == 3, "Start stack arguments");
     require(seeds.words[1] == 0xabcdef01 && seeds.words.back() == 122, "By-value Seeds copy");
@@ -222,6 +223,7 @@ void __attribute__((fastcall)) startNew(void* object, void*, int type, int chall
     checkReceiver(object, manager.data(), "Manager::StartNewGame receiver");
 #endif
     validateStart(type, challenge, seeds, difficulty);
+    require(seeds.words[3] == (expectCrimeMode ? 80u : 103u), "Seed effect on this launch");
     events.emplace_back("start-new");
 }
 void __attribute__((fastcall)) constructSeeds(Seeds* seeds, void*) {
@@ -231,6 +233,12 @@ void __attribute__((fastcall)) constructSeeds(Seeds* seeds, void*) {
 void __attribute__((fastcall)) setSeed(Seeds* seeds, void*, std::uint32_t seed) {
     seeds->words[1] = seed;
 }
+#ifndef ISAAC_LAN_TEST_REPENTANCE
+void __attribute__((fastcall)) addSeedEffect(Seeds* seeds, void*, unsigned effect) {
+    require(seeds->words[1] == 0xabcdef01 && effect == 80, "Crime effect after setting map seed");
+    seeds->words[3] = effect;
+}
+#endif
 // The fixtures implement the native ABI independently, including MSVC's inline string.
 struct String {
     std::array<char, 16> storage{};
@@ -357,6 +365,9 @@ void prepare() {
     patch(backend::entry::runtimeNetParseSeed, parseSeed);
     patch(backend::entry::runtimeNetSeedConstructor, constructSeeds);
     patch(backend::entry::runtimeNetSetSeed, setSeed);
+#ifndef ISAAC_LAN_TEST_REPENTANCE
+    patch(backend::entry::addSeedEffect, addSeedEffect);
+#endif
     patch(backend::entry::runtimeNetStartGame, startNew);
 #ifdef ISAAC_LAN_TEST_REPENTANCE
     patch(backend::entry::progressPersist, persist);
@@ -504,8 +515,20 @@ void hooks() {
     entry<Start>(backend::entry::gameStart)(game.data(), 19, 0, seeds, 3);
 #endif
     require(events[1] == "start-hook" && events[2] == "start", "Game start callback");
-    session::start(0xabcdef01, 19, 3);
+    require(session::start(0xabcdef01, 19, 3, false), "Ordinary LAN launch");
     require(events.back() == "start-new", "StartNewGame path");
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+    const auto launches = events.size();
+    require(!session::supportsCrimeMode() && !session::start(0xabcdef01, 19, 3, true) &&
+                events.size() == launches,
+            "Unsupported native mode must not start an ordinary run");
+#else
+    expectCrimeMode = true;
+    require(session::supportsCrimeMode() && session::start(0xabcdef01, 19, 3, true),
+            "Native crime mode retained the selected map");
+    expectCrimeMode = false;
+    require(session::start(0xabcdef01, 19, 3, false), "Next run retained an old seed effect");
+#endif
     require(session::parseSeed("short") == 0 && parsedSeeds == 0,
             "Reject invalid seed length before native call");
     require(session::parseSeed("ABCDEFGH") == 0xabcdef01 && parsedSeeds == 1, "Seed parser ABI");

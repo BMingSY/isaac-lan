@@ -1696,7 +1696,13 @@ void challengeRules() {
                 !generated->roomOptionsLocked && !generated->friendlyFire &&
                 isaac::compat::challenges::available(*generated, {}),
             "Challenge 45 must be directly available with free characters and room options");
-    require(!isaac::compat::challenges::find(1007), "Unknown challenge accepted");
+    const auto* crime = isaac::compat::challenges::find(1008);
+    require(crime && crime->name == "幺幺幺九" && crime->crimeMode && !generated->crimeMode &&
+                crime->character == RunRules{}.character && crime->route.empty() &&
+                crime->goalStage < 0 && crime->transient && !crime->roomOptionsLocked &&
+                isaac::compat::challenges::available(*crime, {}),
+            "Crime mode must use the native route and ordinary lobby choices");
+    require(!isaac::compat::challenges::find(0xffff), "Unknown challenge accepted");
     std::array<std::uint8_t, 642> achievements{};
     require(!isaac::compat::challenges::available(*large, achievements),
             "Original challenge unlock was bypassed");

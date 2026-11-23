@@ -40,13 +40,13 @@ return function(deps)
     end
     local function pickup(p)
         local definition = authority()
-        if definition then
+        if definition and definition.route ~= "" then
             routes[definition.route].pickup(p)
         end
     end
     local function collide(p, collider)
         local definition, info = current()
-        if not definition then
+        if not definition or definition.route == "" then
             return
         end
         local route = routes[definition.route]
@@ -115,7 +115,7 @@ return function(deps)
         local definition, info = authority()
         if definition then
             local route, effect = routes[definition.route], effects[definition.id]
-            if route.clearAward then
+            if definition.route ~= "" and route.clearAward then
                 route.clearAward()
             end
             if effect then

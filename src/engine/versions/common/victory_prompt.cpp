@@ -43,7 +43,7 @@ void __attribute__((fastcall)) controls(void* object, void*) {
         return;
     }
     const auto address = reinterpret_cast<Address>(object);
-    if (runtime::challengeActive()) {
+    if (runtime::challengeRequiresTrophy()) {
         if (idle(address)) {
             at<int>(address, bindings.result) = decline;
             reinterpret_cast<Method>(image + bindings.hide)(object);
@@ -71,7 +71,8 @@ void __attribute__((fastcall)) controls(void* object, void*) {
     }
 }
 void __attribute__((fastcall)) render(void* object, void*) {
-    if (!partyPrompt(object) || (!runtime::challengeActive() && runtime::localViewSlot() == 0))
+    if (!partyPrompt(object) ||
+        (!runtime::challengeRequiresTrophy() && runtime::localViewSlot() == 0))
         originalRender(object);
 }
 } // namespace

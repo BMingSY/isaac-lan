@@ -284,9 +284,11 @@ Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；�
 
 [胜利圈组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/victory_prompt.cpp) 通过 [忏悔＋绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance_plus/victory_prompt.cpp) 访问 `Game+0x26c18`。Controls、Render、Hide 分别为 RVA `0x4409f0/0x440690/0x440ba0`，均为 thiscall，无栈参数。动画 `+0x34`、播放位 `+0x44`、选择 `+0x128`、结果 `+0x12c` 和投票位 `+0x130` 只在该对象上使用；动画、字符串和字体仍由游戏持有。
 
-普通联机只显示主机提示，主机使用已锁存菜单按键沿，并关闭原生 Steam 投票等待；客机不消费提示输入。Idle 动画阶段才可确认，原生结果 1 接受、2 拒绝，然后调用 Hide。联机挑战在各端等到 Idle 后拒绝；其他提示和单人会话保留原函数。`victory_lap_prompt` 返回打开、选择、结果、投票和 Idle 五个普通值，每次从当前 Game 读取，空 Game 返回关闭状态。两个 Hook 成组安装，失败撤销本组件 Hook 和借用指针，保留外部 Hook 并允许重试。[原版绑定](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-repentance.md#胜利圈提示) 使用自己的字段，不访问 Steam 投票状态。
+普通联机和开放路线的挑战只显示主机提示。主机使用已锁存的菜单按键沿，并关闭原生 Steam 投票等待。客机不消费提示输入。Idle 动画阶段才可确认，原生结果 1 接受、2 拒绝，然后调用 Hide。有奖杯终点的联机挑战在各端等到 Idle 后拒绝跑圈。其他提示和单人会话保留原函数。`victory_lap_prompt` 返回打开、选择、结果、投票和 Idle 五个普通值，每次从当前 Game 读取，空 Game 返回关闭状态。两个 Hook 成组安装，失败撤销本组件 Hook 和借用指针，保留外部 Hook 并允许重试。[原版绑定](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-repentance.md#胜利圈提示) 使用自己的字段，不访问 Steam 投票状态。
 
 ## 楼层生成
+
+联机开局在新建的 0x5c 字节 `Seeds` 上设置房主的普通地图种子。启用犯罪模式时，[忏悔＋会话绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance_plus/session_backend.cpp)在交给 `Manager::StartNewGame` 之前调用原生 `Seeds::AddSeedEffect(80)`。该入口 RVA 为 `0x2f67d0`，使用 `thiscall` 并校验入口签名。游戏负责分配效果集合节点并消费按值传入的开局对象。此能力只用于本次开局，忏悔后端不提供该入口。
 
 [floor_generation.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/floor_generation.h) 接受运行层提供的同步布尔查询，仅选择原版超大层生成分支。忏悔＋的房间数量判断位于 RVA `0x34895f`，布局判断位于 RVA `0x34940f`；两处均为对 `Game+0x26594` 原生挑战编号的七字节比较指令。入口与后续条件跳转受启动签名校验。
 

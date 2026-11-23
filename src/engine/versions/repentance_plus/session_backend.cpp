@@ -7,6 +7,11 @@ namespace isaac::engine::native_session {
 namespace {
 namespace backend = repentance_plus;
 namespace layout = backend::layout;
+void enableCrimeMode(std::uintptr_t image, void* seeds) {
+    constexpr int crimeModeEffect = 80; // V1CE BSMT in the native seed menu.
+    using AddSeedEffect = void(__attribute__((thiscall))*)(void*, int);
+    reinterpret_cast<AddSeedEffect>(image + backend::entry::addSeedEffect)(seeds, crimeModeEffect);
+}
 using RecordCompletion = void(__stdcall*)(unsigned, unsigned, unsigned);
 RecordCompletion originalRecordCompletion;
 void __stdcall recordCompletion(unsigned event, unsigned character, unsigned difficulty) {
@@ -86,5 +91,6 @@ constinit const Bindings bindings{
     .completionDefinitions = backend::globals::completionDefinitions,
     .progressTryUnlock = backend::entry::progressTryUnlock,
     .progressIncreaseCounter = backend::entry::progressIncreaseCounter,
+    .enableCrimeMode = enableCrimeMode,
 };
 } // namespace isaac::engine::native_session

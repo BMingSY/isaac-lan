@@ -23,8 +23,8 @@ int localViewSlot() {
 bool replica() {
     return guest;
 }
-bool challengeActive() {
-    return challenge;
+std::array<int, 2> challengeDestination() {
+    return challenge ? std::array{6, 0} : std::array{-1, -1};
 }
 } // namespace isaac::runtime
 namespace isaac::input {
