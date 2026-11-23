@@ -1,6 +1,6 @@
 # Isaac LAN
 
-简体中文 · [English](https://github.com/BMingSY/isaac-lan/blob/main/docs/i18n/README.en.md) · [贡献指南](https://github.com/BMingSY/isaac-lan/blob/main/CONTRIBUTING.md) · [使用许可（允许商用，禁止售卖 Mod）](https://github.com/BMingSY/isaac-lan/blob/main/LICENSE)
+简体中文 · [English](https://github.com/BMingSY/isaac-lan/blob/main/docs/i18n/README.en.md) · [贡献指南](https://github.com/BMingSY/isaac-lan/blob/main/CONTRIBUTING.md) · [使用许可](https://github.com/BMingSY/isaac-lan/blob/main/LICENSE)
 
 《以撒的结合》的 2–4 人局域网联机扩展。一次安装即可在 Windows 版 **忏悔 v1.7.9b.J835** 和 **忏悔＋ v1.9.7.19.J511** 中使用。
 
