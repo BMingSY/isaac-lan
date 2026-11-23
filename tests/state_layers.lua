@@ -101,13 +101,13 @@ local Entity, Room, Actor = fields.entity, fields.room, fields.actor
 local projectCalls = 0
 local function project(raw, player)
     projectCalls = projectCalls + 1
-    return (player and "smooth" or "exact:") .. raw, player
+    return (player and "smooth" or "exact:") .. raw, player, -0.0, 42.5
 end
 local function expand(wire)
     if wire:sub(1, 6) == "smooth" then
-        return "draw:" .. wire:sub(7), true
+        return "draw:" .. wire:sub(7), true, -0.0, 42.5
     end
-    return wire:sub(7), false
+    return wire:sub(7), false, -0.0, 42.5
 end
 local combat = dofile(root .. "/src/bridge/sync/layers.lua")(fields, project, expand)
 local view = schema.unpack(codec.decode(codec.encode(workloads[1].value)), 42)
@@ -141,6 +141,9 @@ local rows = {
     row(505, 26, 0, 0, "unknown"),
     row(506, 27, source, 0, "two"),
 }
+rows[3][Entity.laserEndPoint] = { -0.0, 42.5 }
+rows[4][Entity.laserEndPoint] = { 11, 42.5 }
+rows[5][Entity.laserEndPoint] = { 0.0, 42.5 }
 view.room[Room.entities] = rows
 local projections = {}
 local core, stable, none = combat.split(view, nil, projections, 0)
@@ -152,7 +155,14 @@ local _, _, small = combat.split(view, nil, projections, budget - 1)
 assert(not small and #detail == budget and #all == 2 * budget and projectCalls == 4)
 local id, raw = string.unpack(">i8s2", detail)
 assert((id == laserId and raw == "one") or (id == 506 and raw == "two"))
+assert(core.room[Room.entities][3][Entity.laserEndPoint] == true)
+assert(core.room[Room.entities][4][Entity.laserEndPoint][1] == 11)
+assert(1 / core.room[Room.entities][5][Entity.laserEndPoint][1] == math.huge)
 local accepted = combat.join(core, stable)
+assert(
+    1 / accepted.room[Room.entities][3][Entity.laserEndPoint][1] == -math.huge
+        and accepted.room[Room.entities][3][Entity.laserEndPoint][2] == 42.5
+)
 local entities = accepted.room[Room.entities]
 assert(
     accepted.tick == 42

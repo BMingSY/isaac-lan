@@ -264,7 +264,8 @@ template <bool packing> int laserSamples(lua_State* L) {
     constexpr std::size_t maxBytes = 33 + 2 * presentation::maxLaserPoints * 2 * sizeof(float);
     std::array<char, maxBytes> storage;
     std::size_t size = 0;
-    bool refined = false;
+    bool refined = false, encoded = false;
+    presentation::laser_projection::Point endpoint{};
     char error[256]{};
     try {
         const auto raw = bytes(L, 1);
@@ -278,9 +279,12 @@ template <bool packing> int laserSamples(lua_State* L) {
         }
         lan::Writer out(lan::Message::world);
         if constexpr (packing)
-            refined = presentation::laser_projection::project(input, out, api.toBoolean(L, 2));
+            refined =
+                presentation::laser_projection::project(input, out, api.toBoolean(L, 2), endpoint);
         else
-            presentation::laser_projection::expand(input, out);
+            presentation::laser_projection::expand(input, out, endpoint);
+        encoded = !packing || out.bytes.front() == presentation::laser_projection::projectedTag ||
+                  out.bytes.front() == presentation::laser_projection::exactTag;
         size = out.bytes.size();
         if (size > storage.size())
             throw std::runtime_error("Laser payload overflow");
@@ -294,7 +298,11 @@ template <bool packing> int laserSamples(lua_State* L) {
     }
     api.pushLString(L, storage.data(), size);
     api.pushBoolean(L, refined);
-    return 2;
+    if (!encoded)
+        return 2;
+    for (const auto word : endpoint)
+        api.pushNumber(L, std::bit_cast<float>(word));
+    return 4;
 }
 
 template <bool view> int decode(lua_State* L) {

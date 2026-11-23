@@ -114,11 +114,25 @@ class WorldTransfer {
         return flight.size();
     }
     std::size_t optionalBudget() const {
+        // Reserve a full cadence of core views before spending spare capacity.
+        // A quiet window between two large emissions is not spare bandwidth.
+        constexpr double publicationsPerSecond = 30;
+        const auto* latest = !flight.empty() ? &flight.back() : (baseline ? &*baseline : nullptr);
+        if (latest && latest->wireBytes * publicationsPerSecond >= pacing.bytesPerSecond())
+            return 0;
         return pacing.optionalBudget();
     }
-    std::size_t flightLimit() const {
-        return transportReceipt ? std::min(maxInFlightBytes, pacing.flightBudget(minimumLatency))
-                                : maxInFlightBytes;
+    bool roomForWorldBytes() const {
+        std::size_t total = 0, onPath = 0;
+        for (const auto& view : flight) {
+            total += view.wireBytes;
+            if (!transportReceipt || view.tick > *transportReceipt)
+                onPath += view.wireBytes;
+        }
+        // Game-thread ACKs own the compression cache. Network receipts free only
+        // the link budget, even when rendering delays the application receipt.
+        return total < maxInFlightBytes &&
+               (!transportReceipt || onPath < pacing.flightBudget(minimumLatency));
     }
     bool permitDatagram(std::size_t bytes) {
         return pacing.consume(bytes, Clock::now());
@@ -176,7 +190,7 @@ class WorldTransfer {
             return true;
         if (!flight.empty() && Clock::now() - flight.front().started >= lostStateAge)
             return true;
-        return flight.size() < window(latency) && inFlightBytes() < flightLimit() &&
+        return flight.size() < window(latency) && roomForWorldBytes() &&
                cachedBytes() < maxCachedBytes;
     }
     void delivered(std::uint32_t tick, std::uint64_t bytes, std::uint64_t milliseconds) {
@@ -195,6 +209,8 @@ class WorldTransfer {
         const auto ms = std::chrono::duration<double, std::milli>(now - view->transmitted).count();
         // Receipt is generated on the network thread before Lua applies the world.
         // A queued relay can delay these probes without changing ENet's smoothed RTT.
+        if (!transportReceipt)
+            pacing.acknowledge(view->wireBytes, ms, networkLatency, now);
         pacing.delivery(bytes, milliseconds, static_cast<int>(ms), now);
         transportReceipt = tick;
     }
@@ -260,7 +276,7 @@ class WorldTransfer {
             while (!flight.empty() && Clock::now() - flight.front().started >= lostStateAge)
                 flight.pop_front();
             if (!pacing.ready(datagram::mtu, Clock::now()) ||
-                flight.size() >= window(minimumLatency) || inFlightBytes() >= flightLimit() ||
+                flight.size() >= window(minimumLatency) || !roomForWorldBytes() ||
                 cachedBytes() + pending->bytes.capacity() > maxCachedBytes)
                 return {};
             sending = std::move(pending);

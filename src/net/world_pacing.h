@@ -63,14 +63,13 @@ class WorldPacing {
         return detailAllowance;
     }
     void delivery(std::uint64_t bytes, std::uint64_t milliseconds, int rtt, Clock::time_point now) {
-        constexpr auto routeHistory = std::chrono::seconds(30);
         constexpr std::uint64_t windowMs = 150;
-        constexpr double utilization = 0.72, probeGain = 1.12, drainGain = 0.90;
+        constexpr double utilization = 0.72, probeGain = 1.12, drainGain = 0.95;
         constexpr double detailSeconds = 0.008;
         if (deliveryWindow &&
             (bytes < deliveryWindow->bytes || milliseconds < deliveryWindow->milliseconds))
             return;
-        baseRtt = deliveryPath.observe(rtt, now, routeHistory);
+        baseRtt = deliveryPath.observe(rtt, now);
         if (!deliveryWindow) {
             deliveryWindow = DeliveryWindow{bytes, milliseconds, rtt};
             return;
@@ -84,8 +83,13 @@ class WorldPacing {
         const bool queued = window.minimumRtt > baseRtt + queueAllowanceMs;
         const bool saturated = delivered >= utilization * rate;
         advance(now);
-        if (queued)
-            rate = std::clamp(std::min(rate, delivered * drainGain), minimumRate, maximumRate);
+        // A few tiny updates on a newly delayed route are application-limited.
+        // They cannot measure the capacity available to the next busy room.
+        const bool substantial = bytes - window.bytes >= 2 * datagram::mtu;
+        if (queued && substantial)
+            rate =
+                std::clamp(std::min(rate, std::max(rate * decreaseFactor, delivered * drainGain)),
+                           minimumRate, maximumRate);
         else if (saturated)
             rate = std::clamp(std::max(rate, delivered) * probeGain, minimumRate, maximumRate);
         // Empty rooms cannot demonstrate link capacity. Probe optional drawing data

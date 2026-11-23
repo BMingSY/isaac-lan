@@ -149,7 +149,7 @@ static void receiverDelivery() {
         sample(80, 5000);
     require(pacing.bytesPerSecond() == WorldPacing::initialRate,
             "One delayed transport receipt cut the path budget");
-    for (int i = 0; i < 12; ++i)
+    for (int i = 0; i < 18; ++i)
         sample(180, 5000);
     const auto limited = pacing.bytesPerSecond();
     require(limited <= 100000 && pacing.flightBudget(0) < initialBudget &&

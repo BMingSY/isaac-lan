@@ -14,9 +14,16 @@ local curve = coords(51, function(i)
     return 40 + i * 2.4, 50 + i * i * 0.052 + (i % 2) * 0.003
 end)
 local full = header .. line .. curve
-local coarse, fine = native.laser_project(full, true)
+local coarse, fine, hostEndX, hostEndY = native.laser_project(full, true)
 assert(fine and #coarse < #full / 3)
-local expanded = native.laser_expand(coarse)
+local expanded, approximate, guestEndX, guestEndY = native.laser_expand(coarse)
+assert(
+    approximate
+        and hostEndX == 160
+        and hostEndY == 180
+        and guestEndX == hostEndX
+        and guestEndY == hostEndY
+)
 assert(
     #expanded == #full and expanded:sub(1, #header + #line + 2) == full:sub(1, #header + #line + 2)
 )

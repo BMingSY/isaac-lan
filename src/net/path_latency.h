@@ -20,8 +20,8 @@ class PathLatency {
     std::deque<Sample> samples;
 
   public:
-    int observe(int milliseconds, Clock::time_point now, Clock::duration history = lifetime) {
-        while (!samples.empty() && now - samples.front().at >= history)
+    int observe(int milliseconds, Clock::time_point now) {
+        while (!samples.empty() && now - samples.front().at >= lifetime)
             samples.pop_front();
         if (milliseconds >= 0) {
             if (!samples.empty() && now - samples.back().at < interval)

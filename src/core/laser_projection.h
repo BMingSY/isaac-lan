@@ -185,9 +185,11 @@ inline void writeArray(Output& out, const Words& words, const Endpoints& refs, b
     for (auto v : words)
         out.u32(v);
 }
-inline bool project(std::span<const std::uint8_t> raw, Output& out, bool playerBeam) {
+inline bool project(std::span<const std::uint8_t> raw, Output& out, bool playerBeam,
+                    Point& endpoint) {
     lan::Reader reader(raw);
     const auto path = readLaserPath(reader);
+    endpoint = {path.values[2], path.values[3]};
     out.bytes.clear();
     out.u8(projectedTag);
     scalars(out, path);
@@ -210,7 +212,7 @@ inline bool project(std::span<const std::uint8_t> raw, Output& out, bool playerB
     out.bytes.front() = refined ? projectedTag : exactTag;
     return refined;
 }
-inline void expand(std::span<const std::uint8_t> bytes, Output& out) {
+inline void expand(std::span<const std::uint8_t> bytes, Output& out, Point& endpoint) {
     lan::Reader in(bytes);
     const auto tag = in.u8();
     if (tag != projectedTag && tag != exactTag)
@@ -224,6 +226,7 @@ inline void expand(std::span<const std::uint8_t> bytes, Output& out) {
             word = in.u32();
             out.u32(word);
         }
+    endpoint = refs.values[1];
     // Shape, scale and sample count follow the two world-space points.
     for (unsigned i = 0; i < 3; ++i)
         out.u32(in.u32());

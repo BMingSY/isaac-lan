@@ -3198,6 +3198,32 @@ void reliableReceive() {
     }
 }
 void worldDetail() {
+    WorldTransfer sender;
+    StateCompression codec;
+    sender.epoch(1);
+    auto capture = [&](unsigned tick, std::size_t wireBytes) {
+        WorldState view;
+        view.tick = view.revision = tick;
+        view.epoch = 1;
+        view.bytes = {1, 2, 3};
+        sender.publish(std::move(view));
+        require(sender.next(codec, 0).has_value(), "Sender failed to publish a coherent view");
+        sender.accountWire(tick, wireBytes);
+        sender.transmitted(tick);
+    };
+    capture(1, 100);
+    require(sender.acknowledge(1, 1), "Could not commit the first core");
+    sender.delivered(1, 100, 1000); // App ACK overtook the transport receipt on its channel.
+    capture(2, 32000);
+    require(!sender.canCapture(0), "An outstanding view exceeded the path byte budget");
+    sender.delivered(2, 32100, 1200);
+    require(sender.canCapture(0) && sender.inFlightStates() == 1 &&
+                sender.acknowledgedRevision() == 1,
+            "Transport delivery must free link capacity while preserving the applied baseline");
+    capture(3, WorldTransfer::maxInFlightBytes);
+    sender.delivered(3, 32100 + WorldTransfer::maxInFlightBytes, 1400);
+    require(!sender.canCapture(0), "Network receipts bypassed the application cache limit");
+
     Group group(2);
     group.ready();
     auto publish = [&](unsigned tick, std::size_t extra) {
@@ -3307,14 +3333,16 @@ void worldDeltas() {
         return received[3] == 99;
     });
     const auto resources = g.peers[0]->resources();
+    std::printf(
+        "DELTA snapshots=%llu deltas=%llu sampled_full=%llu sampled_wire=%llu actual_wire=%llu\n",
+        static_cast<unsigned long long>(resources.worldSnapshots),
+        static_cast<unsigned long long>(resources.deltaSnapshots),
+        static_cast<unsigned long long>(resources.fullWorldBytes),
+        static_cast<unsigned long long>(resources.comparedWorldBytes),
+        static_cast<unsigned long long>(resources.wireWorldBytes));
     require(resources.deltaSnapshots > 180 &&
                 resources.comparedWorldBytes < resources.fullWorldBytes / 2,
             "Sampled sparse snapshots did not reduce compressed payload");
-    std::printf("DELTA snapshots=%llu deltas=%llu full_wire=%llu actual_wire=%llu\n",
-                static_cast<unsigned long long>(resources.worldSnapshots),
-                static_cast<unsigned long long>(resources.deltaSnapshots),
-                static_cast<unsigned long long>(resources.fullWorldBytes),
-                static_cast<unsigned long long>(resources.wireWorldBytes));
 }
 void sampledCompression() {
     WorldTransfer sender, receiver;

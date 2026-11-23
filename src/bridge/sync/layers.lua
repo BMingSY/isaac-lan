@@ -46,6 +46,9 @@ return function(fields, project, expand)
     end
     -- Actors, NPC poses, hazards and every entity link always travel together.
     -- Only an explicitly player-spawned beam may use a bounded drawing approximation.
+    local function sameCoordinate(a, b)
+        return a == b and (a ~= 0 or 1 / a == 1 / b)
+    end
     local function projectRoom(view, realtime, cache)
         if not project then
             return
@@ -68,9 +71,18 @@ return function(fields, project, expand)
                 end
                 local spawner = entity[Entity.spawner]
                 local owner = spawner ~= 0 and spawner or entity[Entity.parent]
-                local bytes, refine = project(path, players[owner] == true)
+                local bytes, refine, x, y = project(path, players[owner] == true)
                 local value = copy(entity)
                 value[Entity.laserPath] = bytes
+                local endpoint = entity[Entity.laserEndPoint]
+                if
+                    x
+                    and endpoint
+                    and sameCoordinate(endpoint[1], x)
+                    and sameCoordinate(endpoint[2], y)
+                then
+                    value[Entity.laserEndPoint] = true
+                end
                 projected[index] = value
                 if refine then
                     details = details or {}
@@ -181,7 +193,11 @@ return function(fields, project, expand)
             for _, entity in ipairs(view.room[Room.entities]) do
                 if entity[Entity.laserPath] then
                     local wire = entity[Entity.laserPath]
-                    local raw, refinable = expand(wire)
+                    local raw, refinable, x, y = expand(wire)
+                    if entity[Entity.laserEndPoint] == true then
+                        assert(x and y, "Missing laser endpoint")
+                        entity[Entity.laserEndPoint] = { x, y }
+                    end
                     entity[Entity.laserPath] = raw
                     if refinable then
                         view.laserRefinements = view.laserRefinements or {}
