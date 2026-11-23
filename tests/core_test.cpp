@@ -1698,12 +1698,13 @@ void challengeRules() {
             "Challenge 45 must be directly available with free characters and room options");
     const auto* shadows = isaac::compat::challenges::find(1007);
     require(shadows && shadows->version == 1 && shadows->character == RunRules{}.character &&
-                shadows->route == "mom" &&
-                shadows->goalStage == isaac::compat::ids::stage::chapterThreeSecond &&
+                shadows->route == "lamb" &&
+                shadows->goalStage == isaac::compat::ids::stage::chestOrDarkRoom &&
+                shadows->goalStageType == isaac::compat::ids::stageType::original &&
                 shadows->transient && shadows->difficulty == 0 && !shadows->roomOptionsLocked &&
                 shadows->hidePlayerOutlines && !luck->hidePlayerOutlines &&
                 isaac::compat::challenges::available(*shadows, {}),
-            "Chasing Shadows must allow ordinary characters and end at Mom");
+            "Chasing Shadows must allow ordinary characters and end at the Lamb in the Dark Room");
     require(!isaac::compat::challenges::find(65535), "Unknown challenge accepted");
     std::array<std::uint8_t, 642> achievements{};
     require(!isaac::compat::challenges::available(*large, achievements),
