@@ -59,6 +59,10 @@ foreach(backend repentance_plus repentance)
                            tests/native_call.cpp src/engine/versions/${backend}/laser_state.cpp)
     isaac_add_backend_test(actor-state ${backend} SOURCES tests/actor_state_backend_test.cpp
                            tests/native_call.cpp src/engine/versions/${backend}/actor_state.cpp)
+    if(backend STREQUAL "repentance_plus")
+        target_sources(isaac_lan_actor_state_repentance_plus_test
+                       PRIVATE src/engine/versions/repentance_plus/crime_view.cpp)
+    endif()
     isaac_add_backend_test(frontend-menu ${backend} SOURCES tests/frontend_menu_test.cpp
                            src/engine/versions/${backend}/frontend.cpp)
     if(backend STREQUAL "repentance")

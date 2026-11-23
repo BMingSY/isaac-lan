@@ -518,3 +518,54 @@ trophy.Wait = 0
 blueBaby.collide(trophy, player)
 assert(finish == beforeBlue + 1)
 print("PASS Challenge 45 Chest/??? identity, reward restoration and trophy completion")
+
+local crimeMode = dofile(root .. "/src/bridge/compat/challenges/crime_mode.lua")
+assert(crimeMode({}) == nil)
+do
+    local received, payload = {}, "\0\1\255"
+    local info = {
+        active = 1,
+        ready = 1,
+        authority = 1,
+        challenge = 1008,
+        challengeVersion = 3,
+        runId = "first",
+    }
+    local definition = { id = 1008, version = 3, route = "blue_baby" }
+    local native = {
+        api_info = function()
+            return info
+        end,
+        net_challenges = function()
+            return { ["1008"] = definition }
+        end,
+        crime_view = function(value)
+            if value == nil then
+                assert(info.authority == 1)
+                return payload
+            end
+            assert(info.authority == 0)
+            received[#received + 1] = value
+            return true
+        end,
+    }
+    local rule = coordinator({
+        native = native,
+        routes = { blue_baby = {} },
+        effects = { [definition.id] = crimeMode(native) },
+    })
+    rule.step()
+    local first = rule.snapshot()
+    info.authority = 0
+    rule.view()
+    rule.apply(first)
+    rule.apply(first)
+    assert(#received == 2 and received[1] == payload and received[2] == payload)
+    assert(not pcall(rule.apply, { 1008, 2, payload }))
+    assert(not pcall(rule.apply, { 1008, 3, false }))
+    info.challenge = 0
+    assert(rule.snapshot() == false)
+    rule.apply(false)
+    assert(not pcall(rule.apply, first))
+end
+print("PASS crime view identity, repeated snapshots and ordinary restart")

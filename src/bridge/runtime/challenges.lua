@@ -5,7 +5,9 @@ return function(deps)
     local routes, effects = deps.routes, deps.effects or {}
     local function reset()
         for _, effect in pairs(effects) do
-            effect.reset()
+            if effect.reset then
+                effect.reset()
+            end
         end
         lastRun = nil
     end
@@ -34,7 +36,7 @@ return function(deps)
     local function view()
         local definition, info = current()
         local effect = definition and effects[definition.id]
-        if effect and info.ready == 1 and info.authority ~= 1 then
+        if effect and effect.initialize and info.ready == 1 and info.authority ~= 1 then
             effect.initialize(info)
         end
     end
@@ -75,14 +77,14 @@ return function(deps)
             return
         end
         local effect = effects[definition.id]
-        if effect then
+        if effect and effect.step then
             effect.step(info)
         end
         if not pendingLayout then
             return
         end
         pendingLayout = false
-        if effect then
+        if effect and effect.level then
             effect.level(info, deps.game():GetLevel())
         end
         -- Deferred until the native floor is usable, before this authority
@@ -118,7 +120,7 @@ return function(deps)
             if route.clearAward then
                 route.clearAward()
             end
-            if effect then
+            if effect and effect.clearAward then
                 effect.clearAward(info)
             end
         end
@@ -128,6 +130,7 @@ return function(deps)
         local effect = definition and effects[definition.id]
         if
             effect
+            and effect.collect
             and owner >= 0
             and owner < info.players
             and (info.connected & (1 << owner)) ~= 0

@@ -1,3 +1,4 @@
+#include "engine/versions/common/actor_state.h"
 #include "engine/versions/common/actor_state_bindings.h"
 #include "engine/versions/repentance/entrypoints.h"
 #include "engine/versions/repentance/layout.h"
@@ -13,4 +14,5 @@ const Bindings bindings{backend::globals::game,
                          layout::player::bagMaterials, layout::player::bagPreview,
                          layout::player::poopMana, layout::player::poopQueue},
                         {layout::playerHud::size, layout::playerHud::bagDirty}};
+void bindCrimeView(lua_State*, const lua::API&, std::uintptr_t, const Callbacks&) {}
 } // namespace isaac::engine::native_actor_state

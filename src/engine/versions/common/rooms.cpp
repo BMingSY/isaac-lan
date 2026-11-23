@@ -1020,6 +1020,8 @@ std::vector<Address> followers(Address player, const Room& room, bool departingF
             darkEsau = true;
         }
         if ((type == 3 && at<Address>(entity, layout.familiar.player) == player) ||
+            (type == compat::ids::entity::effect && layout.player.crimeGun &&
+             at<Address>(player, layout.player.crimeGun) == entity) ||
             (type == 8 && (owned(at<Address>(entity, layout.entity.parent)) ||
                            owned(at<Address>(entity, layout.entity.spawner)))) ||
             compat::items::roomFollower(

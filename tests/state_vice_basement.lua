@@ -8,6 +8,8 @@ local starts = { "RANDOM", "RANDOM", fixedSeed, fixedSeed }
 local run, wins, chosen, requested, checked, renders = 0, 0, 0, 0, 0, 0
 local joined, complete, firstSeed, endingAt = false, false, nil, nil
 local firstStage, nextFloor, sawShot, fireButtons = nil, false, false, 0
+local sawAmmo, spentAmmo, switched, sawWanted, carriedToChest = 0, false, false, false, false
+local heldShotgun = false
 local bossEntered, trophyAt, sawBoss, sawTrophy, claimed
 local blueBabyVariant = 1
 local frame, gate = _IsaacLanFrame, native.net_gate
@@ -68,6 +70,10 @@ Isaac.AddCallback(owner, ModCallbacks.MC_PRE_GAME_EXIT, function()
     )
     if run == 1 then
         assert(sawShot, "Missing guest shot from the starting pistol")
+        assert(
+            spentAmmo and switched and sawWanted and heldShotgun and carriedToChest,
+            "Incomplete crime view"
+        )
     elseif run == 2 then
         assert(nextFloor, "Missing second floor with the lobby seed and crime effect")
     end
@@ -167,6 +173,7 @@ function _IsaacLanFrame()
         )
         checked = run
         if run == #starts and not complete then
+            assert(not native.crime_view(), "Crime HUD state survived the ordinary restart")
             complete = true
             Isaac.DebugString("LAN_NETWORK PASS crime mode lobby seeds")
         end
@@ -217,8 +224,16 @@ local function finishAtBlueBaby(t)
         elseif sawBoss and t - bossEntered >= 45 and not claimed then
             assert(native.rooms_with_player(1, function()
                 local guest = Isaac.GetPlayer(assert(native.rooms_heads()["1"]))
-                for _, boss in ipairs(Isaac.FindByType(EntityType.ENTITY_ISAAC, blueBabyVariant)) do
-                    boss:TakeDamage(1000000, DamageFlag.DAMAGE_IGNORE_ARMOR, EntityRef(guest), 0)
+                -- A wanted party can meet police in the boss room after ??? dies.
+                for _, enemy in ipairs(Isaac.GetRoomEntities()) do
+                    if enemy:IsActiveEnemy(false) then
+                        enemy:TakeDamage(
+                            1000000,
+                            DamageFlag.DAMAGE_IGNORE_ARMOR,
+                            EntityRef(guest),
+                            0
+                        )
+                    end
                 end
                 local trophies =
                     Isaac.FindByType(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_TROPHY)
@@ -235,31 +250,127 @@ local function finishAtBlueBaby(t)
         end
     end
 end
+local function withActor(slot, action)
+    assert(native.rooms_with_player(slot, function()
+        action(Isaac.GetPlayer(assert(native.rooms_heads()[tostring(slot)])))
+    end))
+end
+local function takeStartingPistol(p)
+    local gun = assert(
+        Isaac.FindByType(
+            EntityType.ENTITY_PICKUP,
+            Isaac.GetEntityVariantByName("Weapon"),
+            pistolSubtype
+        )[1]
+    )
+    p.Position, p.Velocity = gun.Position, Vector.Zero
+    p:SetMinDamageCooldown(10000)
+end
+local function exerciseGuns(t)
+    if t == 30 then
+        withActor(0, function(p)
+            p.Position = Vector(145, 230)
+        end)
+        withActor(1, takeStartingPistol)
+    elseif t == 62 then
+        withActor(1, function(p)
+            p.Position = Vector(450, 230)
+        end)
+        withActor(0, takeStartingPistol)
+    elseif t == 100 then
+        local rooms = Game():GetLevel():GetRooms()
+        for i = 0, rooms.Size - 1 do
+            local d = rooms:Get(i)
+            if d.Data and d.Data.Type == RoomType.ROOM_TREASURE and d.SafeGridIndex >= 0 then
+                assert(native.rooms_move(1, d.SafeGridIndex, 0, -1))
+                return
+            end
+        end
+        error("Missing treasure room for split-room crime view")
+    elseif t == 125 or t == 160 then
+        withActor(1, function(p)
+            p.Position, p.Velocity = Vector(260, 240), Vector.Zero
+            local variant = Isaac.GetEntityVariantByName(t == 125 and "Weapon" or "Shotgun Ammo")
+            Isaac.Spawn(EntityType.ENTITY_PICKUP, variant, 2, p.Position, Vector.Zero, nil)
+                :ToPickup().Wait =
+                0
+        end)
+    elseif t == 175 then
+        withActor(0, function(p)
+            local car = Isaac.Spawn(
+                Isaac.GetEntityTypeByName("Car"),
+                Isaac.GetEntityVariantByName("Car"),
+                0,
+                Vector(400, 260),
+                Vector.Zero,
+                nil
+            )
+            car:TakeDamage(10000, DamageFlag.DAMAGE_IGNORE_ARMOR, EntityRef(p), 0)
+        end)
+    end
+end
+local schema = _IsaacLanModules["sync/world_schema"]
+local location = _IsaacLanModules["sync/fields"].location
+local function checkCrimeView(bytes, stable, t)
+    if run ~= 1 then
+        return
+    end
+    local view = schema.unpack(_IsaacLanState.decode(bytes, stable), t)
+    local state = assert(native.crime_view())
+    assert(state == view.challenge[3], "Native HUD differs from the host at tick " .. t)
+    local wanted, _, cursor = string.unpack(">fi4", state)
+    local actorFormat = ">BBBI2I2I2I2"
+    local host, hostGuns, _, _, _, _, _, guestCursor = string.unpack(actorFormat, state, cursor)
+    local guest, guestGuns, equipped, _, shells = string.unpack(actorFormat, state, guestCursor)
+    assert(host == 1 and guest == 2)
+    if hostGuns == 1 and guestGuns == 3 then
+        if inChest() then
+            carriedToChest = shells > 0
+        elseif view.locations[1][location.index] ~= view.locations[2][location.index] then
+            sawWanted = sawWanted or wanted >= 1
+            spentAmmo = spentAmmo or (shells > 0 and shells < sawAmmo)
+            switched = switched or (spentAmmo and equipped == 0)
+            if equipped == 1 then
+                sawAmmo = math.max(sawAmmo, shells)
+                if not heldShotgun then
+                    withActor(1, function(guestPlayer)
+                        local variant = Isaac.GetEntityVariantByName("Gun")
+                        for _, gun in ipairs(Isaac.FindByType(EntityType.ENTITY_EFFECT, variant)) do
+                            local owner = gun.Parent or gun.SpawnerEntity
+                            if
+                                owner
+                                and GetPtrHash(owner) == GetPtrHash(guestPlayer)
+                                and gun:GetSprite():GetFilename():lower():find("shotgun", 1, true)
+                            then
+                                heldShotgun = true
+                            end
+                        end
+                    end)
+                end
+            end
+        end
+    end
+end
 native.net_gate = function(capture, before, collect, restore, present, floor)
     local function shoot()
         if run ~= 1 or config.host then
             return capture()
         end
         local t = _IsaacLanStatus().verified or 0
-        local buttons = t >= 70 and t % 12 < 7 and (1 << ButtonAction.ACTION_SHOOTRIGHT) or 0
+        local firing = (t >= 65 and t < 98) or (t >= 185 and t < 225)
+        local buttons = firing and (1 << ButtonAction.ACTION_SHOOTRIGHT) or 0
+        if t >= 240 and t < 250 then
+            buttons = 1 << ButtonAction.ACTION_DROP
+        end
         local input = _IsaacLanTestInput.buttons(buttons, buttons & ~fireButtons)
         fireButtons = buttons
         return input
     end
     return gate(shoot, function(t, n, bytes)
         before(t, n, bytes)
-        if run == 1 and t == 45 then
-            assert(native.rooms_with_player(1, function()
-                local gun = assert(
-                    Isaac.FindByType(
-                        EntityType.ENTITY_PICKUP,
-                        Isaac.GetEntityVariantByName("Weapon"),
-                        pistolSubtype
-                    )[1]
-                )
-                local guest = Isaac.GetPlayer(assert(native.rooms_heads()["1"]))
-                guest.Position, guest.Velocity = gun.Position, Vector.Zero
-            end))
+        if run == 1 then
+            exerciseGuns(t)
+            finishAtBlueBaby(t - 100)
         elseif run == 2 and t == 60 then
             assert(native.rooms_with_player(0, function()
                 Game():StartStageTransition(false, RoomTransitionAnim.FADE, Isaac.GetPlayer(0))
@@ -267,5 +378,15 @@ native.net_gate = function(capture, before, collect, restore, present, floor)
         elseif run < #starts then
             finishAtBlueBaby(t)
         end
-    end, collect, restore, present, floor)
+    end, function(slot, t, ...)
+        local bytes, stable, detail = collect(slot, t, ...)
+        checkCrimeView(bytes, stable, t)
+        return bytes, stable, detail
+    end, function(bytes, t, ack, betweenUpdates, stable)
+        local applied = restore(bytes, t, ack, betweenUpdates, stable)
+        if applied ~= false then
+            checkCrimeView(bytes, stable, t)
+        end
+        return applied
+    end, present, floor)
 end

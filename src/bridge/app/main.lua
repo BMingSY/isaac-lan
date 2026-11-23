@@ -222,6 +222,7 @@ challenge = _IsaacLanModules["runtime/challenges"]({
     effects = {
         [battleRules.id] = battle,
         [1007] = shadows,
+        [1008] = _IsaacLanModules["compat/challenges/crime_mode"](native),
         [1006] = _IsaacLanModules["compat/challenges/delete_this"]({
             party = allocation.party,
             scoped = allocation.scoped,

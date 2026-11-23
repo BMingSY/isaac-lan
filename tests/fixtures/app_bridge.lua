@@ -71,6 +71,7 @@ return function(root, native, modules)
         "compat/challenges/luck_game",
         "compat/challenges/delete_this",
         "compat/challenges/chasing_shadows",
+        "compat/challenges/crime_mode",
         "compat/challenges/battle_royale_rules",
         "compat/challenges/battle_royale_resources",
         "compat/challenges/battle_royale_rewards",

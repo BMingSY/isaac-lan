@@ -220,6 +220,7 @@ const Bindings bindings{
             .controller = repentance_plus::layout::player::controller,
          .controlsEnabled = repentance_plus::layout::player::controlsEnabled,
             .coopGhost = repentance_plus::layout::player::coopGhost,
+            .crimeGun = repentance_plus::layout::player::crimeGun,
             .darkEsau = repentance_plus::layout::player::darkEsau,
             .emote = repentance_plus::layout::player::emote,
             .extraAnimationActive = repentance_plus::layout::player::extraAnimationActive,

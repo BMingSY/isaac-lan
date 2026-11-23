@@ -147,7 +147,7 @@ inline constexpr std::array definitions{
     },
     Definition{
         .id = 1008,
-        .version = 2,
+        .version = 3,
         .character = unrestrictedCharacter,
         .difficulty = 0,
         .transient = true,

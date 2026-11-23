@@ -18,6 +18,7 @@ constexpr unsigned poopMana = 0x1f54, poopQueue = 0x1f58, hudStride = 0x6dc, bag
 constexpr std::array<unsigned, 3> spriteOffsets{0x41c, 0xff8, 0xee4};
 #endif
 struct lua_State {
+    isaac::lua::Function crimeView = nullptr;
     int top = 1;
     std::size_t userdataBytes = 8;
     bool validWrapper = true, success = false, metatable = false, appliedMeta = false;
@@ -31,6 +32,7 @@ namespace {
 namespace state = isaac::engine::native_actor_state;
 using Address = std::uintptr_t;
 bool replica = false;
+bool crimeReady = true;
 unsigned hudCalls = 0;
 void* currentGame = nullptr;
 void* currentHud = nullptr;
@@ -131,7 +133,77 @@ void rejection(Player& player, int (*function)(lua_State*), const std::string& i
     require(!invoke(player, function, &input).success && player.data == before,
             "Invalid actor snapshot partially wrote state");
 }
+void checkCrimeView(unsigned char* image) {
+    lua_State L;
+    state::lua.pushClosure = [](lua_State* L, isaac::lua::Function f, int) { L->crimeView = f; };
+    state::lua.setField = [](lua_State*, int, const char* name) {
+        require(std::string_view(name) == "crime_view", "Unexpected crime view binding");
+    };
+    state::bindCrimeView(&L, state::lua, address(image), state::context);
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+    require(!L.crimeView, "Base game registered an unavailable crime mode");
+#else
+    require(L.crimeView, "Crime mode view is missing");
+    std::vector<unsigned char> game(0x26b00, 0), host(0x2f30, 0), guest(0x2f30, 0);
+    field<Address>(image, gameGlobal) = address(game.data());
+    teamPlayers = {address(host.data()), address(guest.data())};
+    localPlayers = {address(guest.data())};
+    host[0x28] = guest[0x28] = 1;
+    host[0x161c] = 1;
+    guest[0x161c] = 2;
+    L.top = 0;
+    require(L.crimeView(&L) == 1 && !L.success && L.output.empty(), "Read outside crime mode");
+    game[0x26644] = 1;
+    const auto empty = bytes("0000000000000000"
+                             "0100ff0060000000000000"
+                             "0200ff0060000000000000");
+    const auto armed = bytes("40600000fffffff6"
+                             "0101000060000000000000"
+                             "0203010060000b00000000");
+    host[0x2f14] = guest[0x2f14] = 0xff;
+    host[0x2f08] = guest[0x2f08] = 96;
+    require(L.crimeView(&L) == 1 && L.output == empty, "Split-room capture lost an actor");
+    L.top = 1;
+    L.input = armed;
+    replica = false;
+    require(L.crimeView(&L) == 1 && !L.success, "Authority accepted a crime view");
+    replica = true;
+    auto reject = [&](const std::string& bad) {
+        L.input = bad;
+        require(L.crimeView(&L) == 1 && !L.success, "Invalid crime view applied");
+    };
+    reject(armed.substr(0, armed.size() - 1));
+    reject(armed + 'x');
+    constexpr unsigned guestRecord = 8 + 11;
+    reject(std::string(armed).replace(guestRecord, 1, bytes("01")));       // Wrong controller.
+    reject(std::string(armed).replace(guestRecord + 2, 1, bytes("03")));   // Unowned gun.
+    reject(std::string(armed).replace(guestRecord + 5, 2, bytes("ffff"))); // Negative ammo.
+    reject(std::string(armed).replace(0, 4, bytes("7fc00000"))); // Nonfinite wanted level.
+    L.top = 0;
+    require(L.crimeView(&L) == 1 && L.output == empty, "Invalid crime view partially wrote state");
+    L.top = 1;
+    L.input = armed;
+    for (int i = 0; i < 2; ++i)
+        require(L.crimeView(&L) == 1 && L.success, "Valid or repeated crime view rejected");
+    require(field<float>(game.data(), 0x26648) == 3.5f && field<int>(game.data(), 0x26ac0) == -10 &&
+                host[0x2f10] == 1 && host[0x2f14] == 0 && guest[0x2f10] == 3 &&
+                guest[0x2f14] == 1 && guest[0x2f0a] == 11,
+            "Crime view wrote the wrong HUD fields or actor");
+    L.top = 0;
+    require(L.crimeView(&L) == 1 && L.output == armed, "Crime view failed to round-trip");
+    crimeReady = false;
+    L.top = 1;
+    L.input = empty;
+    require(L.crimeView(&L) == 1 && !L.success && guest[0x2f10] == 3,
+            "Crime view wrote during a floor transition");
+#endif
+}
 } // namespace
+namespace isaac::rooms {
+bool stateReady() {
+    return crimeReady;
+}
+} // namespace isaac::rooms
 namespace isaac::runtime {
 bool replica() {
     return ::replica;
@@ -315,6 +387,7 @@ int main() {
             L.wrapper = {0, spriteOffset};
             require(function(&L) == 1 && !L.success, "Null entity was dereferenced");
         }
+        checkCrimeView(image);
         VirtualFree(image, 0, MEM_RELEASE);
         std::cout << "Actor Sprite borrowing, pocket/bag/poop wire bytes, ownership and atomic "
                      "validation passed\n";
