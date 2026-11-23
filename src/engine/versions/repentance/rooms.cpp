@@ -40,6 +40,8 @@ const Bindings bindings{
     .globalManager = repentance::globals::manager,
     .entry = {
         .ambushDestroyWaveQueue = repentance::entry::ambushDestroyWaveQueue,
+        .ambushStart = repentance::entry::ambushStart,
+        .ambushUpdate = repentance::entry::ambushUpdate,
         .cameraDrag = repentance::entry::cameraDrag,
         .cameraSmooth = repentance::entry::cameraSmooth,
         .colorModStateLerp = repentance::entry::colorModStateLerp,

@@ -9,7 +9,7 @@ inline constexpr unsigned contextFieldCount = 35, renderImageCount = 27, doorCou
 struct Bindings {
     unsigned globalGame, globalManager;
     struct Entries {
-        unsigned ambushDestroyWaveQueue;
+        unsigned ambushDestroyWaveQueue, ambushStart, ambushUpdate;
         unsigned cameraDrag;
         unsigned cameraSmooth;
         unsigned colorModStateLerp;

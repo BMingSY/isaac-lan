@@ -59,6 +59,7 @@ compat/routes/home
 compat/routes/victory_lap
 compat/bosses/room_entry
 compat/bosses/rotgut
+compat/bosses/mega_satan
 runtime/transitions
 runtime/room_entry
 sync/codec
@@ -86,6 +87,7 @@ compat/items/glitched
 compat/routes/crawlspace
 compat/routes/dice_floor
 compat/routes/greed
+compat/routes/boss_rush
 compat/bosses/dogma
 compat/bosses/held_bombs
 compat/visuals

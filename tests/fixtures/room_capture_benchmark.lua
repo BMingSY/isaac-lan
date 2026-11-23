@@ -54,6 +54,7 @@ local room = {
     GetGridEntity = function(_, i)
         return occupied[i]
     end,
+    GetBackdropType = zero,
     GetWaterCurrent = function()
         return current
     end,
@@ -84,6 +85,11 @@ local native = {
     room_layout = empty,
     room_rails = empty,
 }
+local static = {
+    capture = function()
+        return false
+    end,
+}
 local newCapture = dofile(module)(fields)
 for _, changing in ipairs({ false, true }) do
     local capture = newCapture(
@@ -91,7 +97,10 @@ for _, changing in ipairs({ false, true }) do
         identity,
         identity,
         { capture = empty },
-        { ENTITY_PLAYER = 1 }
+        { ENTITY_PLAYER = 1 },
+        nil,
+        static,
+        static
     )
     for tick = -100, 0 do
         capture(1, tick, 0, location)

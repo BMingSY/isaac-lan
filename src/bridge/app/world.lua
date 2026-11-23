@@ -39,6 +39,10 @@ local npcState = assert(modules["sync/npc"])
 local curses = assert(modules["sync/curses"])
 local deals = component("sync/deals")(native)
 local pills = assert(modules["sync/pills"])(native)
+local bossRush = assert(modules["compat/routes/boss_rush"])(native, RoomType.ROOM_BOSSRUSH)
+local megaSatan = assert(modules["compat/bosses/mega_satan"])(BackdropType.MEGA_SATAN, function()
+    return assert(native.room_floor_sprite(Isaac.GetPlayer(0):GetSprite()))
+end)
 local greed = assert(modules["compat/routes/greed"])(function()
     return Game()
 end)
@@ -309,7 +313,9 @@ local captureState = component("sync/capture")({
             sprite,
             crawlspace,
             EntityType,
-            entityCodec.localEffect
+            entityCodec.localEffect,
+            bossRush,
+            megaSatan
         )
     end,
 })
@@ -362,6 +368,8 @@ local replica = component("sync/replica")({
         return Isaac.GetRoomEntities()
     end,
     forms = forms,
+    bossRush = bossRush,
+    megaSatan = megaSatan,
     restoreActorRoster = component("sync/actor_roster")(native),
     applyInventory = applyInventory,
     sameInventory = inventoryState.sameItems,

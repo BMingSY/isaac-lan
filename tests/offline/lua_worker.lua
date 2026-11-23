@@ -87,6 +87,7 @@ local function stateEnvironment()
                 root .. "/src/bridge/compat/routes/victory_lap.lua"
             ),
             ["compat/routes/home"] = dofile(root .. "/src/bridge/compat/routes/home.lua"),
+            ["compat/routes/boss_rush"] = dofile(root .. "/src/bridge/compat/routes/boss_rush.lua"),
             ["compat/routes/greed"] = dofile(root .. "/src/bridge/compat/routes/greed.lua"),
             ["compat/bosses/room_entry"] = dofile(
                 root .. "/src/bridge/compat/bosses/room_entry.lua"
@@ -120,6 +121,9 @@ local function stateEnvironment()
             ),
             ["compat/routes/crawlspace"] = dofile(
                 root .. "/src/bridge/compat/routes/crawlspace.lua"
+            ),
+            ["compat/bosses/mega_satan"] = dofile(
+                root .. "/src/bridge/compat/bosses/mega_satan.lua"
             ),
             ["compat/bosses/dogma"] = dofile(root .. "/src/bridge/compat/bosses/dogma.lua"),
             ["sync/entity_links"] = dofile(root .. "/src/bridge/sync/entity_links.lua"),

@@ -58,7 +58,12 @@ local function environment()
         end
         players[index] = p
     end
-    local room = { SetClear = noop }
+    local room = {
+        SetClear = noop,
+        GetType = function()
+            return 1
+        end,
+    }
     local level = {
         GetStage = function()
             return stage
@@ -152,6 +157,9 @@ local function environment()
         room_layout = function()
             return true
         end,
+        room_backdrop = function(value)
+            return value == 1
+        end,
         room_rails = function(value)
             return value == nil and string.rep("\255", 448) or true
         end,
@@ -205,6 +213,8 @@ local function environment()
         "compat/transitions",
         "compat/routes/home",
         "compat/routes/greed",
+        "compat/routes/boss_rush",
+        "compat/bosses/mega_satan",
         "compat/routes/victory_lap",
         "compat/items/hourglass",
         "compat/items/r_key",
@@ -338,7 +348,7 @@ local function environment()
     end
     modules["sync/room"] = function()
         return function()
-            return { true, 20, {}, {}, false, "layout", false, { 0, 0 }, "rails" }
+            return { true, 20, {}, {}, false, "layout", false, { 0, 0 }, "rails", 1, false, false }
         end
     end
     for _, name in ipairs({

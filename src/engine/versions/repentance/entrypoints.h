@@ -5,6 +5,9 @@
 // Layouts and native calling conventions belong to this backend.
 namespace isaac::engine::repentance {
 namespace entry {
+inline constexpr std::uint32_t backdropInit = 0x4987a0;
+inline constexpr std::uint32_t ambushStart = 0x3ed6e0;
+inline constexpr std::uint32_t ambushUpdate = 0x3ee390;
 inline constexpr std::uint32_t glitchedGridStyle = 0x2e38e2;
 inline constexpr std::uint32_t glitchedRockStyle = 0x2e9d07;
 inline constexpr std::uint32_t glitchedBackdropType = 0x3a9f70;
