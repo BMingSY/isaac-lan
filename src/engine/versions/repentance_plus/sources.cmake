@@ -11,6 +11,7 @@ set(ISAAC_LAN_BACKEND_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/laser_state.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/room_data.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/actor_state.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/crime_view.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/room_routing.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/entity_visuals.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/references.cpp"

@@ -233,6 +233,7 @@ bool bind(lua_State* L, HMODULE module, Address base, const Callbacks& callbacks
         lua.pushClosure(L, fn, 0);
         lua.setField(L, -2, name);
     }
+    bindCrimeView(L, lua, image, callbacks);
     return true;
 }
 } // namespace isaac::engine::native_actor_state

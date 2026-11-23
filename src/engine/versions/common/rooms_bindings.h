@@ -199,6 +199,7 @@ struct Bindings {
             unsigned controller;
             unsigned controlsEnabled;
             unsigned coopGhost;
+            unsigned crimeGun = 0;
             unsigned darkEsau;
             unsigned emote;
             unsigned extraAnimationActive;

@@ -1711,7 +1711,7 @@ void challengeRules() {
                 isaac::compat::challenges::available(*shadows, {}),
             "Chasing Shadows must allow ordinary characters and end at the Lamb in the Dark Room");
     const auto* crime = isaac::compat::challenges::find(1008);
-    require(crime && crime->name == "幺幺幺九" && crime->version == 2 && crime->crimeMode &&
+    require(crime && crime->name == "幺幺幺九" && crime->version == 3 && crime->crimeMode &&
                 !crime->deleteThis && !generated->crimeMode &&
                 crime->nativeRewardChallenge(crime->goalStage) ==
                     isaac::compat::ids::challenge::deleteThis &&

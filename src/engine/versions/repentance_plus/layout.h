@@ -83,6 +83,7 @@ inline constexpr std::ptrdiff_t opacity = -0x1a0;
 inline constexpr std::ptrdiff_t shadowOpacity = -0x124;
 } // namespace laserRenderFrame
 namespace game {
+inline constexpr unsigned crime = 0x26644;
 inline constexpr unsigned ambushPending = 0x265e4;
 inline constexpr unsigned certificateLeaveDoor = 0x188fc;
 inline constexpr unsigned certificatePreviousDimension = 0x1890c;
@@ -405,6 +406,8 @@ inline constexpr std::array<unsigned, 6> values{0x468, 0x46c, 0x470, 0x474, 0x47
 inline constexpr std::array<unsigned, 2> paths{0x480, 0x48c};
 } // namespace laser
 namespace player {
+inline constexpr unsigned crimeAmmo = 0x2f08, crimeWeapons = 0x2f10, crimeEquipped = 0x2f14;
+inline constexpr unsigned crimeGun = 0x2f18;
 inline constexpr unsigned smeltedTrinkets = 0x1748;
 inline constexpr unsigned darkEsau = 0x1fc0;
 
@@ -443,6 +446,9 @@ inline constexpr unsigned nightLightAngle = 0x1ae4;
 inline constexpr unsigned generatedInventoryHead = 0x1fcc;
 inline constexpr unsigned generatedInventorySize = 0x1fd0;
 } // namespace player
+namespace crime {
+inline constexpr unsigned active = 0, wanted = 4, starFlash = 0x47c;
+} // namespace crime
 namespace weapon {
 inline constexpr std::array<unsigned, 3> charge{0xc, 0x10, 0x14};
 inline constexpr unsigned kind = 0x30;
