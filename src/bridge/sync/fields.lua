@@ -103,6 +103,7 @@ return {
         rails = 9,
         backdrop = 10,
         bossRush = 11,
+        floorAnimation = 12,
     },
     map = {
         index = 1,

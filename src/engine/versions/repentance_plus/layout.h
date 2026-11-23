@@ -198,7 +198,7 @@ inline constexpr unsigned size = 0x1c, trinket = 0x4, id = 0x8;
 inline constexpr unsigned maxEntries = 65536;
 } // namespace historyItem
 namespace backdrop {
-inline constexpr unsigned type = 0x150, count = 63;
+inline constexpr unsigned floorSprite = 0x3c, type = 0x150, count = 63;
 } // namespace backdrop
 namespace room {
 inline constexpr unsigned backdrop = 0x1bc8;

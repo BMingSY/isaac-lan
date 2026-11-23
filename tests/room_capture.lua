@@ -60,6 +60,23 @@ local native = {
         return string.rep(string.char(active), 448)
     end,
 }
+local floor = { name = "Idle1", frame = 0, writes = 0 }
+function floor:GetAnimation()
+    return self.name
+end
+function floor:GetFrame()
+    return self.frame
+end
+function floor:SetFrame(name, frame)
+    self.name, self.frame, self.writes = name, frame, self.writes + 1
+end
+local megaSatan = dofile(root .. "/src/bridge/compat/bosses/mega_satan.lua")(
+    enums.BackdropType.MEGA_SATAN,
+    function()
+        assert(backdrop == enums.BackdropType.MEGA_SATAN, "Static room borrowed the floor sprite")
+        return floor
+    end
+)
 local bossRush =
     dofile(root .. "/src/bridge/compat/routes/boss_rush.lua")(native, enums.RoomType.ROOM_BOSSRUSH)
 local capture = assert(loadfile(root .. "/src/bridge/sync/room.lua"))()(
@@ -72,13 +89,13 @@ end, {
     capture = function()
         return "return"
     end,
-}, enums.EntityType, nil, bossRush)
+}, enums.EntityType, nil, bossRush, megaSatan)
 local one = capture(1, 10, 0, { dimension = 0, index = 84 })
 assert(one == capture(2, 10, 0, { dimension = 0, index = 84 }) and calls == 1)
 assert(one[3][1][1] == 1)
 assert(one[8][1] == 0 and one[8][2] == 1)
 assert(one[9] == string.rep("\1", 448))
-assert(#one == 11 and one[10] == 17 and one[11] == false)
+assert(#one == 12 and one[10] == 17 and one[11] == false and one[12] == false)
 backdrop = 18
 assert(capture(2, 10, 0, { dimension = 0, index = 85 }) ~= one and calls == 2)
 assert(capture(3, 10, 0, { dimension = 1, index = 84 }) ~= one and calls == 3)
@@ -98,8 +115,23 @@ end, {
     capture = function()
         return "return"
     end,
-}, enums.EntityType, nil, bossRush)
+}, enums.EntityType, nil, bossRush, megaSatan)
 assert(fresh(1, 11, 1, { dimension = 0, index = 84 }) ~= nextTick and calls == 6)
+
+local opening = nextTick[12]
+assert(opening[1] == "Idle1" and opening[2] == 0)
+floor.name, floor.frame = "Intro", 45
+local mid = capture(1, 12, 1, { dimension = 0, index = 84 })[12]
+floor.name, floor.frame = "Idle2", 0
+local lit = capture(1, 13, 1, { dimension = 0, index = 84 })[12]
+for _, pose in ipairs({ opening, mid, mid, lit, lit }) do
+    megaSatan.apply(backdrop, pose)
+    assert(floor.name == pose[1] and floor.frame == pose[2])
+end
+assert(floor.writes == 3 and mid[2] == 45 and opening[1] == "Idle1")
+backdrop = 17
+megaSatan.apply(backdrop, false)
+assert(not pcall(megaSatan.apply, backdrop, mid))
 
 -- Native room ambience survives both reconciliation passes and never enters
 -- the snapshot. A real projectile still uses normal authority ownership.
@@ -123,7 +155,7 @@ end, {
     capture = function()
         return "return"
     end,
-}, enums.EntityType, localEffect, bossRush)
+}, enums.EntityType, localEffect, bossRush, megaSatan)
 entity.Variant, entity.SubType = 0, 0
 function entity:GetData()
     return {}
@@ -223,7 +255,7 @@ end, {
     capture = function()
         return "return"
     end,
-}, enums.EntityType, localEffect, bossRush)
+}, enums.EntityType, localEffect, bossRush, megaSatan)
 local location = { dimension = 0, index = 84 }
 local first = cached(1, 20, 2, location)
 local firstBytes = codec.encode(first)

@@ -214,6 +214,7 @@ local function environment()
         "compat/routes/home",
         "compat/routes/greed",
         "compat/routes/boss_rush",
+        "compat/bosses/mega_satan",
         "compat/routes/victory_lap",
         "compat/items/hourglass",
         "compat/items/r_key",
@@ -347,7 +348,7 @@ local function environment()
     end
     modules["sync/room"] = function()
         return function()
-            return { true, 20, {}, {}, false, "layout", false, { 0, 0 }, "rails", 1, false }
+            return { true, 20, {}, {}, false, "layout", false, { 0, 0 }, "rails", 1, false, false }
         end
     end
     for _, name in ipairs({

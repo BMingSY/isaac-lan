@@ -202,6 +202,11 @@ local replica = createReplica({
             context.reclaim()
         end
     end,
+    megaSatan = {
+        apply = function(backdrop, pose)
+            assert(scope == "room" and backdrop == 1 and pose == false)
+        end,
+    },
     bossRush = {
         apply = function(_, value)
             assert(value == false)
@@ -305,7 +310,7 @@ local function packet(tick, nextEpoch)
             },
         },
         slot = 1,
-        room = { true, 0, {}, {}, "music", "layout", false, current, "rails", 1, false },
+        room = { true, 0, {}, {}, "music", "layout", false, current, "rails", 1, false, false },
         sound = {},
         progress = "progress",
         epoch = nextEpoch or epoch,

@@ -166,7 +166,7 @@ inline constexpr unsigned state = 0, index = 0x14, direction = 0x10;
 inline constexpr unsigned animation = 0x1c, dimension = 0x18;
 } // namespace roomTransition
 namespace backdrop {
-inline constexpr unsigned type = 0x150, count = 61;
+inline constexpr unsigned floorSprite = 0x3c, type = 0x150, count = 61;
 } // namespace backdrop
 namespace room {
 inline constexpr unsigned backdrop = 0x1d34;

@@ -153,6 +153,8 @@ Boss 演出事件使用独立序号和楼层／维度／房间身份。权威端
 
 `room_backdrop(id)` 在客机当前已加载的房间内切换原生背景。忏悔＋使用 `Room+0x1bc8` 的 Backdrop，类型在对象 `+0x150`。编号须在 0 至 62 内，变化时调用 `Backdrop::Init(id, true)` 加载图形，房间继续持有原生绘制资源。
 
+`room_floor_sprite(sample)` 借用当前已加载房间的地面 Sprite（Backdrop `+0x3c`），沿用 `GetSprite()` 的非持有包装。调用方在本次房间作用域内读写动画与帧。存储壳和未加载图形的房间返回 false。
+
 `room_ambush_wave()` 在 Boss Rush 作用域读取当前波和总波数；客机以 `(进行标记, 当前波, 总波数)` 恢复这些标量。进行标记为 0 或 1，当前波在 0 和总波数之间。原生 HUD 与封门判断共用当前房间的标记。客机跳过该房的原生启动和推进，待刷波次队列、随机数和奖励由主机持有。忏悔＋的 Ambush 位于 `Game+0x265d8`，总波数、进行标记及当前波分别在对象 `+0x18/+0x20/+0x24`。
 
 `room_water_current(x, y)` 只为已初始化的客机当前房间写入 `Room+0x7478/+0x747c`，拒绝存储壳、非有限坐标及长度大于单位向量的值。`state_clock(frame)` 恢复客机 `Game+0x26508` 的 uint32 帧钟；销毁后的 Game 不访问。`map_refresh()` 仅在启用时调用 `0x5a2650`（thiscall、无参数）刷新 `Game+0x25ee4/+0x26044`，并维护 `+0x22ed4/+0x22edc` 的显示状态，不执行可见性玩法。布局与缓存的[原版绑定](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-repentance.md#房间描述符与地图缓存)独立核对。

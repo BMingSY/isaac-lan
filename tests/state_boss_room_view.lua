@@ -6,6 +6,7 @@ local phases = native.net_phases()
 local mega, rush = GridRooms.ROOM_MEGA_SATAN_IDX, GridRooms.ROOM_BOSSRUSH_IDX
 local joined, chosen, started, renders, tick = false, false, false, 0, -1
 local step, since, observed = "start", 0, {}
+local hitAt
 local closedGap, openAfter, left, firstWave, lastWave, totalWaves =
     false, false, false, nil, nil, nil
 
@@ -42,14 +43,38 @@ local function sample()
     local room, level = Game():GetRoom(), Game():GetLevel()
     local idx = level:GetCurrentRoomIndex()
     if level:GetStage() == LevelStage.STAGE6 and idx == mega then
-        local body = #Isaac.FindByType(EntityType.ENTITY_MEGA_SATAN) > 0
-        if body and not observed.arena then
-            mark("arena backdrop=" .. room:GetBackdropType())
+        local body = Isaac.FindByType(EntityType.ENTITY_MEGA_SATAN, 0)[1]
+        if body then
+            local floor = assert(native.room_floor_sprite(Isaac.GetPlayer(0):GetSprite()))
+            local animation = floor:GetAnimation()
+            if animation == "Intro" and floor:GetFrame() > 0 then
+                observed.summoning = true
+            end
             assert(
                 room:GetBackdropType() == BackdropType.MEGA_SATAN,
                 "Chest backdrop behind Mega Satan"
             )
-            observed.arena = true
+            if
+                body.Visible
+                and body.HitPoints > 0
+                and body.HitPoints < body.MaxHitPoints
+                and not observed.arena
+            then
+                assert(
+                    observed.summoning and animation == "Idle2",
+                    "Mega Satan summoning circle stayed dark"
+                )
+                observed.arena = true
+                hitAt = tick
+                mark(
+                    "arena backdrop="
+                        .. room:GetBackdropType()
+                        .. " floor="
+                        .. animation
+                        .. " animation="
+                        .. body:GetSprite():GetAnimation()
+                )
+            end
         end
     elseif idx == rush then
         local active, done = room:IsAmbushActive(), room:IsAmbushDone()
@@ -145,10 +170,22 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             move(1, mega)
             advance("fight", t)
         elseif step == "fight" then
+            if native.rooms_positions()["0"].index == mega then
+                actor(0, function(p)
+                    p.Position, p.Velocity = Vector(320, 350), Vector.Zero
+                end)
+            end
             actor(1, function(p)
-                p.Position, p.Velocity = Vector(320, t - since < 90 and 440 or 200), Vector.Zero
+                p.Position, p.Velocity = Vector(320, t - since < 90 and 440 or 350), Vector.Zero
+                if not hitAt and t - since > 300 and t % 15 == 0 then
+                    local body = Isaac.FindByType(EntityType.ENTITY_MEGA_SATAN, 0)[1]
+                    if body and body.Visible and body:IsVulnerableEnemy() then
+                        body:TakeDamage(2, 0, EntityRef(p), 0)
+                    end
+                end
             end)
-            if t - since > 250 then
+            assert(t - since < 1400, "Mega Satan never became vulnerable")
+            if hitAt and t - hitAt > 120 then
                 floor(LevelStage.STAGE3_2, StageType.STAGETYPE_ORIGINAL)
                 advance("depths", t)
             end

@@ -211,6 +211,7 @@ return function(fields)
                 local room = game:GetRoom()
                 local data = value.room
                 assert(native.room_backdrop(data[Room.backdrop]))
+                deps.megaSatan.apply(data[Room.backdrop], data[Room.floorAnimation])
                 deps.bossRush.apply(room, data[Room.bossRush])
                 assert(native.room_water_current(data[Room.current][1], data[Room.current][2]))
                 crawlspace.apply(data[Room.crawlspace])

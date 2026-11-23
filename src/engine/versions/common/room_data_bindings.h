@@ -10,7 +10,8 @@ struct Bindings {
         unsigned mapState, mapTimer;
     } game;
     struct Room {
-        unsigned descriptor, waterX, waterY, backdrop, backdropType, backdropCount;
+        unsigned descriptor, waterX, waterY, backdrop, backdropType, backdropCount, floorSprite,
+            spriteLoaded;
     } room;
     struct Descriptor {
         unsigned size, gridIndex, safeGridIndex, listIndex, dimension, data, overrideData;

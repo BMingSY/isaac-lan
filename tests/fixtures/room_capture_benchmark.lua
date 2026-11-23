@@ -85,6 +85,11 @@ local native = {
     room_layout = empty,
     room_rails = empty,
 }
+local static = {
+    capture = function()
+        return false
+    end,
+}
 local newCapture = dofile(module)(fields)
 for _, changing in ipairs({ false, true }) do
     local capture = newCapture(
@@ -94,11 +99,8 @@ for _, changing in ipairs({ false, true }) do
         { capture = empty },
         { ENTITY_PLAYER = 1 },
         nil,
-        {
-            capture = function()
-                return false
-            end,
-        }
+        static,
+        static
     )
     for tick = -100, 0 do
         capture(1, tick, 0, location)

@@ -122,6 +122,9 @@ local function stateEnvironment()
             ["compat/routes/crawlspace"] = dofile(
                 root .. "/src/bridge/compat/routes/crawlspace.lua"
             ),
+            ["compat/bosses/mega_satan"] = dofile(
+                root .. "/src/bridge/compat/bosses/mega_satan.lua"
+            ),
             ["compat/bosses/dogma"] = dofile(root .. "/src/bridge/compat/bosses/dogma.lua"),
             ["sync/entity_links"] = dofile(root .. "/src/bridge/sync/entity_links.lua"),
             ["compat/bosses/held_bombs"] = dofile(

@@ -6,8 +6,8 @@ struct lua_State;
 namespace isaac::engine::native_room_data {
 struct Callbacks {
     std::function<bool()> enabled, idle;
-    // Only a current replica room with initialized native geometry is writable.
-    std::function<std::uintptr_t()> writableRoom;
+    // Current scoped room with initialized geometry, on either peer. Excludes storage shells.
+    std::function<std::uintptr_t()> loadedRoom;
 };
 bool bind(lua_State*, HMODULE, std::uintptr_t image, const Callbacks&);
 void resetMap();

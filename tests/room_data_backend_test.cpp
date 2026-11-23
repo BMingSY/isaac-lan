@@ -29,6 +29,9 @@ struct lua_State {
     std::vector<bool> flags;
     std::vector<long long> table;
     long long pushed = 0;
+    std::array<std::uintptr_t, 2> sample{99, 1}, borrowed{};
+    std::size_t userdataSize = sizeof(sample);
+    bool copiedMetatable = false;
 };
 namespace {
 namespace state = isaac::engine::native_room_data;
@@ -134,6 +137,20 @@ void configure() {
         return L->output.c_str();
     };
     state::lua.pushBoolean = [](lua_State* L, int value) { L->flags.push_back(value); };
+    state::lua.toUserdata = [](lua_State* L, int) -> void* { return L->sample.data(); };
+    state::lua.rawLength = [](lua_State* L, int) { return L->userdataSize; };
+    state::lua.newUserdata = [](lua_State* L, std::size_t size) -> void* {
+        require(size == sizeof(L->borrowed), "Floor Sprite wrapper took ownership");
+        return L->borrowed.data();
+    };
+    state::lua.getMetatable = [](lua_State*, int index) {
+        require(index == 1, "Floor Sprite metatable source");
+        return 1;
+    };
+    state::lua.setMetatable = [](lua_State* L, int index) {
+        L->copiedMetatable = index == -2;
+        return 1;
+    };
     state::lua.createTable = [](lua_State* L, int size, int hash) {
         require(size == 8 && hash == 0, "Door table shape changed");
         L->table.resize(size);
@@ -423,6 +440,25 @@ int main() {
             return success(value);
         };
         require(!backdrop(18) && !backdropReloads, "Host accepted replica backdrop");
+        constexpr unsigned floorSprite = roomBackdrop + 0x3c, spriteLoaded = 0x109;
+        const auto floorView = [&](bool expected) {
+            lua_State sample;
+            state::roomFloorSprite(&sample);
+            if (expected)
+                require(sample.copiedMetatable && sample.borrowed[0] == sample.sample[0] &&
+                            sample.borrowed[1] == address(host.room.data()) + floorSprite,
+                        "Borrowed wrong arena floor Sprite");
+            else
+                require(!sample.copiedMetatable && sample.flags == std::vector<bool>{false},
+                        "Unloaded room floor Sprite borrowed");
+        };
+        floorView(false);
+        field<bool>(host.room.data(), floorSprite + spriteLoaded) = true;
+        floorView(true);
+        lua_State owned;
+        owned.userdataSize += 0x114;
+        state::roomFloorSprite(&owned);
+        require(!owned.copiedMetatable && !success(owned), "Owning Sprite used as a template");
         const auto beforeWater = host.room;
         lua_State flow;
         flow.numbers = {0.6, 0.8};
@@ -458,7 +494,9 @@ int main() {
         require(success(validFlow) && host.room == expectedRoom, "Water wrote wrong room layout");
         shell = true;
         require(!backdrop(18), "Storage shell loaded backdrop graphics");
+        floorView(false);
         shell = false;
+        floorView(true);
         require(!backdrop(-1) && !backdrop(backdropCount) && !backdropReloads,
                 "Out-of-range backdrop reached native resources");
         require(backdrop(18) && backdrop(18) && backdropReloads == 1,

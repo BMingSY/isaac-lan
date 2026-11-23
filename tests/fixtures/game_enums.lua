@@ -2,6 +2,7 @@
 -- Keep scenario inputs/expected wire values literal so ID drift stays visible.
 -- Reference: https://wofsauge.github.io/IsaacDocs/rep/enums/EntityType.html
 return {
+    BackdropType = { MEGA_SATAN = 18 },
     CacheFlag = { CACHE_ALL = 0xffff },
     SeedEffect = { SEED_INVISIBLE_ISAAC = 14, SEED_INVISIBLE_ENEMIES = 15 },
     WeaponType = {

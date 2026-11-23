@@ -121,9 +121,27 @@ int mapPickups(lua_State* L) {
         return 1;
     }
 }
+int roomFloorSprite(lua_State* L) {
+    const auto room = context.loadedRoom();
+    const auto sample = static_cast<const Address*>(lua.toUserdata(L, 1));
+    const auto sprite = room + bindings.room.backdrop + bindings.room.floorSprite;
+    constexpr unsigned borrowedBytes = 2 * sizeof(Address);
+    if (!room || !sample || lua.rawLength(L, 1) != borrowedBytes || !sample[1] ||
+        !at<bool>(sprite, bindings.room.spriteLoaded)) {
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+    // The room owns the ANM2. Lua receives the same non-owning wrapper as GetSprite().
+    const auto wrapper = static_cast<Address*>(lua.newUserdata(L, borrowedBytes));
+    wrapper[0] = sample[0];
+    wrapper[1] = sprite;
+    lua.getMetatable(L, 1);
+    lua.setMetatable(L, -2);
+    return 1;
+}
 int roomBackdrop(lua_State* L) {
     const auto id = lua.checkInteger(L, 1);
-    const auto room = context.writableRoom();
+    const auto room = context.loadedRoom();
     const bool valid = runtime::replica() && room && id >= 0 && id < bindings.room.backdropCount;
     if (valid) {
         const auto backdrop = room + bindings.room.backdrop;
@@ -137,7 +155,7 @@ int roomBackdrop(lua_State* L) {
 }
 int roomWaterCurrent(lua_State* L) {
     const auto x = lua.checkNumber(L, 1), y = lua.checkNumber(L, 2);
-    const auto room = context.writableRoom();
+    const auto room = context.loadedRoom();
     const bool valid = runtime::replica() && room && std::isfinite(x) && std::isfinite(y) &&
                        x * x + y * y <= 1.000001;
     if (valid) {
@@ -371,13 +389,15 @@ void withMapPickups(const std::function<void()>& cache) {
     borrowMapPickups(cache);
 }
 bool bind(lua_State* L, HMODULE module, Address base, const Callbacks& callbacks) {
-    if (!base || !callbacks.enabled || !callbacks.idle || !callbacks.writableRoom ||
+    if (!base || !callbacks.enabled || !callbacks.idle || !callbacks.loadedRoom ||
         !lua.load(module, {isaac::lua::Symbol::getTop, isaac::lua::Symbol::checkInteger,
                            isaac::lua::Symbol::checkNumber, isaac::lua::Symbol::checkString,
                            isaac::lua::Symbol::pushLString, isaac::lua::Symbol::pushBoolean,
                            isaac::lua::Symbol::pushInteger, isaac::lua::Symbol::createTable,
                            isaac::lua::Symbol::rawSetI, isaac::lua::Symbol::pushClosure,
-                           isaac::lua::Symbol::setField}))
+                           isaac::lua::Symbol::setField, isaac::lua::Symbol::toUserdata,
+                           isaac::lua::Symbol::rawLength, isaac::lua::Symbol::newUserdata,
+                           isaac::lua::Symbol::getMetatable, isaac::lua::Symbol::setMetatable}))
         return false;
     image = base;
     context = callbacks;
@@ -385,6 +405,7 @@ bool bind(lua_State* L, HMODULE module, Address base, const Callbacks& callbacks
                                    {"map_pickups", mapPickups},
                                    {"room_water_current", roomWaterCurrent},
                                    {"room_backdrop", roomBackdrop},
+                                   {"room_floor_sprite", roomFloorSprite},
                                    {"room_connections", roomConnections},
                                    {"state_clock", stateClock},
                                    {"map_refresh", refreshMap}}) {
