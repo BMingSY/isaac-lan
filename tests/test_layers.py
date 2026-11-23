@@ -93,7 +93,7 @@ def test_native_and_fixture_enum_names_match(name, fixture_name):
 
 
 def test_repository_document_links_resolve():
-    for path in [ROOT / "AGENTS.md", ROOT / "README.md", *(ROOT / "docs").rglob("*.md")]:
+    for path in [*ROOT.glob("*.md"), *(ROOT / "docs").rglob("*.md")]:
         for target in re.findall(
             r"https://github.com/BMingSY/isaac-lan/(?:blob|tree)/main/([^\s)#]+)",
             path.read_text(),

@@ -1,5 +1,7 @@
 # Isaac LAN
 
+简体中文 · [English](https://github.com/BMingSY/isaac-lan/blob/main/docs/i18n/README.en.md) · [贡献指南](https://github.com/BMingSY/isaac-lan/blob/main/CONTRIBUTING.md) · [使用许可（允许商用，禁止售卖 Mod）](https://github.com/BMingSY/isaac-lan/blob/main/LICENSE)
+
 《以撒的结合》的 2–4 人局域网联机扩展。一次安装即可在 Windows 版 **忏悔 v1.7.9b.J835** 和 **忏悔＋ v1.9.7.19.J511** 中使用。
 
 ## 功能
@@ -52,7 +54,7 @@ WINEDLLOVERRIDES="winmm=n,b" %command%
 
 ## 配置与日志
 
-首次启动会在游戏目录生成 `isaac-lan/config.ini`：
+首次启动时，扩展会在游戏目录生成 `isaac-lan/config.ini`。已有配置会自动补齐缺项，保留原有设置。修改后重启游戏生效。
 
 ```ini
 ; Isaac LAN：修改后重启游戏生效。
@@ -64,6 +66,8 @@ input_hz = 60
 [players]
 ; 其他玩家默认不透明度：0–100；0 完全透明，100 保留原本外观，仅影响本机画面。
 others_opacity = 100
+; 客机自己的移动预测：true 开启，false 只显示房主确认的位置。
+movement_prediction = true
 
 [logging]
 ; 日志与原版 log.txt 位于同一游戏数据目录，按启动和局次分目录保存。
@@ -82,8 +86,8 @@ sample_interval_ms = 1000
 [chat]
 ; 聊天背景不透明度：0–100，0 完全透明，100 不透明。
 background_opacity = 70
-; 自定义背景：PNG、JPG/JPEG、BMP；相对 config.ini 的路径或绝对路径。
-; 留空使用纯色；按框大小缩放，保留透明区域，原图不修改。
+; 自定义背景支持 PNG、JPG/JPEG 和 BMP。可使用绝对路径或相对 config.ini 的路径。
+; 例如 backgrounds/chat.png。留空使用纯色。图片按框大小缩放并保留透明区域。
 background_image =
 ; 纯色背景、边框／分隔线与通用界面文字颜色：六位 RGB 十六进制，不加 #。
 background_color = 231B18

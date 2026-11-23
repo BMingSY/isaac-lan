@@ -28,6 +28,8 @@ SHARED_FILES = {
     "install.ps1",
     "install.py",
     "README.md",
+    "README.en.md",
+    "LICENSE",
     "FAQ.md",
     "payload.json",
     "licenses/MinHook-LICENSE.txt",
@@ -165,10 +167,10 @@ def check(archive, tag, *, require_stripped=False, allow_legacy=False):
     root = archive.stem + "/"
     with ZipFile(archive) as zipped:
         names = zipped.namelist()
-        legacy = allow_legacy and set(names) == {root + name for name in LEGACY_FILES}
         if root + "payload.json" not in names:
             raise ValueError("Release archive contains missing or unexpected files")
         index = json.loads(zipped.read(root + "payload.json"))
+        legacy = allow_legacy and index.get("format") == 1
         if legacy:
             backend = index.get("backend")
             if (
@@ -183,6 +185,9 @@ def check(archive, tag, *, require_stripped=False, allow_legacy=False):
             backends = bundle_backends(index, allow_legacy=allow_legacy)
             expected = bundle_files(backends)
             directories = {b: root + f"backends/{b}/" for b in backends}
+        if allow_legacy and root + "LICENSE" not in names:
+            # Published installers predating the project license had only the Chinese README.
+            expected = expected - {"LICENSE", "README.en.md"}
         if len(names) != len(expected) or set(names) != {root + name for name in expected}:
             raise ValueError("Release archive contains missing or unexpected files")
         if zipped.testzip() is not None:

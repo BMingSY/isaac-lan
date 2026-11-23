@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 安装与联机常见问题 / FAQ (中文)
+    url: https://github.com/BMingSY/isaac-lan/blob/main/docs/faq.md
+    about: 查看安装、存档、重连和 Mod 兼容问题。 Help with setup, save files, reconnecting and mods.
