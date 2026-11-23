@@ -26,8 +26,12 @@ int main() {
                       "Finished replacement retained protection");
               emission = {};
               emission.begin(128 * 1024, now);
+              require(!emission.finishing(128 * 1024),
+                      "Large outstanding view requested its successor");
               emission.sent(100 * 1024);
               require(!emission.replace(true, 32768, now + 1s), "Nearly completed view was wasted");
+              emission.sent(27 * 1024);
+              require(emission.finishing(128 * 1024), "Short send tail wasted a game tick");
               emission = {};
               emission.begin(2048, now);
               require(!emission.replace(true, 32768, now + 1s),

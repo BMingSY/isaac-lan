@@ -3197,6 +3197,82 @@ void reliableReceive() {
         rejects([&] { receiver.floor(changed); }, "Mixed rewind metadata accepted");
     }
 }
+void worldDetail() {
+    WorldTransfer sender;
+    StateCompression codec;
+    sender.epoch(1);
+    auto capture = [&](unsigned tick, std::size_t wireBytes) {
+        WorldState view;
+        view.tick = view.revision = tick;
+        view.epoch = 1;
+        view.bytes = {1, 2, 3};
+        sender.publish(std::move(view));
+        require(sender.next(codec, 0).has_value(), "Sender failed to publish a coherent view");
+        sender.accountWire(tick, wireBytes);
+        sender.transmitted(tick);
+    };
+    capture(1, 100);
+    require(sender.acknowledge(1, 1), "Could not commit the first core");
+    sender.delivered(1, 100, 1000); // App ACK overtook the transport receipt on its channel.
+    capture(2, 32000);
+    require(!sender.canCapture(0), "An outstanding view exceeded the path byte budget");
+    sender.delivered(2, 32100, 1200);
+    require(sender.canCapture(0) && sender.inFlightStates() == 1 &&
+                sender.acknowledgedRevision() == 1,
+            "Transport delivery must free link capacity while preserving the applied baseline");
+    capture(3, WorldTransfer::maxInFlightBytes);
+    sender.delivered(3, 32100 + WorldTransfer::maxInFlightBytes, 1400);
+    require(!sender.canCapture(0), "Network receipts bypassed the application cache limit");
+
+    Group group(2);
+    group.ready();
+    auto publish = [&](unsigned tick, std::size_t extra) {
+        group.step(tick);
+        WorldState state;
+        state.tick = tick;
+        state.connected = 3;
+        state.bytes = {static_cast<std::uint8_t>(tick), 19, 21};
+        state.detail.assign(extra, static_cast<std::uint8_t>(tick));
+        require(group.peers[0]->publish(1, state), "Core publication rejected");
+        std::optional<WorldState> received;
+        until([&] {
+            group.poll();
+            received = group.peers[1]->takeState();
+            return received.has_value();
+        });
+        require(received->bytes == state.bytes && received->tick == tick &&
+                    received->detail.empty(),
+                "Optional bytes altered the independently delivered core");
+        group.peers[1]->applied(tick);
+        until([&] {
+            group.poll();
+            return group.peers[0]->resources().inFlightStates == 0;
+        });
+        return *received;
+    };
+    publish(0, 0);
+    Sleep(200); // Supply a receiver-clock delivery window before probing detail.
+    const auto first = publish(1, 0);
+    const auto next = publish(2, 128);
+    require(!group.peers[1]->takeDetail(first), "Future detail attached to an old frame");
+    std::unique_ptr<WorldDetail> received;
+    until([&] {
+        group.poll();
+        received = group.peers[1]->takeDetail(next);
+        return bool(received);
+    });
+    require(received->bytes == std::vector<std::uint8_t>(128, 2) &&
+                !group.peers[1]->takeDetail(next),
+            "Detail changed bytes or applied twice");
+    auto differentScene = publish(3, 64);
+    ++differentScene.fence;
+    require(!group.peers[1]->takeDetail(differentScene), "Detail crossed a run/floor fence");
+    const auto newest = publish(4, maxWorldDetail);
+    require(!group.peers[1]->takeDetail(newest),
+            "Oversized decoration occupied the gameplay budget");
+    const auto overflow = publish(5, maxWorldDetail + 1);
+    require(!group.peers[1]->takeDetail(overflow), "Over-limit detail blocked or altered the core");
+}
 void worldDeltas() {
     Group g(4);
     g.ready();
@@ -3257,14 +3333,16 @@ void worldDeltas() {
         return received[3] == 99;
     });
     const auto resources = g.peers[0]->resources();
+    std::printf(
+        "DELTA snapshots=%llu deltas=%llu sampled_full=%llu sampled_wire=%llu actual_wire=%llu\n",
+        static_cast<unsigned long long>(resources.worldSnapshots),
+        static_cast<unsigned long long>(resources.deltaSnapshots),
+        static_cast<unsigned long long>(resources.fullWorldBytes),
+        static_cast<unsigned long long>(resources.comparedWorldBytes),
+        static_cast<unsigned long long>(resources.wireWorldBytes));
     require(resources.deltaSnapshots > 180 &&
                 resources.comparedWorldBytes < resources.fullWorldBytes / 2,
             "Sampled sparse snapshots did not reduce compressed payload");
-    std::printf("DELTA snapshots=%llu deltas=%llu full_wire=%llu actual_wire=%llu\n",
-                static_cast<unsigned long long>(resources.worldSnapshots),
-                static_cast<unsigned long long>(resources.deltaSnapshots),
-                static_cast<unsigned long long>(resources.fullWorldBytes),
-                static_cast<unsigned long long>(resources.wireWorldBytes));
 }
 void sampledCompression() {
     WorldTransfer sender, receiver;
@@ -3537,6 +3615,7 @@ int main(int argc, char** argv) {
         argc, argv,
         {{"codec", codec},
          {"world-deltas", worldDeltas},
+         {"world-detail", worldDetail},
          {"sampled-compression", sampledCompression},
          {"capture-demand", captureDemand},
          {"wire-compression", wireCompression},

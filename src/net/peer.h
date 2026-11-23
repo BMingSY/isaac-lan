@@ -24,6 +24,7 @@ struct Peer : Socket {
     std::optional<Stage> floorAfterLoad;
     std::shared_ptr<const Stage> sendingStage;
     std::optional<WorldState> pending;
+    std::unique_ptr<WorldDetail> pendingDetail;
     std::uint32_t inputSequence = 0;
     InputEvents inputEvents;
     std::optional<std::uint32_t> acknowledged;
@@ -49,6 +50,7 @@ struct Peer : Socket {
     }
     void resetWorldCache(std::uint32_t epoch = 0) {
         pending.reset();
+        pendingDetail.reset();
         if (pipe) {
             pipe->captureRequested.store(true, std::memory_order_release);
             pipe->publication.take();

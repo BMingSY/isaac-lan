@@ -1,5 +1,6 @@
 #include "engine/state_codec.h"
 #include "core/state_codec.h"
+#include "core/laser_projection.h"
 #include <algorithm>
 #include <array>
 #include <cstdio>
@@ -258,6 +259,52 @@ int encode(lua_State* L) {
     api.pushString(L, error);
     return api.error(L); // No owning C++ objects remain across Lua's longjmp.
 }
+template <bool packing> int laserSamples(lua_State* L) {
+    // Release the vector before calling Lua, whose allocator can longjmp on OOM.
+    constexpr std::size_t maxBytes = 33 + 2 * presentation::maxLaserPoints * 2 * sizeof(float);
+    std::array<char, maxBytes> storage;
+    std::size_t size = 0;
+    bool refined = false, encoded = false;
+    presentation::laser_projection::Point endpoint{};
+    char error[256]{};
+    try {
+        const auto raw = bytes(L, 1);
+        const auto input = std::span(reinterpret_cast<const std::uint8_t*>(raw.data()), raw.size());
+        if (raw.empty() || raw.size() > maxBytes)
+            throw std::runtime_error("Invalid laser payload size");
+        refined = input.front() == presentation::laser_projection::projectedTag;
+        if (!packing && !refined && input.front() != presentation::laser_projection::exactTag) {
+            api.pushValue(L, 1);
+            return 1;
+        }
+        lan::Writer out(lan::Message::world);
+        if constexpr (packing)
+            refined =
+                presentation::laser_projection::project(input, out, api.toBoolean(L, 2), endpoint);
+        else
+            presentation::laser_projection::expand(input, out, endpoint);
+        encoded = !packing || out.bytes.front() == presentation::laser_projection::projectedTag ||
+                  out.bytes.front() == presentation::laser_projection::exactTag;
+        size = out.bytes.size();
+        if (size > storage.size())
+            throw std::runtime_error("Laser payload overflow");
+        std::memcpy(storage.data(), out.bytes.data(), size);
+    } catch (const std::exception& exception) {
+        std::snprintf(error, sizeof(error), "%s", exception.what());
+    }
+    if (*error) {
+        api.pushString(L, error);
+        return api.error(L);
+    }
+    api.pushLString(L, storage.data(), size);
+    api.pushBoolean(L, refined);
+    if (!encoded)
+        return 2;
+    for (const auto word : endpoint)
+        api.pushNumber(L, std::bit_cast<float>(word));
+    return 4;
+}
+
 template <bool view> int decode(lua_State* L) {
     char error[256]{};
     try {
@@ -297,6 +344,10 @@ bool bind(lua_State* L, lua::Module module, lua::Resolver resolver) {
     api.pushClosure(L, releaseBuffer, 0);
     api.setField(L, -2, "__gc");
     api.setField(L, registry, bufferMetatable);
+    api.pushClosure(L, laserSamples<true>, 0);
+    api.setField(L, -2, "laser_project");
+    api.pushClosure(L, laserSamples<false>, 0);
+    api.setField(L, -2, "laser_expand");
     api.pushClosure(L, encode, 0);
     api.setField(L, -2, "state_encode");
     api.pushClosure(L, decode<false>, 0);

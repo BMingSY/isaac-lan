@@ -98,6 +98,11 @@ struct DatagramConnection {
     std::uint32_t outgoingTick = 0;
     Envelope outgoingKind = Envelope::shard;
     std::optional<WorldState> publication;
+    std::optional<WorldDetail> detail;
+    std::optional<std::uint32_t> lastDetail;
+    StateCompression detailCodec{maxWorldDetail};
+    std::uint64_t deliveredBytes = 0;
+
     std::vector<std::uint8_t> currentDependency, sentDependency, receivedDependency;
     std::uint32_t dependencyRevision = 0, sentDependencyRevision = 0,
                   receivedDependencyRevision = 0;
@@ -202,6 +207,7 @@ struct DatagramConnection {
         redundancy = {};
         world.epoch(generation.epoch);
         publication.reset();
+        detail.reset();
         latestReceipt.reset();
         outgoingShards.clear();
         emission = {};
@@ -251,6 +257,9 @@ struct DatagramConnection {
             if (channel != reliableChannel || authority || context <= fence)
                 throw std::runtime_error("Invalid UDP generation fence");
             fence = context;
+            lastDetail.reset();
+            deliveredBytes = 0;
+            pipe->detail.take();
             pipe->incoming.invalidate();
             world.resetReceiver();
             dependencies.reset();
@@ -270,6 +279,7 @@ struct DatagramConnection {
         if (kind == Envelope::world || kind == Envelope::shard) {
             if ((channel != worldChannel && channel != recoveryChannel) || authority)
                 throw std::runtime_error("Invalid UDP world channel");
+            deliveredBytes += datagramCost(packet.size() - 5);
             std::optional<std::vector<std::uint8_t>> restored;
             auto payload = packet.subspan(5);
             if (kind == Envelope::shard) {
@@ -285,9 +295,39 @@ struct DatagramConnection {
                 throw std::runtime_error("Invalid UDP world message");
             incoming.world = world.receive(r, worldCodec);
             if (incoming.world) {
+                Writer receipt(Message::world);
+                receipt.u32(incoming.world->tick);
+                receipt.u64(deliveredBytes);
+                receipt.u64(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                Clock::now().time_since_epoch())
+                                .count());
+                send(std::span(receipt.bytes).subspan(1), inputChannel, Envelope::delivered, 0,
+                     nullptr, true);
                 pipe->samples.push({"decompress", world.expandMs});
                 incoming.world = dependencies.receive(std::move(*incoming.world));
             }
+        } else if (kind == Envelope::delivered) {
+            if (channel != inputChannel || !authority)
+                throw std::runtime_error("Invalid transport receipt channel");
+            const auto tick = envelope.u32();
+            const auto bytes = envelope.u64(), milliseconds = envelope.u64();
+            envelope.finish();
+            world.delivered(tick, bytes, milliseconds);
+            return;
+        } else if (kind == Envelope::detail) {
+            if (channel != detailChannel || authority)
+                throw std::runtime_error("Invalid world detail channel");
+            deliveredBytes += datagramCost(packet.size() - 5);
+            const auto tick = envelope.u32();
+            const auto packed = envelope.blobView(maxWorldDetail + StateCompression::headerSize);
+            envelope.finish();
+            if (!lastDetail || tick > *lastDetail) {
+                auto bytes = detailCodec.expand(packed);
+                pipe->detail.publish(
+                    std::make_unique<WorldDetail>(WorldDetail{fence, tick, std::move(bytes)}));
+                lastDetail = tick;
+            }
+            return;
         } else if (kind == Envelope::quality) {
             if (channel != inputChannel || !authority)
                 throw std::runtime_error("Invalid shard quality channel");
@@ -332,6 +372,8 @@ struct DatagramConnection {
                                       [&](Writer pong) { message(std::move(pong.bytes), codec); });
         } else
             throw std::runtime_error("Invalid UDP envelope");
+        if (incoming.world)
+            incoming.world->fence = fence;
         deliver(std::move(incoming));
     }
     void observe() {
@@ -449,6 +491,9 @@ struct DatagramConnection {
                 if (!world.hasBaseline() || world.acknowledgedRevision() == dependencyRevision)
                     value.stable.clear();
             }
+            detail.reset();
+            if (!value.detail.empty())
+                detail = WorldDetail{fence, value.tick, std::move(value.detail)};
             world.publish(std::move(value));
             publication.reset();
         }
@@ -607,6 +652,29 @@ struct DatagramConnection {
             emission.sent(shard.size());
             outgoingShards.pop_front();
         }
+        // Detail is replaceable and never holds a capture slot or gameplay receipt.
+        // Admit it only after its own gameplay bytes and parity, within a small
+        // fraction of one update's link budget. Otherwise leave the complete core alone.
+        if (detail && outgoingShards.empty() && world.trace.tick == detail->tick) {
+            const auto allowance = world.optionalBudget();
+            if (!closingAt && bulk.empty() && world.hasBaseline() && world.oldestMs() < 150 &&
+                detail->bytes.size() <= allowance) {
+                auto packed = detailCodec.compress(detail->bytes);
+                Writer refinement(Message::world);
+                refinement.u32(detail->tick);
+                refinement.blob(packed);
+                const auto fragments =
+                    (refinement.bytes.size() + WorldShards::shardSize - 1) / WorldShards::shardSize;
+                const auto wire = refinement.bytes.size() +
+                                  fragments * (datagramCost(0) + sizeof(ENetProtocolSendFragment));
+                if (wire <= allowance) {
+                    world.accountDetail(wire);
+                    send(std::span(refinement.bytes).subspan(1), detailChannel, Envelope::detail);
+                }
+            }
+            detail.reset();
+        }
+        pipe->detailBudget.store(world.optionalBudget(), std::memory_order_relaxed);
         observe();
         // Request game-thread work only when it can feed the bounded sender.
         // A stale unfinished emission may request one fresh replacement; its
@@ -620,7 +688,7 @@ struct DatagramConnection {
                  (recoveryComplete->load() &&
                   Clock::now() - recoveryAt >= WorldTransfer::lostStateAge)) &&
                 world.canCapture(pipe->minimumLatency.load(), refresh) &&
-                (outgoingShards.empty() || refresh),
+                (outgoingShards.empty() || emission.finishing(world.bytesPerSecond()) || refresh),
             std::memory_order_release);
         if (closingAt) {
             if (peer->state == ENET_PEER_STATE_CONNECTED)

@@ -17,6 +17,9 @@ local types =
 local effects = { LASER_IMPACT = 50 }
 local writes = {}
 local attachments = dofile(root .. "/src/bridge/presentation/attachments.lua")(fields)({
+    laser_project = function(path)
+        return "projected:" .. path
+    end,
     laser_path = function(sprite, bytes, x, y)
         writes[#writes + 1] = { sprite = sprite, bytes = bytes, x = x, y = y }
         return true
@@ -186,3 +189,42 @@ entities[80] = nil
 present()
 close(bone.Position, 110, 215, "Removed holder retained a link")
 print("PASS carried actor/weapon offsets, repeat, throw and holder removal")
+
+-- A late refinement can only touch the existing beam at the committed tick.
+models, entities, writes = {}, {}, {}
+local enemy, source = add(90, 10)
+source.display, source.track = Vector(120, 217), { npc = true }
+local weapon, beam = add(91, types.ENTITY_LASER, 0, 90)
+beam.tick = 50
+function weapon:Exists()
+    return true
+end
+local freeShot = add(92, 9, 0, 90)
+local shotAt, enemyAt = freeShot.Position, enemy.Position
+local function refine(id, path, tick)
+    attachments.refine(string.pack(">i8s2", id, path), models, function(i)
+        return entities[i]
+    end, tick, { [91] = "projected:exact" })
+end
+present()
+close(weapon.Position, 120, 217, "Enemy's attached beam missed its interpolated origin")
+close(freeShot.Position, shotAt.X, shotAt.Y, "Free bullet stuck to a moving enemy")
+local n = #writes
+refine(91, "old", 49)
+present()
+assert(#writes == n)
+refine(91, "wrong-shape", 50)
+present()
+assert(#writes == n, "Unrelated geometry replaced the accepted contour")
+refine(91, "exact", 50)
+present()
+assert(#writes == n + 1 and writes[#writes].bytes == "exact" and writes[#writes].x == 20)
+refine(91, "exact", 50)
+present()
+assert(#writes == n + 1, "Repeated detail reapplied native geometry")
+close(enemy.Position, enemyAt.X, enemyAt.Y, "Laser refinement rewound the enemy")
+close(freeShot.Position, shotAt.X, shotAt.Y, "Laser refinement rewound the shot")
+entities[91] = nil
+refine(91, "retired", 50)
+present()
+assert(#writes == n + 1, "Refinement resurrected a retired beam")

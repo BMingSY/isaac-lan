@@ -2,7 +2,10 @@
 """Compare complete projectile synchronization with one protected native pair."""
 
 import argparse
+from bisect import bisect_right
 import json
+from math import ceil
+import re
 from pathlib import Path
 import subprocess
 
@@ -11,6 +14,47 @@ from testing.engine import configure_interrupts, engine_command, run_engine
 from testing.results import finish_run
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def combat_views(log):
+    views = {}
+    for series in re.findall(r"LAN_COMBAT_POSITIONS ([0-9.,;-]+)", log):
+        for record in series.split(";"):
+            tick, milliseconds, *positions = record.split(",")
+            views[int(tick)] = (int(milliseconds), positions)
+    return views
+
+
+def compare_combat(host_log, client_log):
+    host, guest = combat_views(host_log), combat_views(client_log)
+    different = [
+        tick
+        for tick, (_, positions) in guest.items()
+        if tick not in host or host[tick][1] != positions
+    ]
+    report = {"guest_views": len(guest), "different_ticks": different}
+    if different or not guest:
+        return report
+    # Both protected game processes use the same Windows monotonic clock.
+    arrivals = sorted((at, host[tick][0]) for tick, (at, _) in guest.items())
+    times = [at for at, _ in arrivals]
+    limits = [
+        int(value) for value in re.findall(r"LAN_COMBAT_WINDOW moving-enemy-fire (\d+)", host_log)
+    ]
+    if len(limits) == 2:
+        start, end = limits
+        if end > start and times[0] <= start:
+            current = [at for at in times if start <= at < end]
+            gaps = [b - a for a, b in zip([start] + current, current + [end])]
+            ages = sorted(
+                t - arrivals[bisect_right(times, t) - 1][1] for t in range(start, end, 10)
+            )
+            report.update(
+                applied_hz=round(len(current) * 1000 / (end - start), 2),
+                newest_state_age_p95_ms=ages[ceil(len(ages) * 0.95) - 1],
+                max_update_gap_ms=max(gaps),
+            )
+    return report
 
 
 def main():
@@ -28,10 +72,23 @@ def main():
     parser.add_argument(
         "--verify", action="store_true", help="Also check links, room and floor cleanup"
     )
+    parser.add_argument(
+        "--combat",
+        action="store_true",
+        help="Compare a moving shooter and hostile shot at each applied tick under laser load",
+    )
+    parser.add_argument(
+        "--downstream-kbps",
+        type=int,
+        default=0,
+        help="Limit the isolated relay downstream, in decimal kilobits per second",
+    )
     parser.add_argument("--heap-check", action="store_true")
     args = parser.parse_args()
     if not 1024 <= args.port <= 65534 or not 0 <= args.latency_ms <= 500:
         parser.error("Require port 1024..65534 and one-way latency 0..500 ms")
+    if args.downstream_kbps < 0 or (args.downstream_kbps and not args.latency_ms):
+        parser.error("A downstream cap requires a nonnegative rate and an active latency relay")
     output = args.output.resolve()
     labs = validate_labs([args.host, args.client], output)
     idle(labs, exclusive=not args.verify)
@@ -42,7 +99,7 @@ def main():
     try:
         script = output / "fixture.lua"
         script.write_text(
-            f"_IsaacLanProjectileFixture = {{ verify = {str(args.verify).lower()} }}\n"
+            f"_IsaacLanProjectileFixture = {{ verify = {str(args.verify).lower()}, combat = {str(args.combat).lower()} }}\n"
             + (ROOT / "tests/state_projectile_pressure.lua").read_text()
         )
         command = engine_command(
@@ -63,6 +120,17 @@ def main():
             "--scenario-timeout",
             "300",
         )
+        if args.downstream_kbps:
+            config = output / "relay-control.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "delay_ms": args.latency_ms,
+                        "downstream_bytes_per_second": args.downstream_kbps * 125,
+                    }
+                )
+            )
+            command.extend(("--relay-control", str(config)))
         if args.phase_profile:
             command.append("--performance")
         if args.heap_check:
@@ -76,14 +144,24 @@ def main():
             report["result"] = json.loads(result_path.read_text())
         report["passed"] = result.returncode == 0 and report.get("result", {}).get("pass") is True
         report["measurements"] = {}
+        observed = {}
         for role in ("host", "client"):
             path = output / "engine" / role / "log.txt"
             if path.is_file():
+                log = path.read_text(errors="replace")
+                if args.combat:
+                    observed[role] = log
                 report["measurements"][role] = [
                     json.loads(line.split("LAN_PROJECTILE_PRESSURE ", 1)[1])
-                    for line in path.read_text(errors="replace").splitlines()
+                    for line in log.splitlines()
                     if "LAN_PROJECTILE_PRESSURE {" in line
                 ]
+        if args.combat:
+            combat = compare_combat(observed.get("host", ""), observed.get("client", ""))
+            report["combat"] = combat
+            report["passed"] = (
+                report["passed"] and bool(combat["guest_views"]) and not combat["different_ticks"]
+            )
         idle(labs, exclusive=not args.verify)
     finally:
         finish_run(protected, report, output)

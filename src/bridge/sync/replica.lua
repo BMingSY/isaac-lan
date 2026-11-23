@@ -28,7 +28,7 @@ return function(fields)
         local pendingBytes, pendingTick, pendingValue
         local replicas, motion = {}, {}
         local replicaRoom, receivedTick = nil, -1
-        local actorVisuals = {}
+        local actorVisuals, laserRefinements = {}, nil
         local appliedLocations
         local function locationIdentity(locations)
             local result = {}
@@ -345,7 +345,8 @@ return function(fields)
             if deps.applyChallenge then
                 deps.applyChallenge(value.challenge)
             end
-            actorVisuals, receivedTick = value.actors, tick
+            actorVisuals, receivedTick, laserRefinements =
+                value.actors, tick, value.laserRefinements
         end
         restoreActors = performance.wrap("apply.actors", restoreActors)
         restoreRoom = performance.wrap("apply.room", restoreRoom)
@@ -455,7 +456,7 @@ return function(fields)
             end
             stableBytes, stableValue = nil, nil
             pendingBytes, pendingTick, pendingValue = nil, nil, nil
-            motion, actorVisuals, replicaRoom = {}, {}, nil
+            motion, actorVisuals, replicaRoom, laserRefinements = {}, {}, nil, nil
             appliedLocations = nil
             if deps.roomPresentation then
                 deps.roomPresentation.reset()
@@ -464,7 +465,10 @@ return function(fields)
         return {
             apply = apply,
             actorPose = actorPose,
-            present = function(input, sequence)
+            present = function(input, sequence, detail)
+                if detail and laserRefinements then
+                    deps.attachments.refine(detail, motion, ref, receivedTick, laserRefinements)
+                end
                 return motionPresentation.present(
                     input,
                     sequence,

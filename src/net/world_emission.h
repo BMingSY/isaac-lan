@@ -27,6 +27,12 @@ class WorldEmission {
         if (!remaining)
             protectedReplacement = false;
     }
+    // Capture one successor during the short tail of an emission. Waiting for
+    // an empty send queue can waste a whole 30 Hz game tick between views.
+    bool finishing(double bytesPerSecond) const {
+        constexpr double captureLeadSeconds = 0.025;
+        return remaining <= bytesPerSecond * captureLeadSeconds;
+    }
     bool refreshDue(double bytesPerSecond, Clock::time_point now) const {
         return !protectedReplacement && remaining && now - started >= staleAfter &&
                remaining > total / 2 &&

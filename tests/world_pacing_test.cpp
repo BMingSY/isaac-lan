@@ -129,9 +129,44 @@ static void bottleneck() {
     require(delay / delivered < 0.2, "Realtime pacing retained excessive queue delay");
 }
 
+static void receiverDelivery() {
+    WorldPacing pacing;
+    auto now = Clock::time_point{};
+    std::uint64_t bytes = 0, milliseconds = 0;
+    auto sample = [&](int rtt, std::uint64_t traffic) {
+        now += 50ms;
+        milliseconds += 50;
+        bytes += traffic;
+        pacing.delivery(bytes, milliseconds, rtt, now);
+    };
+    for (int i = 0; i < 30; ++i)
+        sample(80, 300);
+    require(pacing.bytesPerSecond() == WorldPacing::initialRate && pacing.optionalBudget() > 0,
+            "Sparse traffic manufactured new capacity or never admitted optional work");
+    const auto initialBudget = pacing.flightBudget(0);
+    sample(210, 5000);
+    for (int i = 0; i < 3; ++i)
+        sample(80, 5000);
+    require(pacing.bytesPerSecond() == WorldPacing::initialRate,
+            "One delayed transport receipt cut the path budget");
+    for (int i = 0; i < 18; ++i)
+        sample(180, 5000);
+    const auto limited = pacing.bytesPerSecond();
+    require(limited <= 100000 && pacing.flightBudget(0) < initialBudget &&
+                pacing.optionalBudget() == 0,
+            "Receiver throughput and persistent queue growth did not limit outstanding work");
+    pacing.delivery(bytes - 5000, milliseconds - 150, 80, now);
+    require(pacing.bytesPerSecond() == limited, "Reordered receiver counters changed capacity");
+    for (int i = 0; i < 36; ++i)
+        sample(80, static_cast<std::uint64_t>(0.8 * pacing.bytesPerSecond() / 20));
+    require(pacing.bytesPerSecond() > limited * 2,
+            "A busy path stopped probing when the downstream cap was lifted");
+}
+
 int main(int argc, char** argv) {
     return runTests(argc, argv,
                     {{"budget", budget},
+                     {"receiver-delivery", receiverDelivery},
                      {"feedback", feedback},
                      {"bottleneck", bottleneck},
                      {"path-changes", pathChanges}});

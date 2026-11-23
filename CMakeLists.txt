@@ -242,6 +242,11 @@ if(BUILD_TESTING)
                 "${CMAKE_CURRENT_SOURCE_DIR}")
         set_tests_properties(bridge.native-capture-generation PROPERTIES TIMEOUT 60 LABELS
                                                                          "offline;lua;core")
+        add_test(NAME bridge.laser-projection
+                 COMMAND isaac_lan_state_codec_runner
+                         "${CMAKE_CURRENT_SOURCE_DIR}/tests/laser_projection.lua")
+        set_tests_properties(bridge.laser-projection PROPERTIES TIMEOUT 30 LABELS
+                                                                "offline;lua;core")
         add_test(NAME bridge.native-capture-arrays
                  COMMAND isaac_lan_state_codec_runner
                          "${CMAKE_CURRENT_SOURCE_DIR}/tests/native_capture_arrays.lua")
@@ -698,6 +703,7 @@ if(BUILD_TESTING)
         reliable-receive
         receive-isolation
         world-deltas
+        world-detail
         sampled-compression
         capture-demand
         delivery-backpressure

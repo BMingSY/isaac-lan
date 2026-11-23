@@ -109,7 +109,7 @@ function _IsaacLanRoomEntered(door)
     )
 end
 local worldSchema = assert(modules["sync/world_schema"])
-local layers = component("sync/layers")
+local layers = modules["sync/layers"](fields, native.laser_project, native.laser_expand)
 function state.decode(bytes, stable)
     local value = decode(bytes)
     if stable and #stable > 0 then
@@ -317,9 +317,9 @@ function state.capture(slot, tick)
     performance.resources()
     return captureState.capture(slot, tick)
 end
-function state.captureTransfer(slot, tick)
+function state.captureTransfer(slot, tick, detailBudget)
     performance.resources()
-    return captureState.capture(slot, tick, true)
+    return captureState.capture(slot, tick, true, detailBudget)
 end
 local home = assert(modules["compat/routes/home"])(LevelStage, StageType)
 local floor = assert(modules["runtime/floor"])(native, home)
@@ -410,13 +410,13 @@ function state.apply(bytes, tick, ack, betweenUpdates, stable)
     state.lastTick = tick
     return true
 end
-function state.present(input, sequence)
+function state.present(input, sequence, detail)
     greed.present()
     local status = _IsaacLanStatus()
     if native.api_info().ready == 1 then
         keeper.present(status.slot)
     end
-    return replica.present(input, sequence)
+    return replica.present(input, sequence, detail)
 end
 state.actorPose = replica.actorPose
 function state.render()

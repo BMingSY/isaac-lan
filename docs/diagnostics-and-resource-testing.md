@@ -104,6 +104,9 @@ python3 tools/run_special_routes.py \
 
 [`run_projectile_pressure.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_projectile_pressure.py) 使用同一组主客机依次检查空房、店主的食泪症／硫磺火／圣心组合、200／500 颗移动泪弹和 64 条旋转激光。每档持续 360 tick，预热 90 tick，收尾 10 tick 不计入统计；双端核对合成弹幕数量，道具组合必须实际发射激光。输出每档帧间隔、采集／应用耗时、原始字节数及样本数。合成弹幕保持存活并关闭主机碰撞，用于比较同步成本，不代表自然战斗的伤害或吞吐量。
 
+`--combat --downstream-kbps 1000 --latency-ms 40` 使用 1 Mbps 主机下行、单向 40 ms 的中继，在 64 条旋转激光中反复生成和移除移动敌人与敌弹。双端按客机实际应用的 tick 核对实体 ID、位置、出生与移除，并检查敌弹在客机上的原生发射者引用。输出报告含参与比对的视图数量及差异所在 tick。预热结束前已收到状态时，另统计实际应用频率、最长更新间隔和最新权威状态年龄的 P95，按同机单调时钟每 10 ms 取样。
+
+
 ```sh
 python3 tools/run_projectile_pressure.py \
   --host "$ISAAC_HOST_LAB" --client "$ISAAC_CLIENT_LAB" \

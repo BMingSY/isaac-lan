@@ -95,3 +95,94 @@ for _, workload in ipairs(workloads) do
     end
 end
 print("state layers round trips, dependency identity and connected same-room fragment reuse passed")
+
+-- Every peer gets one complete combat tick regardless of its optional byte budget.
+local Entity, Room, Actor = fields.entity, fields.room, fields.actor
+local projectCalls = 0
+local function project(raw, player)
+    projectCalls = projectCalls + 1
+    return (player and "smooth" or "exact:") .. raw, player, -0.0, 42.5
+end
+local function expand(wire)
+    if wire:sub(1, 6) == "smooth" then
+        return "draw:" .. wire:sub(7), true, -0.0, 42.5
+    end
+    return wire:sub(7), false, -0.0, 42.5
+end
+local combat = dofile(root .. "/src/bridge/sync/layers.lua")(fields, project, expand)
+local view = schema.unpack(codec.decode(codec.encode(workloads[1].value)), 42)
+for _, actor in ipairs(view.actors) do
+    local inventory = actor[Actor.inventory]
+    for _, field in ipairs({
+        fields.inventory.items,
+        fields.inventory.trinkets,
+        fields.inventory.smeltedTrinkets,
+    }) do
+        inventory[field] = inventory[field] or {}
+    end
+end
+local source = view.actors[1][Actor.entity][Entity.id]
+local function row(id, x, parent, spawner, path)
+    return {
+        [Entity.id] = id,
+        [Entity.position] = { x, 10 },
+        [Entity.parent] = parent,
+        [Entity.spawner] = spawner,
+        [Entity.laserPath] = path,
+        [Entity.typed] = { 6 },
+    }
+end
+local enemyId, shotId, laserId = 501, 502, 503
+local rows = {
+    row(enemyId, 21, 0, 0),
+    row(shotId, 23, 0, enemyId),
+    row(laserId, 24, 0, source, "one"),
+    row(504, 25, source, enemyId, "enemy"),
+    row(505, 26, 0, 0, "unknown"),
+    row(506, 27, source, 0, "two"),
+}
+rows[3][Entity.laserEndPoint] = { -0.0, 42.5 }
+rows[4][Entity.laserEndPoint] = { 11, 42.5 }
+rows[5][Entity.laserEndPoint] = { 0.0, 42.5 }
+view.room[Room.entities] = rows
+local projections = {}
+local core, stable, none = combat.split(view, nil, projections, 0)
+assert(not none and projectCalls == 4 and rows[3][Entity.laserPath] == "one")
+local budget = #string.pack(">i8s2", laserId, "one")
+local _, _, detail = combat.split(view, nil, projections, budget)
+local _, _, all = combat.split(view, nil, projections, 2 * budget)
+local _, _, small = combat.split(view, nil, projections, budget - 1)
+assert(not small and #detail == budget and #all == 2 * budget and projectCalls == 4)
+local id, raw = string.unpack(">i8s2", detail)
+assert((id == laserId and raw == "one") or (id == 506 and raw == "two"))
+assert(core.room[Room.entities][3][Entity.laserEndPoint] == true)
+assert(core.room[Room.entities][4][Entity.laserEndPoint][1] == 11)
+assert(1 / core.room[Room.entities][5][Entity.laserEndPoint][1] == math.huge)
+local accepted = combat.join(core, stable)
+assert(
+    1 / accepted.room[Room.entities][3][Entity.laserEndPoint][1] == -math.huge
+        and accepted.room[Room.entities][3][Entity.laserEndPoint][2] == 42.5
+)
+local entities = accepted.room[Room.entities]
+assert(
+    accepted.tick == 42
+        and entities[1][Entity.position][1] == 21
+        and entities[1][Entity.typed][1] == 6
+)
+assert(
+    entities[2][Entity.spawner] == entities[1][Entity.id] and entities[2][Entity.position][1] == 23
+)
+assert(
+    entities[3][Entity.laserPath] == "draw:one"
+        and entities[4][Entity.laserPath] == "enemy"
+        and entities[5][Entity.laserPath] == "unknown"
+)
+assert(
+    accepted.laserRefinements[laserId]
+        and accepted.laserRefinements[506]
+        and not accepted.laserRefinements[504]
+        and not accepted.laserRefinements[505]
+)
+print(
+    "Combat core preserves shooter and hazards, player-only refinement and per-peer budgets passed"
+)

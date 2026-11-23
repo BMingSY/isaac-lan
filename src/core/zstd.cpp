@@ -7,7 +7,7 @@
 
 namespace isaac::compression {
 namespace {
-constexpr int compressionLevel = -1;
+constexpr int compressionLevel = -1, indexedPrefixLevel = 3;
 constexpr int prefixHashLog = 18;
 constexpr std::size_t indexedPrefixThreshold = 64 * 1024;
 void checked(std::size_t status) {
@@ -43,7 +43,9 @@ std::vector<std::uint8_t> Zstd::compress(std::span<const std::uint8_t> value, st
         impl->scratch.resize(capacity);
     auto* context = impl->encoder;
     checked(ZSTD_CCtx_reset(context, ZSTD_reset_session_and_parameters));
-    checked(ZSTD_CCtx_setParameter(context, ZSTD_c_compressionLevel, compressionLevel));
+    checked(ZSTD_CCtx_setParameter(context, ZSTD_c_compressionLevel,
+                                   prefix.size() >= indexedPrefixThreshold ? indexedPrefixLevel
+                                                                           : compressionLevel));
     checked(ZSTD_CCtx_setParameter(context, ZSTD_c_windowLog,
                                    std::max<int>(10, std::bit_width(limit - 1))));
     checked(ZSTD_CCtx_setParameter(context, ZSTD_c_checksumFlag, 1));
