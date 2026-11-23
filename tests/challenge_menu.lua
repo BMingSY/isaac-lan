@@ -457,10 +457,16 @@ for n = 2, 4 do
 end
 status.hosting, status.slot = 1, 0
 draw()
-assert(labels["结束挑战（不保存）"] and not labels["保存并结束联机"])
+assert(labels["结束挑战"] and labels["关闭菜单"] and not labels["保存并退出"])
+if vanilla then
+    Options.Language = "en"
+    draw()
+    assert(labels["End Challenge"] and labels["Close Menu"])
+    Options.Language = "zh"
+end
 status.challenge = 0
 draw()
-assert(labels["保存并结束联机"])
+assert(labels["保存并退出"])
 local actions = dofile(root .. "/src/bridge/presentation/menu_model.lua")(
     _IsaacLan.net_phases(),
     _IsaacLan.net_commands(),
@@ -491,8 +497,8 @@ local function action(label, running)
     error("Missing action: " .. label)
 end
 action("暂停全队", { phase = 3, hosting = 1, slot = 0, pause = 0 })
-action("恢复游戏", { phase = 3, hosting = 1, slot = 0, pause = 1, pauseOwner = 0 })
-action("保存并结束联机", { phase = 3, hosting = 1, slot = 0 })
+action("解除暂停", { phase = 3, hosting = 1, slot = 0, pause = 1, pauseOwner = 0 })
+action("保存并退出", { phase = 3, hosting = 1, slot = 0 })
 action("重连游戏", { phase = 3, hosting = 0, slot = 1 })
 action("离开游戏", { phase = 3, hosting = 0, slot = 1 })
 for i = 1, 3 do
@@ -526,6 +532,8 @@ assert(
 )
 status.hosting, status.prepared = 1, false
 assert(hidden == 1)
+action("关闭菜单", { phase = 3, hosting = 1, slot = 0, pause = 1, pauseOwner = 0 })
+assert(hidden == 2 and #sent == 5)
 -- Reconnect/loading/game cards use the run roster, even when lobby choices
 -- were never selected (fresh rejoin) or differ from a resumed save.
 catalog["1"].animation = "02_Magdalene"
@@ -554,12 +562,12 @@ end
 status.phase, status.prepared = 10, false
 _IsaacLanMenuOpen(true)
 draw()
-assert(labels["等待队友结算结束"] and labels["离开房间"])
+assert(labels["队友结算中"] and labels["离开房间"])
 assert(not labels["开始游戏"] and not labels["队友可以继续游戏"])
 status.phase, status.players = 2, 2
 draw()
 assert(labels["以撒"] and not labels["里·该隐"])
-assert(labels["准备"] and labels["开始游戏"] and not labels["等待队友结算结束"])
+assert(labels["准备"] and labels["开始游戏"] and not labels["队友结算中"])
 assert(renderedPortraits[1][2] == "01_Isaac" and renderedPortraits[2][2] == "01_Isaac")
 -- A returning LAN page uses each game's normal Back action.
 status.phase, status.prepared = 0, false
@@ -572,16 +580,16 @@ assert(not draw(27))
 assert(#commands == count)
 print("PASS challenge selection, role cards, reconnect roster, clean HUD and transient exit")
 
-status.pendingSave, status.saveError = 1, "联机存档保存失败，请重试保存"
+status.pendingSave, status.saveError = 1, "联机存档保存失败"
 _IsaacLanMenuOpen(true)
 draw()
-assert(labels["重试保存联机存档"] and labels[status.saveError])
+assert(labels["重新保存"] and labels[status.saveError])
 assert(not labels["创建房间"] and not labels["加入房间"])
 draw(13)
 assert(commands[#commands][1] == "retry_save", "Pending snapshot offered no retry action")
 status.pendingSave, status.saveError = 0, ""
 draw()
-assert(labels["创建房间"] and not labels["重试保存联机存档"])
+assert(labels["创建房间"] and not labels["重新保存"])
 
 -- Compatibility failures retain full versions, including a long prerelease,
 -- without UTF-8 truncation or colliding with the existing menu controls.

@@ -464,7 +464,7 @@ Outcome interpret(int status, std::string_view body) {
         result.text = "无法连接反馈服务器";
     } else if (status >= 500) {
         result.retry = true;
-        result.text = "反馈服务器暂时不可用（HTTP " + std::to_string(status) + "）";
+        result.text = "反馈服务暂不可用";
     } else {
         result.text = "反馈未上传（HTTP " + std::to_string(status) + "）";
     }
