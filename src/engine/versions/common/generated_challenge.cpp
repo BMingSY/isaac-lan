@@ -8,7 +8,8 @@ namespace isaac::engine {
 namespace {
 using native_generated_challenge::bindings;
 std::uintptr_t generatedChallengeImage;
-bool (*useGeneratedChallenge)() = nullptr;
+bool (*useGlitchedStyle)() = nullptr;
+bool (*useBlueBabyRoute)() = nullptr;
 constexpr unsigned nativeGeneratedChallenge = 45, compareBytes = 7;
 constexpr unsigned arithmeticFlags = 0x8d5, equalFlags = 0x44;
 using ChestEnding = int(__stdcall*)(bool);
@@ -21,7 +22,7 @@ std::array<void*, 5> styleOriginals{};
 } // namespace
 
 GeneratedChallengeRewardScope::GeneratedChallengeRewardScope() {
-    if (!useGeneratedChallenge || !useGeneratedChallenge())
+    if (!useBlueBabyRoute || !useBlueBabyRoute())
         return;
     const auto game = *reinterpret_cast<std::uintptr_t*>(generatedChallengeImage + bindings.game);
     if (!game)
@@ -43,7 +44,7 @@ __attribute__((used, force_align_arg_pointer)) void __cdecl isaac_lan_style_prep
     native_branch::Frame* frame, unsigned index) noexcept {
     (*frame)[native_branch::continuation] = reinterpret_cast<std::uintptr_t>(styleOriginals[index]);
     try {
-        if (useGeneratedChallenge && useGeneratedChallenge())
+        if (useGlitchedStyle && useGlitchedStyle())
             (*frame)[native_branch::flags] =
                 ((*frame)[native_branch::flags] & ~arithmeticFlags) | equalFlags;
     } catch (const std::exception& error) {
@@ -67,9 +68,10 @@ STYLE_BOUNDARY(isaac_lan_glitched_room_config, 4)
 #undef STYLE_BOUNDARY
 }
 
-bool installGeneratedChallenge(std::uintptr_t image, bool (*enabled)()) {
+bool installGeneratedChallenge(std::uintptr_t image, bool (*style)(), bool (*route)()) {
     if (generatedChallengeImage)
-        return generatedChallengeImage == image && useGeneratedChallenge == enabled;
+        return generatedChallengeImage == image && useGlitchedStyle == style &&
+               useBlueBabyRoute == route;
     if (!image)
         return false;
     const std::array replacements{isaac_lan_glitched_grid, isaac_lan_glitched_rock,
@@ -83,10 +85,12 @@ bool installGeneratedChallenge(std::uintptr_t image, bool (*enabled)()) {
     if (!hooks.add(image + bindings.chestEnding, generatedChestEnding, originalChestEnding))
         return false;
     generatedChallengeImage = image;
-    useGeneratedChallenge = enabled;
+    useGlitchedStyle = style;
+    useBlueBabyRoute = route;
     if (!hooks.enable()) {
         generatedChallengeImage = 0;
-        useGeneratedChallenge = nullptr;
+        useGlitchedStyle = nullptr;
+        useBlueBabyRoute = nullptr;
         return false;
     }
     return true;

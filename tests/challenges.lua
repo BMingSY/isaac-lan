@@ -114,10 +114,7 @@ local function chest()
 end
 local native = {
     net_challenges = function()
-        return {
-            ["1001"] = { version = 2, id = 1001, route = "lamb" },
-            ["1008"] = { version = 1, id = 1008, route = "" },
-        }
+        return { ["1001"] = { version = 2, id = 1001, route = "lamb" } }
     end,
     api_info = function()
         return info
@@ -180,13 +177,6 @@ for _, state in ipairs({ { 1, 1, 15 }, { 1, 0, 15 }, { 0, 1, 15 }, { 1, 1, 14 } 
     end
 end
 info.authority, info.ready, info.connected = 1, 1, 15
--- An open route leaves the native ending chest available.
-info.challenge, info.challengeVersion = 1008, 1
-local nativeChest = chest()
-rule.clearAward()
-rule.pickup(nativeChest)
-assert(rule.collide(nativeChest, collider) == nil and nativeChest.Variant == 340 and finish == 0)
-info.challenge, info.challengeVersion = 1001, 2
 -- Match the endpoint, native room identity and clear status together.
 for _, state in ipairs({
     { 10, 0, true, 273 },

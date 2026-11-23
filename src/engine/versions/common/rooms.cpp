@@ -824,9 +824,9 @@ void __attribute__((fastcall)) endGame(void* target, void*, int ending) {
     if (ending == static_cast<int>(lan::ending::gameOver) &&
         !runtime::allowChallengeEvent("game_over"))
         return;
-    // Trophy routes complete through their reward transaction.
-    if (runtime::challengeRequiresTrophy() &&
-        ending >= static_cast<int>(lan::ending::firstCinematic) &&
+    // LAN challenges complete through their explicit reward transaction.
+    // Native terminal routes cannot publish a second completion path.
+    if (runtime::challengeActive() && ending >= static_cast<int>(lan::ending::firstCinematic) &&
         ending <= static_cast<int>(lan::ending::lastCinematic))
         return;
     if (runtime::localViewSlot() < 0 || ending < static_cast<int>(lan::ending::gameOver) ||
@@ -1523,7 +1523,7 @@ void __attribute__((fastcall)) victoryLap(void* g, void*) {
         originalVictoryLap(g);
         return;
     }
-    if (runtime::challengeRequiresTrophy())
+    if (runtime::challengeActive())
         return;
     if (!runtime::replica())
         pendingRestart = 2;
@@ -1842,7 +1842,7 @@ int beginRKey(lua_State* L) {
 }
 int beginVictoryLap(lua_State* L) {
     const bool ready =
-        runtime::replica() && enabled && !scopes.depth() && !runtime::challengeRequiresTrophy();
+        runtime::replica() && enabled && !scopes.depth() && !runtime::challengeActive();
     if (ready)
         pendingRestart = 2;
     lua.pushBoolean(L, ready);

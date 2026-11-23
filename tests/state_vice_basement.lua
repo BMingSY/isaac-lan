@@ -8,11 +8,14 @@ local starts = { "RANDOM", "RANDOM", fixedSeed, fixedSeed }
 local run, wins, chosen, requested, checked, renders = 0, 0, 0, 0, 0, 0
 local joined, complete, firstSeed, endingAt = false, false, nil, nil
 local firstStage, nextFloor, sawShot, fireButtons = nil, false, false, 0
+local bossEntered, trophyAt, sawBoss, sawTrophy, claimed
+local blueBabyVariant = 1
 local frame, gate = _IsaacLanFrame, native.net_gate
 local owner = { Name = "LAN Crime Mode seed test" }
 
 Isaac.AddCallback(owner, ModCallbacks.MC_POST_GAME_STARTED, function()
     run = run + 1
+    bossEntered, trophyAt, sawBoss, sawTrophy, claimed = nil, nil, false, false, false
     local active = run < #starts
     local seeds = Game():GetSeeds()
     firstStage = Game():GetLevel():GetStage()
@@ -54,13 +57,28 @@ Isaac.AddCallback(owner, ModCallbacks.MC_POST_GAME_STARTED, function()
 end)
 Isaac.AddCallback(owner, ModCallbacks.MC_POST_GAME_END, function(_, over)
     assert(not over)
+end)
+Isaac.AddCallback(owner, ModCallbacks.MC_PRE_GAME_EXIT, function()
+    if run == 0 or run >= #starts then
+        return
+    end
+    assert(
+        sawBoss and sawTrophy and (not config.host or claimed),
+        "Challenge ended before the Blue Baby trophy"
+    )
     if run == 1 then
         assert(sawShot, "Missing guest shot from the starting pistol")
     elseif run == 2 then
         assert(nextFloor, "Missing second floor with the lobby seed and crime effect")
     end
-    wins = wins + 1
+    wins = run
+    Isaac.DebugString("LAN_NETWORK CRIME_WIN run=" .. run)
 end)
+local function inChest()
+    local level = Game():GetLevel()
+    return level:GetStage() == LevelStage.STAGE6
+        and level:GetStageType() == StageType.STAGETYPE_WOTL
+end
 function _IsaacLanFrame()
     renders = renders + 1
     local s = frame()
@@ -83,7 +101,7 @@ function _IsaacLanFrame()
         s.prepared
         and run == 2
         and not nextFloor
-        and Game():GetLevel():GetStage() > firstStage
+        and Game():GetLevel():GetStage() == firstStage + 1
     then
         local seeds = Game():GetSeeds()
         assert(
@@ -97,6 +115,20 @@ function _IsaacLanFrame()
                 .. " stageSeed="
                 .. seeds:GetStageSeed(Game():GetLevel():GetStage())
         )
+    end
+    if s.prepared and run > 0 and run < #starts and inChest() then
+        if not sawBoss and #Isaac.FindByType(EntityType.ENTITY_ISAAC, blueBabyVariant) > 0 then
+            sawBoss = true
+            Isaac.DebugString("LAN_NETWORK CRIME_BOSS blue baby run=" .. run)
+        end
+        if
+            not sawTrophy
+            and #Isaac.FindByType(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_TROPHY) > 0
+        then
+            assert(sawBoss and Game():GetRoom():IsClear())
+            sawTrophy = true
+            Isaac.DebugString("LAN_NETWORK CRIME_TROPHY run=" .. run)
+        end
     end
     if not joined and renders >= (config.host and 300 or 360) then
         joined = true
@@ -149,6 +181,60 @@ function _IsaacLanFrame()
     )
     return s
 end
+-- Jump to the generated Chest and accelerate the real ??? fight. Observe
+-- its clear reward on both peers before moving the guest onto the trophy.
+local function finishAtBlueBaby(t)
+    if t == 210 then
+        Game():End(firstCinematic)
+    elseif t == 225 then
+        assert(native.rooms_with_player(0, function()
+            local game = Game()
+            game:GetLevel():SetStage(LevelStage.STAGE6, StageType.STAGETYPE_WOTL)
+            game:StartStageTransition(true, RoomTransitionAnim.FADE, Isaac.GetPlayer(0))
+        end))
+    elseif t > 225 and native.rooms_ready() and inChest() then
+        if not bossEntered then
+            local rooms = Game():GetLevel():GetRooms()
+            for i = 0, rooms.Size - 1 do
+                local room = rooms:Get(i)
+                if
+                    room.Data
+                    and room.Data.Type == RoomType.ROOM_BOSS
+                    and room.SafeGridIndex >= 0
+                then
+                    for slot = 0, 1 do
+                        assert(native.rooms_move(slot, room.SafeGridIndex, 0, -1))
+                        assert(native.rooms_with_player(slot, function()
+                            local p = Isaac.GetPlayer(assert(native.rooms_heads()[tostring(slot)]))
+                            p.Position, p.Velocity = Vector(140 + 40 * slot, 220), Vector.Zero
+                            p:SetMinDamageCooldown(10000)
+                        end))
+                    end
+                    bossEntered = t
+                    break
+                end
+            end
+        elseif sawBoss and t - bossEntered >= 45 and not claimed then
+            assert(native.rooms_with_player(1, function()
+                local guest = Isaac.GetPlayer(assert(native.rooms_heads()["1"]))
+                for _, boss in ipairs(Isaac.FindByType(EntityType.ENTITY_ISAAC, blueBabyVariant)) do
+                    boss:TakeDamage(1000000, DamageFlag.DAMAGE_IGNORE_ARMOR, EntityRef(guest), 0)
+                end
+                local trophies =
+                    Isaac.FindByType(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_TROPHY)
+                if #trophies > 0 then
+                    assert(#trophies == 1)
+                    trophyAt = trophyAt or t
+                    if t - trophyAt >= 60 and trophies[1]:ToPickup().Wait <= 0 then
+                        guest.Position, guest.Velocity = trophies[1].Position, Vector.Zero
+                        claimed = true
+                        Isaac.DebugString("LAN_NETWORK CRIME_CONTACT guest run=" .. run)
+                    end
+                end
+            end))
+        end
+    end
+end
 native.net_gate = function(capture, before, collect, restore, present, floor)
     local function shoot()
         if run ~= 1 or config.host then
@@ -178,8 +264,8 @@ native.net_gate = function(capture, before, collect, restore, present, floor)
             assert(native.rooms_with_player(0, function()
                 Game():StartStageTransition(false, RoomTransitionAnim.FADE, Isaac.GetPlayer(0))
             end))
-        elseif run < #starts and t == 210 then
-            Game():End(firstCinematic)
+        elseif run < #starts then
+            finishAtBlueBaby(t)
         end
     end, collect, restore, present, floor)
 end

@@ -284,7 +284,7 @@ Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；�
 
 [胜利圈组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/victory_prompt.cpp) 通过 [忏悔＋绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance_plus/victory_prompt.cpp) 访问 `Game+0x26c18`。Controls、Render、Hide 分别为 RVA `0x4409f0/0x440690/0x440ba0`，均为 thiscall，无栈参数。动画 `+0x34`、播放位 `+0x44`、选择 `+0x128`、结果 `+0x12c` 和投票位 `+0x130` 只在该对象上使用；动画、字符串和字体仍由游戏持有。
 
-普通联机和开放路线的挑战只显示主机提示。主机使用已锁存的菜单按键沿，并关闭原生 Steam 投票等待。客机不消费提示输入。Idle 动画阶段才可确认，原生结果 1 接受、2 拒绝，然后调用 Hide。有奖杯终点的联机挑战在各端等到 Idle 后拒绝跑圈。其他提示和单人会话保留原函数。`victory_lap_prompt` 返回打开、选择、结果、投票和 Idle 五个普通值，每次从当前 Game 读取，空 Game 返回关闭状态。两个 Hook 成组安装，失败撤销本组件 Hook 和借用指针，保留外部 Hook 并允许重试。[原版绑定](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-repentance.md#胜利圈提示) 使用自己的字段，不访问 Steam 投票状态。
+普通联机只显示主机提示，主机使用已锁存菜单按键沿，并关闭原生 Steam 投票等待；客机不消费提示输入。Idle 动画阶段才可确认，原生结果 1 接受、2 拒绝，然后调用 Hide。联机挑战在各端等到 Idle 后拒绝；其他提示和单人会话保留原函数。`victory_lap_prompt` 返回打开、选择、结果、投票和 Idle 五个普通值，每次从当前 Game 读取，空 Game 返回关闭状态。两个 Hook 成组安装，失败撤销本组件 Hook 和借用指针，保留外部 Hook 并允许重试。[原版绑定](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-repentance.md#胜利圈提示) 使用自己的字段，不访问 Steam 投票状态。
 
 ## 楼层生成
 

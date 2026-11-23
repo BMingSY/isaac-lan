@@ -126,6 +126,11 @@ bool deleteThis() {
         session ? compat::challenges::find(session->settings().rules.id) : nullptr;
     return challengeActive() && definition && definition->deleteThis;
 }
+bool blueBabyRoute() {
+    const auto* definition =
+        challengeActive() ? compat::challenges::find(session->settings().rules.id) : nullptr;
+    return definition && definition->route == compat::challenges::blueBabyRoute;
+}
 bool beginNetworkRun() {
     if (saves.networkRun)
         return true;
@@ -1311,8 +1316,7 @@ int configureRoomOptions(lua_State* L) {
 int finishChallenge(lua_State* L) {
     const auto* definition =
         session ? compat::challenges::find(session->settings().rules.id) : nullptr;
-    const bool allowed = definition && definition->goalStage >= 0 && view.gated &&
-                         session->isHost() && !view.playingEnding &&
+    const bool allowed = definition && view.gated && session->isHost() && !view.playingEnding &&
                          session->phase() == lan::Phase::running;
     if (allowed)
         view.pendingChallengeFinish = definition->ending;
@@ -1800,10 +1804,10 @@ bool install(std::uintptr_t image, void (*log)(const std::string&), void (*halfU
     logger = log;
     runHalf = halfUpdate;
     restorePositions = restore;
-    return backend::install(image,
-                            {saveGame, protectsSoloSave, saveRerun, serializeProgress, executeStart,
-                             startGame, update, consoleUpdate, consoleCommand, controls,
-                             executeMenu, requestRestart, completionAward, largeFloor, deleteThis});
+    return backend::install(image, {saveGame, protectsSoloSave, saveRerun, serializeProgress,
+                                    executeStart, startGame, update, consoleUpdate, consoleCommand,
+                                    controls, executeMenu, requestRestart, completionAward,
+                                    largeFloor, deleteThis, blueBabyRoute});
 }
 void configureNetwork(unsigned hz) {
     inputHz = hz;
