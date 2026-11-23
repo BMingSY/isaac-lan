@@ -52,6 +52,7 @@ LaunchState launch;
 SessionView view;
 core::InputLatency inputLatency;
 SavedRun saves;
+constexpr char saveFailureMessage[] = "联机存档保存失败";
 std::string sessionFingerprint;
 bool requestRestart(bool held) {
     if (!view.gated || !session || session->phase() != lan::Phase::running)
@@ -174,7 +175,7 @@ bool retryArchive() {
     if (!saves.pendingArchive.pending())
         return true;
     const bool ok = saves.pendingArchive.retry(writeArchive);
-    saves.saveError = ok ? "" : "联机存档保存失败，请重试保存";
+    saves.saveError = ok ? "" : saveFailureMessage;
     if (!ok && logger)
         logger("session_save=FAILED " + saves.pendingArchive.error());
     return ok;
@@ -1757,7 +1758,7 @@ void afterExit(bool save) {
     } catch (const std::exception& error) {
         if (logger)
             logger("session_save=FAILED " + std::string(error.what()));
-        saves.saveError = "联机存档保存失败";
+        saves.saveError = saveFailureMessage;
     }
     saves.exitingArchive.reset();
     if (!saves.soloState.empty()) {

@@ -129,7 +129,7 @@ return function(Phase, Command, endpoint, characters, text)
             end
         end
         if status.pendingSave == 1 then
-            row(text("重试保存联机存档"), function()
+            row(text("重新保存"), function()
                 command("retry_save")
             end)
             row(text("返回"), deps.hide)
@@ -381,19 +381,16 @@ return function(Phase, Command, endpoint, characters, text)
                     command("control", tostring(Command.pause))
                 end)
             else
-                row(text("恢复游戏"), function()
+                row(text("解除暂停"), function()
                     if command("control", tostring(Command.resume)) then
                         deps.hide()
                     end
                 end, localSlot == status.pauseOwner)
             end
-            row(
-                text(challenge and "结束挑战（不保存）" or "保存并结束联机"),
-                function()
-                    command("control", tostring(Command.saveExit))
-                end
-            )
-            row(text("返回游戏"), function()
+            row(text(challenge and "结束挑战" or "保存并退出"), function()
+                command("control", tostring(Command.saveExit))
+            end)
+            row(text("关闭菜单"), function()
                 deps.hide()
             end)
         else

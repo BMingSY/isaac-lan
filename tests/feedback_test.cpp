@@ -228,8 +228,9 @@ void outcomes() {
     for (const auto status : {400, 413, 429, 404})
         require(!feedback::interpret(status, "<html>").retry, "Rejected upload was retried");
     require(!feedback::interpret(503, R"({"error": "busy"})").retry, "Busy server was retried");
-    require(feedback::interpret(0, "").retry && feedback::interpret(502, "<html>").retry,
-            "Transient failure was not retried");
+    result = feedback::interpret(502, "<html>");
+    require(feedback::interpret(0, "").retry && result.retry, "Transient failure was not retried");
+    require(result.text == "反馈服务暂不可用", "Unexpected feedback service error message");
 }
 } // namespace
 

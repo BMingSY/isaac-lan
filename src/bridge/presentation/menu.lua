@@ -373,7 +373,7 @@ function _IsaacLanMenuRender(
     elseif notice == "unavailable" then
         centered(message("全员需解锁底片与里该隐"), 240, 250, 10, red)
     elseif notice == "returning" then
-        centered(message("等待队友结算结束"), 110, 100, 12)
+        centered(message("队友结算中"), 110, 100, 12)
     elseif notice == "waiting" then
         centered(message("正在连接..."), 110, 100, 12)
     end
