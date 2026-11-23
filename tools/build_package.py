@@ -115,12 +115,16 @@ def build_bundle(build_directories, output, *, strip_binaries=False):
         )
     write_installer(output)
     shared_loader = stage_binary(loader_build, "winmm.dll", output / "winmm.dll", strip_binaries)
+    uninstall_files = {"winmm.dll": shared_loader}
     for backend in RELEASE_BACKENDS:
         directory, profile = builds[backend]
         target = output / "backends" / backend
         target.mkdir(parents=True)
-        write_payload(directory, target, profile, strip_binaries, shared_loader)
-    index = {"format": 3, "backends": list(RELEASE_BACKENDS)}
+        payload = write_payload(directory, target, profile, strip_binaries, shared_loader)
+        uninstall_files[f"isaac-lan/backends/{backend}/isaac_lan_probe.dll"] = payload["files"][
+            "isaac_lan_probe.dll"
+        ]
+    index = {"format": 3, "backends": list(RELEASE_BACKENDS), "files": uninstall_files}
     (output / "payload.json").write_text(json.dumps(index, indent=2) + "\n")
     return index
 
