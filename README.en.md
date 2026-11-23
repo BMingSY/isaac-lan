@@ -121,4 +121,4 @@ For GitHub reports, include the game and extension versions, host or guest role,
 
 ## Contributing and license
 
-Contributions are welcome in English or Chinese. Isaac LAN's original code is available under the MIT license. Third-party components retain their own licenses. [Contribution guide](https://github.com/BMingSY/isaac-lan/blob/main/CONTRIBUTING.md#english) · [MIT license](https://github.com/BMingSY/isaac-lan/blob/main/LICENSE) · [Third-party notices](https://github.com/BMingSY/isaac-lan/tree/main/third_party)
+Contributions are welcome in English or Chinese. You can play, modify and share Isaac LAN for noncommercial purposes under PolyForm Noncommercial 1.0.0. Selling the mod or including it in a paid product requires separate permission from the rights holders. Third-party components retain their own licenses. [Contribution guide](https://github.com/BMingSY/isaac-lan/blob/main/CONTRIBUTING.md#english) · [Project license](https://github.com/BMingSY/isaac-lan/blob/main/LICENSE) · [Third-party notices](https://github.com/BMingSY/isaac-lan/tree/main/third_party)

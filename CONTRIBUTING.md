@@ -14,7 +14,9 @@
 
 修改 README 中的安装命令、菜单路径或配置示例时，请同步中英文两份说明。
 
-提交的原创贡献按项目的 MIT 协议授权。引入第三方材料时，请标明来源并保留其版权和许可声明。游戏本体和游戏素材的权利属于各自的权利人。[项目许可证](https://github.com/BMingSY/isaac-lan/blob/main/LICENSE) · [第三方许可](https://github.com/BMingSY/isaac-lan/tree/main/third_party)
+提交的原创贡献按 PolyForm Noncommercial 1.0.0 授权。你可以为非商业目的使用、修改和分享项目原创代码。再分发时请附上协议正文或协议网址，以及项目的 `Required Notice:` 声明。商业销售或纳入商业产品需另行取得权利人授权。[项目许可证](https://github.com/BMingSY/isaac-lan/blob/main/LICENSE)
+
+引入第三方材料时，请标明来源并保留其版权和许可声明。第三方组件沿用各自的许可，游戏本体和游戏素材的权利属于各自的权利人。[第三方许可](https://github.com/BMingSY/isaac-lan/tree/main/third_party)
 
 ## English
 
@@ -26,4 +28,6 @@ Issues and pull requests are welcome in English or Chinese. Search existing issu
 
 When editing installation commands, menu paths or configuration examples in a README, update both language versions.
 
-You license your original contributions under the project's MIT license. Identify the source of third-party material and retain its copyright and license notices. The game and its assets belong to their respective rights holders. [Project license](https://github.com/BMingSY/isaac-lan/blob/main/LICENSE) · [Third-party licenses](https://github.com/BMingSY/isaac-lan/tree/main/third_party)
+You license your original contributions under PolyForm Noncommercial 1.0.0. You can use, modify and share the project's original code for noncommercial purposes. If you distribute a copy, include the license text or its URL and the project's `Required Notice:` line. Commercial sales or inclusion in a commercial product require separate permission from the rights holders. [Project license](https://github.com/BMingSY/isaac-lan/blob/main/LICENSE)
+
+Identify the source of third-party material and retain its copyright and license notices. Third-party components retain their own licenses. The game and its assets belong to their respective rights holders. [Third-party licenses](https://github.com/BMingSY/isaac-lan/tree/main/third_party)
