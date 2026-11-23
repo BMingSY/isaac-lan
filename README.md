@@ -133,4 +133,4 @@ python3 tools/build_package.py --build build-repentance --build build-repentance
 
 参与开发请参阅[贡献指南](https://github.com/BMingSY/isaac-lan/blob/main/CONTRIBUTING.md)。
 
-允许商业使用，禁止售卖本 Mod 或其修改版。详见[使用许可](https://github.com/BMingSY/isaac-lan/blob/main/LICENSE)。
+禁止售卖本 Mod 或其修改版。详见[使用许可](https://github.com/BMingSY/isaac-lan/blob/main/LICENSE)。
