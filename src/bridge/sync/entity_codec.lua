@@ -1,3 +1,4 @@
+local newSprite = Sprite
 return function(wire)
     local Entity, Sprite, Spritesheet = wire.entity, wire.sprite, wire.spritesheet
     local FLOOR_DEPTH_BIAS = 10000
@@ -229,19 +230,47 @@ return function(wire)
             end
             return value
         end
-        local function applySprite(s, v)
+        local npcAssets = {}
+        local function npcAssetAvailable(path, current, layer)
+            local known = npcAssets[path]
+            if known == nil then
+                -- Loading a missing resource into the live sprite discards its working art.
+                local probe = newSprite()
+                if layer == nil then
+                    probe:Load(path, true)
+                    known = probe:IsLoaded() and native.sprite_graphics_loaded(probe)
+                else
+                    probe:Load(current, false)
+                    probe:ReplaceSpritesheet(layer, path)
+                    probe:LoadGraphics()
+                    known = native.sprite_graphics_loaded(probe, layer)
+                end
+                npcAssets[path] = known
+            end
+            return known
+        end
+        local function applySprite(s, v, npc)
+            local useLocalPose = false
             if s:GetFilename() ~= v[Sprite.path] then
                 if v[Sprite.path] == "" then
                     s:Reset()
+                elseif npc and not npcAssetAvailable(v[Sprite.path]) then
+                    useLocalPose = true
                 else
                     s:Load(v[Sprite.path], true)
                 end
             end
-            if v[Sprite.animation] ~= "" and s:GetAnimation() ~= v[Sprite.animation] then
+            if
+                v[Sprite.animation] ~= ""
+                and (useLocalPose or s:GetAnimation() ~= v[Sprite.animation])
+            then
                 s:SetFrame(v[Sprite.animation], v[Sprite.frame])
+                if useLocalPose and s:GetAnimation() ~= v[Sprite.animation] then
+                    s:SetFrame(s:GetDefaultAnimation(), v[Sprite.frame])
+                end
             end
             if v[Sprite.overlay] ~= "" then
-                if s:GetOverlayAnimation() ~= v[Sprite.overlay] then
+                if useLocalPose or s:GetOverlayAnimation() ~= v[Sprite.overlay] then
                     s:SetOverlayFrame(v[Sprite.overlay], v[Sprite.overlayFrame])
                 end
             elseif s:GetOverlayAnimation() ~= "" then
@@ -254,12 +283,17 @@ return function(wire)
                 s.Scale = vec(v[Sprite.scale])
                 s.Offset = vec(v[Sprite.offset])
             end
-            local changed = assert(native.sprite_state(s, v[Sprite.native]))
+            local changed = assert(native.sprite_state(s, v[Sprite.native], useLocalPose))
             if changed ~= true then
+                local reload = false
                 for _, layer in ipairs(changed) do
-                    s:ReplaceSpritesheet(layer[Spritesheet.layer], layer[Spritesheet.path])
+                    local id, path = layer[Spritesheet.layer], layer[Spritesheet.path]
+                    if not npc or path == "" or npcAssetAvailable(path, s:GetFilename(), id) then
+                        s:ReplaceSpritesheet(id, path)
+                        reload = true
+                    end
                 end
-                if #changed > 0 then
+                if reload then
                     s:LoadGraphics()
                 end
             end
@@ -345,6 +379,15 @@ return function(wire)
             end
             local s = e:GetSprite()
             local kind = v[Entity.type]
+            if kind == types.ENTITY_PICKUP then
+                -- The native price setter removes Child as a price decoration. A haunted
+                -- chest borrows that same slot for its live Polty. Reconciliation restores
+                -- the authoritative link after both entities have received their fields.
+                local child = e.Child
+                if child and child:ToNPC() then
+                    e.Child = nil
+                end
+            end
             local plan = plans[kind]
             if plan then
                 assert(native.entity_fields_apply(s, plan, v))
@@ -366,7 +409,7 @@ return function(wire)
             -- Entity.Color resets the Sprite color (including alpha/colorize). Apply
             -- the complete native visual state last so fading creep stays faded.
             if v[Entity.sprite] then
-                applySprite(s, v[Entity.sprite])
+                applySprite(s, v[Entity.sprite], v[Entity.npc])
             end
             if v[Entity.shadow] then
                 assert(native.entity_shadow(s, v[Entity.shadow]))
@@ -439,12 +482,14 @@ return function(wire)
             vector = vector,
             vec = vec,
             reset = function()
+                npcAssets = {}
                 nextID, numericCapture = 1, {}
                 if tethers then
                     tethers.reset()
                 end
             end,
             resetView = function()
+                npcAssets = {}
                 if tethers then
                     tethers.reset()
                 end

@@ -238,6 +238,36 @@ int animationLength(lua_State* L) {
     }
     return 1;
 }
+int graphicsLoaded(lua_State* L) {
+    try {
+        const auto s = sprite(L);
+        if (lua.getTop(L) == 1) {
+            const auto n = count(s, bindings.sprite.layerCount);
+            bool loaded = n != 0;
+            for (unsigned i = 0; loaded && i < n; ++i) {
+                const auto layer = layerAt(s, i);
+                loaded = at<Address>(layer, bindings.layer.image) ||
+                         path(layer + bindings.layer.path).empty();
+            }
+            lua.pushBoolean(L, loaded);
+        } else {
+            const auto id = lua.checkInteger(L, 2);
+            if (id < 0 || id >= pose::maxLayers)
+                throw std::runtime_error("Invalid sprite layer ID");
+            const auto layer = findLayer(s, static_cast<unsigned>(id));
+            lua.pushBoolean(L, layer && at<Address>(layer, bindings.layer.image));
+        }
+    } catch (const std::exception& error) {
+        runtime::abort(error.what());
+        lua.pushBoolean(L, false);
+    }
+    return 1;
+}
+void applyColorAndSpeed(Address s, const State& value) {
+    for (unsigned i = 0; i < colorValues; ++i)
+        at<unsigned>(s, bindings.sprite.colors + i * sizeof(unsigned)) = value.colors[i];
+    at<unsigned>(s, bindings.sprite.speed) = value.speed;
+}
 int state(lua_State* L) {
     try {
         const auto s = sprite(L);
@@ -271,12 +301,19 @@ int state(lua_State* L) {
                             writer.bytes.size() - 1);
             return 1;
         }
-        if (!runtime::replica() || lua.getTop(L) != 2)
+        const auto argc = lua.getTop(L);
+        if (!runtime::replica() || (argc != 2 && argc != 3))
             throw std::runtime_error("Only replicas apply visual state");
         std::size_t size = 0;
         const auto bytes = lua.checkString(L, 2, &size);
         lan::Reader reader({reinterpret_cast<const std::uint8_t*>(bytes), size});
         const auto value = decode(reader);
+        if (argc == 3 && lua.toBoolean(L, 3)) {
+            // Another ANM2 owns the local animation cursors, shadow and layer layout.
+            applyColorAndSpeed(s, value);
+            lua.pushBoolean(L, true);
+            return 1;
+        }
         validateAnimation(s + bindings.sprite.animation, value.animation);
         validateAnimation(s + bindings.sprite.overlay, value.overlay);
         const auto shadow = value.shadow >= 0 && !findLayer(s, value.shadow) ? -1 : value.shadow;
@@ -290,9 +327,7 @@ int state(lua_State* L) {
         applyAnimation(value.animation, s + bindings.sprite.animation);
         applyAnimation(value.overlay, s + bindings.sprite.overlay);
         at<int>(s, bindings.sprite.shadow) = shadow;
-        for (unsigned i = 0; i < colorValues; ++i)
-            at<unsigned>(s, bindings.sprite.colors + i * sizeof(unsigned)) = value.colors[i];
-        at<unsigned>(s, bindings.sprite.speed) = value.speed;
+        applyColorAndSpeed(s, value);
         at<unsigned>(s, bindings.sprite.flags) = value.flags;
         at<bool>(s, bindings.sprite.overlayFirst) = value.overlayFirst;
         if (changed.any())
@@ -354,12 +389,15 @@ bool bind(lua_State* L, HMODULE module, Address base) {
                            isaac::lua::Symbol::rawLength, isaac::lua::Symbol::checkString,
                            isaac::lua::Symbol::pushLString, isaac::lua::Symbol::pushInteger,
                            isaac::lua::Symbol::pushBoolean, isaac::lua::Symbol::createTable,
-                           isaac::lua::Symbol::rawSetI, isaac::lua::Symbol::pushClosure,
+                           isaac::lua::Symbol::rawSetI, isaac::lua::Symbol::checkInteger,
+                           isaac::lua::Symbol::toBoolean, isaac::lua::Symbol::pushClosure,
                            isaac::lua::Symbol::setField}))
         return false;
     image = base;
     lua.pushClosure(L, state, 0);
     lua.setField(L, -2, "sprite_state");
+    lua.pushClosure(L, graphicsLoaded, 0);
+    lua.setField(L, -2, "sprite_graphics_loaded");
     lua.pushClosure(L, animationLength, 0);
     lua.setField(L, -2, "sprite_animation_length");
     return true;
