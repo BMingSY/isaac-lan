@@ -1703,14 +1703,18 @@ void challengeRules() {
                 shadows->goalStage == isaac::compat::ids::stage::chestOrDarkRoom &&
                 shadows->goalStageType == isaac::compat::ids::stageType::original &&
                 shadows->transient && shadows->difficulty == 0 && !shadows->roomOptionsLocked &&
-                shadows->rewardChallenge == isaac::compat::ids::challenge::iRule &&
+                shadows->nativeRewardChallenge(shadows->goalStage - 1) ==
+                    isaac::compat::ids::challenge::iRule &&
+                shadows->nativeRewardChallenge(shadows->goalStage) == 0 &&
+                shadows->nativeRewardChallenge(isaac::compat::ids::stage::voidFloor) == 0 &&
                 !shadows->deleteThis && shadows->hidePlayerOutlines && !luck->hidePlayerOutlines &&
                 isaac::compat::challenges::available(*shadows, {}),
             "Chasing Shadows must allow ordinary characters and end at the Lamb in the Dark Room");
     const auto* crime = isaac::compat::challenges::find(1008);
     require(crime && crime->name == "幺幺幺九" && crime->version == 2 && crime->crimeMode &&
                 !crime->deleteThis && !generated->crimeMode &&
-                crime->rewardChallenge == isaac::compat::ids::challenge::deleteThis &&
+                crime->nativeRewardChallenge(crime->goalStage) ==
+                    isaac::compat::ids::challenge::deleteThis &&
                 crime->character == RunRules{}.character && crime->route == "blue_baby" &&
                 crime->goalStage == generated->goalStage &&
                 crime->goalStageType == generated->goalStageType &&

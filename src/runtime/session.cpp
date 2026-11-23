@@ -124,7 +124,9 @@ bool largeFloor() {
 unsigned rewardChallenge() {
     const auto* definition =
         challengeActive() ? compat::challenges::find(session->settings().rules.id) : nullptr;
-    return definition ? definition->rewardChallenge : 0;
+    if (!definition || !definition->rewardChallenge || !backend::gameReady())
+        return 0;
+    return definition->nativeRewardChallenge(backend::stage().level);
 }
 bool deleteThis() {
     const auto* definition =

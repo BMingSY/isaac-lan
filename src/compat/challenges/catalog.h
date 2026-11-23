@@ -8,7 +8,7 @@
 namespace isaac::compat::challenges {
 // The core run-rules regression checks this sentinel against the lobby contract.
 inline constexpr std::uint16_t unrestrictedCharacter = 65535;
-inline constexpr std::string_view blueBabyRoute = "blue_baby";
+inline constexpr std::string_view blueBabyRoute = "blue_baby", lambRoute = "lamb";
 struct Definition {
     std::uint16_t id, version, character;
     std::uint8_t difficulty;
@@ -26,6 +26,12 @@ struct Definition {
     bool crimeMode = false;
     unsigned rewardChallenge = 0;
     bool hidePlayerOutlines = false;
+
+    unsigned nativeRewardChallenge(int stage) const {
+        // I RULE! continues past the Lamb to Mega Satan. The Dark Room needs
+        // its ordinary Lamb chest for the LAN trophy.
+        return route == lambRoute && stage >= goalStage ? 0 : rewardChallenge;
+    }
 };
 inline constexpr std::array definitions{
     Definition{
@@ -35,7 +41,7 @@ inline constexpr std::array definitions{
         0,
         true,
         "恶魔形态",
-        "lamb",
+        lambRoute,
         6,
         ids::stage::chestOrDarkRoom,
         ids::stageType::original,
@@ -130,7 +136,7 @@ inline constexpr std::array definitions{
         .difficulty = 0,
         .transient = true,
         .name = "捕风捉影",
-        .route = "lamb",
+        .route = lambRoute,
         .ending = ids::ending::epilogue,
         .goalStage = ids::stage::chestOrDarkRoom,
         .goalStageType = ids::stageType::original,
