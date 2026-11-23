@@ -444,7 +444,7 @@ if (Get-Command Get-FileHash -ErrorAction SilentlyContinue) { throw 'Get-FileHas
         self.assertFalse(target.exists())
         self.assertEqual((self.game / "winmm.dll").read_bytes(), b"another extension")
 
-    def test_uninstall_picker_suggests_installed_steam_library_and_can_cancel(self):
+    def test_install_and_uninstall_pickers_select_the_steam_executable(self):
         steam = self.root / "Steam"
         library = self.root / "library [two]"
         game = library / "steamapps" / "common" / "The Binding of Isaac Rebirth"
@@ -460,6 +460,7 @@ if (Get-Command Get-FileHash -ErrorAction SilentlyContinue) { throw 'Get-FileHas
         )
         mock = r"""
 $global:expectedGame = $GameDirectory
+$global:expectedMode = $Mode
 $global:fixtureRoot = $PSScriptRoot
 function Get-ItemPropertyValue {
     param($LiteralPath, $Name, $ErrorAction)
@@ -471,7 +472,8 @@ function New-Object {
     if ($TypeName -ne 'System.Windows.Forms.OpenFileDialog') { throw "Unexpected dialog: $TypeName" }
     $dialog = [pscustomobject]@{ Title=''; Filter=''; FileName=''; InitialDirectory=''; CheckFileExists=$true }
     $dialog | Add-Member ScriptMethod ShowDialog {
-        if ($this.InitialDirectory -ne $global:expectedGame -or $this.FileName -ne 'isaac-ng.exe' -or $this.CheckFileExists) {
+        if ($this.InitialDirectory -ne $global:expectedGame -or $this.FileName -ne 'isaac-ng.exe' -or
+            $this.Filter.Split('|')[-1] -ne 'isaac-ng.exe' -or $this.CheckFileExists -ne ($global:expectedMode -eq 'Install')) {
             throw "Unexpected suggestion: $($this.InitialDirectory) / $($this.FileName)"
         }
         $this.FileName = Join-Path $this.InitialDirectory $this.FileName
@@ -481,19 +483,21 @@ function New-Object {
     return $dialog
 }
 """
-        self.run_installer(
-            "Uninstall", game=game, interactive=True, inject=mock + "\n$global:result = 2"
-        )
+        confirm = mock + "\n$global:result = 1"
+        cancel = mock + "\n$global:result = 2"
+        self.run_installer("Install", game=self.game, interactive=True, inject=confirm)
+        self.assertTrue((self.game / "winmm.dll").is_file())
+        self.run_installer("Uninstall", game=self.game, interactive=True, inject=confirm)
+        self.assertFalse((self.game / "winmm.dll").exists())
+        self.assertTrue((self.game / "isaac-ng.exe").is_file())
+        # The other Steam library still has a recorded installation, without the executable.
+        self.run_installer("Uninstall", game=game, interactive=True, inject=cancel)
         self.assertTrue((game / ".isaac-lan-install").is_file())
-        self.run_installer(
-            "Uninstall", game=game, interactive=True, inject=mock + "\n$global:result = 1"
-        )
+        self.run_installer("Uninstall", game=game, interactive=True, inject=confirm)
         self.assertFalse((game / ".isaac-lan-install").exists())
         self.assertFalse((game / "winmm.dll").exists())
         (self.game / "isaac-ng.exe").unlink()
-        self.run_installer(
-            "Uninstall", game=self.game, interactive=True, inject=mock + "\n$global:result = 2"
-        )
+        self.run_installer("Uninstall", game=self.game, interactive=True, inject=cancel)
 
     def test_running_game_and_locked_file(self):
         self.run_installer(
