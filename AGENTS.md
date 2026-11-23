@@ -45,6 +45,9 @@
 # 文档边界与游戏内界面
 
 - 未经用户明确允许，不得向 `README.md` 新增任何内容；功能实现、BUG 修复或“文档随实际行为更新”不构成该授权。
+- 中文首页使用根目录的 [README.md](https://github.com/BMingSY/isaac-lan/blob/main/README.md)。译本按 `README.<语言代码>.md` 命名，放在 [docs/i18n/](https://github.com/BMingSY/isaac-lan/tree/main/docs/i18n)。各语言 README 标题下的导航只放语言切换。
+- 修改 README 时，在同一 PR 核对中文首页和所有现有译本，同步对应内容的增删、位置和链接文字。安装命令、菜单路径和配置示例须与实际行为一致。配置示例的节、键和默认值以首次启动生成的 `config.ini` 为准。[配置示例回归](https://github.com/BMingSY/isaac-lan/blob/main/tests/test_readme.py)
+- 各语言 README 的最后一节放贡献指南和使用许可。链接文字只用「贡献指南」「使用许可」或对应译名。许可摘要单独写「禁止售卖本 Mod 或其修改版」或等义译文，完整条款见[项目许可证](https://github.com/BMingSY/isaac-lan/blob/main/LICENSE)。
 - 文档描述当前事实，先给结论，只保留必要操作、契约和限制。设计文档不是变更日志；禁止写历史演进、版本升级经过、逐轮修复、调试流水、测试成绩或尚未实施的方案。
 - 架构／设计文档只解释当前目标、模块职责、数据流、状态所有权、生命周期、关键取舍和限制。不逐项罗列道具／Boss 特判，不堆原生偏移、补丁原因或 PR 经过。
 - 接口参数、字段布局、原生 ABI、校验与所有权放所属参考文档或源码；角色、道具、Mod 的具体效果与当前兼容状态放对应清单。设计文档用链接引用，避免重复维护。
