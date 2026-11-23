@@ -26,6 +26,9 @@ local function environment(difficulty)
         end,
     }
     local room = {
+        GetBackdropType = function()
+            return 1
+        end,
         GetType = function()
             return enums.RoomType.ROOM_DEFAULT
         end,
@@ -112,6 +115,9 @@ local function environment(difficulty)
         end,
         room_layout = function()
             return "layout"
+        end,
+        room_backdrop = function(value)
+            return value == 1
         end,
         room_rails = function()
             return string.rep("\255", 448)

@@ -58,6 +58,7 @@
 #include "engine/versions/common/room_routing.h"
 #include "engine/versions/common/room_roster.h"
 #include "engine/versions/common/rooms_bindings.h"
+#include "core/room_options.h"
 #include "engine/versions/common/forgotten_form.h"
 
 namespace isaac::rooms {
@@ -139,7 +140,13 @@ int controlRestoreState() {
 }
 struct AmbushState {
     Vector pendingWaves;
-    std::array<std::uint32_t, 13> scalars{};
+    struct Progress {
+        int totalWaves, bossesPerWave;
+        std::uint8_t active;
+        std::array<std::uint8_t, 3> padding;
+        int currentWave, timer;
+        std::array<std::uint32_t, 8> remainingScalars;
+    } progress{};
 };
 static_assert(sizeof(AmbushState) == 0x40);
 struct Room;
@@ -167,8 +174,10 @@ struct Room {
     Room() {
         // The leading Ambush vector is immutable XML configuration. Each room
         // owns only its shuffled pending-wave vector, counters and RNGs.
-        ambush.scalars = at<AmbushState>(game(), layout.game.ambushPending).scalars;
-        ambush.scalars[2] = ambush.scalars[3] = ambush.scalars[4] = 0;
+        ambush.progress = at<AmbushState>(game(), layout.game.ambushPending).progress;
+        ambush.progress.active = 0;
+        ambush.progress.padding = {};
+        ambush.progress.currentWave = ambush.progress.timer = 0;
     }
     void capture() {
         for (unsigned i = 0; i < context.size(); ++i)
@@ -2420,6 +2429,54 @@ void __attribute__((fastcall)) needleVisual(void* npc, void*) {
     if (!runtime::replica())
         originalNeedleVisual(npc);
 }
+bool bossRushRoom(Address room) {
+    return room && at<unsigned>(room, layout.room.type) ==
+                       static_cast<unsigned>(roomOptions::RoomType::bossRush);
+}
+int roomAmbushWave(lua_State* L) {
+    const auto room = scopes.current();
+    if (!enabled || !room || room->replicaShell || !bossRushRoom(room->pointer)) {
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+    auto& progress = at<AmbushState>(game(), layout.game.ambushPending).progress;
+    const auto args = lua.getTop(L);
+    if (args == 0) {
+        lua.pushInteger(L, progress.currentWave);
+        lua.pushInteger(L, progress.totalWaves);
+        return 2;
+    }
+    if (args != 3 || !runtime::replica()) {
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+    const auto active = lua.checkInteger(L, 1), wave = lua.checkInteger(L, 2),
+               total = lua.checkInteger(L, 3);
+    const bool valid =
+        (active == 0 || active == 1) && wave >= 0 && wave <= total && total <= INT32_MAX;
+    if (valid) {
+        progress.active = static_cast<std::uint8_t>(active);
+        progress.currentWave = static_cast<int>(wave);
+        progress.totalWaves = static_cast<int>(total);
+    }
+    lua.pushBoolean(L, valid);
+    return 1;
+}
+bool replicaBossRush() {
+    return runtime::replica() && enabled && game() &&
+           bossRushRoom(at<Address>(game(), layout.game.room));
+}
+RoomCall originalAmbushStart = nullptr, originalAmbushUpdate = nullptr;
+void __attribute__((fastcall)) ambushStart(void* ambush, void*) {
+    if (!replicaBossRush())
+        originalAmbushStart(ambush);
+}
+void __attribute__((fastcall)) ambushUpdate(void* ambush, void*) {
+    // Room::Update must see the active flag to keep the doors shut. The
+    // native scheduler would consume the replica's empty wave queue.
+    if (!replicaBossRush())
+        originalAmbushUpdate(ambush);
+}
 RoomCall originalDoorUpdate = nullptr;
 void __attribute__((fastcall)) doorUpdate(void* door, void*) {
     // Replica doors receive their complete state and animation from the host.
@@ -3764,6 +3821,10 @@ bool install(Address base, void (*log)(const std::string&)) {
                 reinterpret_cast<void**>(&originalCameraDrag)) &&
            hook(bindings.entry.playerManagerGetCenter, reinterpret_cast<void*>(playersCenter),
                 reinterpret_cast<void**>(&originalPlayersCenter)) &&
+           hook(bindings.entry.ambushStart, reinterpret_cast<void*>(ambushStart),
+                reinterpret_cast<void**>(&originalAmbushStart)) &&
+           hook(bindings.entry.ambushUpdate, reinterpret_cast<void*>(ambushUpdate),
+                reinterpret_cast<void**>(&originalAmbushUpdate)) &&
            hook(bindings.entry.doorUpdate, reinterpret_cast<void*>(doorUpdate),
                 reinterpret_cast<void**>(&originalDoorUpdate)) &&
            hook(bindings.entry.gridEntityTrapdoorUpdate, reinterpret_cast<void*>(trapdoorUpdate),
@@ -3814,6 +3875,7 @@ bool bind(lua_State* L, HMODULE module) {
     function("rooms_heads", heads);
     function("rooms_sync", syncLocations);
     function("room_special_template", specialRoomTemplate);
+    function("room_ambush_wave", roomAmbushWave);
     function("actor_form", actorForm);
     function("actor_lazarus_unpair", actorLazarusUnpair);
     function("actor_forgotten_form", actorForgottenForm);

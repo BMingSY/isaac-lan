@@ -121,6 +121,20 @@ int mapPickups(lua_State* L) {
         return 1;
     }
 }
+int roomBackdrop(lua_State* L) {
+    const auto id = lua.checkInteger(L, 1);
+    const auto room = context.writableRoom();
+    const bool valid = runtime::replica() && room && id >= 0 && id < bindings.room.backdropCount;
+    if (valid) {
+        const auto backdrop = room + bindings.room.backdrop;
+        if (at<unsigned>(backdrop, bindings.room.backdropType) != static_cast<unsigned>(id)) {
+            using Init = void(__attribute__((thiscall))*)(void*, unsigned, bool);
+            engine<Init>(bindings.backdropInit)(reinterpret_cast<void*>(backdrop), id, true);
+        }
+    }
+    lua.pushBoolean(L, valid);
+    return 1;
+}
 int roomWaterCurrent(lua_State* L) {
     const auto x = lua.checkNumber(L, 1), y = lua.checkNumber(L, 2);
     const auto room = context.writableRoom();
@@ -370,6 +384,7 @@ bool bind(lua_State* L, HMODULE module, Address base, const Callbacks& callbacks
     for (const auto& [name, fn] : {std::pair{"room_layout", &roomLayout},
                                    {"map_pickups", mapPickups},
                                    {"room_water_current", roomWaterCurrent},
+                                   {"room_backdrop", roomBackdrop},
                                    {"room_connections", roomConnections},
                                    {"state_clock", stateClock},
                                    {"map_refresh", refreshMap}}) {

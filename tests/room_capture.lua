@@ -9,7 +9,15 @@ local entity = {
         return true
     end,
 }
+local backdrop = 17
+local roomType = enums.RoomType.ROOM_DEFAULT
 local room = {
+    GetType = function()
+        return roomType
+    end,
+    GetBackdropType = function()
+        return backdrop
+    end,
     GetWaterCurrent = function()
         return current
     end,
@@ -52,6 +60,8 @@ local native = {
         return string.rep(string.char(active), 448)
     end,
 }
+local bossRush =
+    dofile(root .. "/src/bridge/compat/routes/boss_rush.lua")(native, enums.RoomType.ROOM_BOSSRUSH)
 local capture = assert(loadfile(root .. "/src/bridge/sync/room.lua"))()(
     dofile(root .. "/src/bridge/sync/fields.lua")
 )(native, function()
@@ -62,19 +72,20 @@ end, {
     capture = function()
         return "return"
     end,
-}, enums.EntityType)
+}, enums.EntityType, nil, bossRush)
 local one = capture(1, 10, 0, { dimension = 0, index = 84 })
 assert(one == capture(2, 10, 0, { dimension = 0, index = 84 }) and calls == 1)
 assert(one[3][1][1] == 1)
 assert(one[8][1] == 0 and one[8][2] == 1)
 assert(one[9] == string.rep("\1", 448))
-assert(#one == 9, "Current and rails must occupy distinct room fields")
+assert(#one == 11 and one[10] == 17 and one[11] == false)
+backdrop = 18
 assert(capture(2, 10, 0, { dimension = 0, index = 85 }) ~= one and calls == 2)
 assert(capture(3, 10, 0, { dimension = 1, index = 84 }) ~= one and calls == 3)
 current.Y = 0
 local nextTick = capture(1, 11, 0, { dimension = 0, index = 84 })
 assert(nextTick[8][2] == 0 and one[8][2] == 1, "Room current view is mutable/stale")
-assert(nextTick ~= one and calls == 4)
+assert(nextTick ~= one and calls == 4 and nextTick[10] == 18 and one[10] == 17)
 assert(capture(2, 11, 0, { dimension = 0, index = 84 }) == nextTick and calls == 4)
 assert(capture(1, 11, 1, { dimension = 0, index = 84 }) ~= nextTick and calls == 5)
 local fresh = assert(loadfile(root .. "/src/bridge/sync/room.lua"))()(
@@ -87,7 +98,7 @@ end, {
     capture = function()
         return "return"
     end,
-}, enums.EntityType)
+}, enums.EntityType, nil, bossRush)
 assert(fresh(1, 11, 1, { dimension = 0, index = 84 }) ~= nextTick and calls == 6)
 
 -- Native room ambience survives both reconciliation passes and never enters
@@ -112,7 +123,7 @@ end, {
     capture = function()
         return "return"
     end,
-}, enums.EntityType, localEffect)
+}, enums.EntityType, localEffect, bossRush)
 entity.Variant, entity.SubType = 0, 0
 function entity:GetData()
     return {}
@@ -212,7 +223,7 @@ end, {
     capture = function()
         return "return"
     end,
-}, enums.EntityType, localEffect)
+}, enums.EntityType, localEffect, bossRush)
 local location = { dimension = 0, index = 84 }
 local first = cached(1, 20, 2, location)
 local firstBytes = codec.encode(first)
@@ -254,3 +265,58 @@ local removed = cached(1, 31, 3, location)[Room.grids]
 assert(#removed == 1 and removed[1] == tail and #inserted == 2)
 print("PASS live grid reuse, door animation, replacement and room/floor invalidation")
 print("PASS room views capture once per room/tick and clear on tick/floor changes")
+
+local rushType = enums.RoomType.ROOM_BOSSRUSH
+roomType = rushType
+local running, done, wave, total = false, false, 0, 15
+room.IsAmbushActive = function()
+    return running
+end
+room.IsAmbushDone = function()
+    return done
+end
+native.room_ambush_wave = function()
+    return wave, total
+end
+local guest = { active = false, done = false }
+local restore = dofile(root .. "/src/bridge/compat/routes/boss_rush.lua")({
+    room_ambush_wave = function(activeFlag, currentWave, totalWaves)
+        guest.active, guest.wave, guest.total = activeFlag == 1, currentWave, totalWaves
+        return true
+    end,
+}, rushType)
+guest.GetType = function()
+    return roomType
+end
+guest.IsAmbushDone = function()
+    return guest.done
+end
+guest.SetAmbushDone = function(_, value)
+    guest.done = value
+end
+for t, state in ipairs({
+    { false, false, 0 },
+    { true, false, 0 },
+    { true, false, 1 },
+    { true, false, 1 },
+    { true, false, 2 },
+    { false, true, 15 },
+}) do
+    running, done, wave = table.unpack(state)
+    local snapshot = cached(1, t, 4, { dimension = 0, index = -5 })
+    restore.apply(guest, snapshot[Room.bossRush])
+    assert(
+        guest.active == running
+            and guest.done == done
+            and guest.wave == wave
+            and guest.total == total
+    )
+end
+roomType = enums.RoomType.ROOM_DEFAULT
+local outside = cached(2, 6, 4, { dimension = 0, index = 84 })[Room.bossRush]
+assert(outside == false)
+restore.apply(guest, outside)
+assert(not pcall(restore.apply, guest, { true, false, 2, 15 }))
+roomType = rushType
+assert(not pcall(restore.apply, guest, outside))
+print("PASS Boss Rush entry, gaps, final clear and separate room views")

@@ -54,6 +54,7 @@ local room = {
     GetGridEntity = function(_, i)
         return occupied[i]
     end,
+    GetBackdropType = zero,
     GetWaterCurrent = function()
         return current
     end,
@@ -91,7 +92,13 @@ for _, changing in ipairs({ false, true }) do
         identity,
         identity,
         { capture = empty },
-        { ENTITY_PLAYER = 1 }
+        { ENTITY_PLAYER = 1 },
+        nil,
+        {
+            capture = function()
+                return false
+            end,
+        }
     )
     for tick = -100, 0 do
         capture(1, tick, 0, location)

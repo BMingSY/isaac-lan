@@ -11,6 +11,7 @@ constexpr unsigned waterOffset = 0x7344, savedStride = 0x68, mapState = 0x101904
                    mapTimer = 0x10190c;
 constexpr std::array<unsigned, 2> caches{0x1a2ac8, 0x1a2c28};
 constexpr int minimumRoom = -18;
+constexpr unsigned backdropEntry = 0x4987a0, roomBackdrop = 0x1d34, backdropCount = 61;
 #else
 constexpr unsigned gameGlobal = 0x8994f8, descEntry = 0x348580, cacheEntry = 0x5a2650;
 constexpr unsigned roomOffset = 0x18300, indexOffset = 0x18304, dimensionOffset = 0x1830c;
@@ -18,6 +19,7 @@ constexpr unsigned mapOffset = 0x17adc, countOffset = 0x182cc, frameOffset = 0x2
 constexpr unsigned waterOffset = 0x7478, savedStride = 0x78, mapState = 0x22ed4, mapTimer = 0x22edc;
 constexpr std::array<unsigned, 2> caches{0x25ef4, 0x26054};
 constexpr int minimumRoom = -20;
+constexpr unsigned backdropEntry = 0x552d80, roomBackdrop = 0x1bc8, backdropCount = 63;
 #endif
 struct lua_State {
     int top = 0;
@@ -95,6 +97,13 @@ struct Game {
     }
 };
 Game* current = nullptr;
+unsigned backdropReloads = 0;
+void __attribute__((fastcall)) initBackdrop(void* object, void*, unsigned type, bool graphics) {
+    require(current && object == current->room.data() + roomBackdrop && graphics,
+            "Backdrop refresh escaped its room or skipped graphics");
+    ++backdropReloads;
+    field<unsigned>(object, 0x150) = type;
+}
 void* __attribute__((fastcall)) descriptor(void* game, void*, int index, int dimension) {
     require(current && game == current->data.data(), "Descriptor queried a stale Game");
     require(index >= minimumRoom && index < 169 && dimension >= 0 && dimension < 3,
@@ -240,6 +249,7 @@ int main() {
         state::image = address(image);
         jump(descEntry, reinterpret_cast<void*>(descriptor));
         jump(cacheEntry, reinterpret_cast<void*>(cache));
+        jump(backdropEntry, reinterpret_cast<void*>(initBackdrop));
         Game host, guest;
         select(host);
         const auto packet = layoutPacket();
@@ -406,6 +416,13 @@ int main() {
         state::roomConnections(&busy);
         require(!success(busy), "Busy room connections were accepted");
         idle = true;
+        const auto backdrop = [](int id) {
+            lua_State value;
+            value.integers[0] = id;
+            state::roomBackdrop(&value);
+            return success(value);
+        };
+        require(!backdrop(18) && !backdropReloads, "Host accepted replica backdrop");
         const auto beforeWater = host.room;
         lua_State flow;
         flow.numbers = {0.6, 0.8};
@@ -439,6 +456,14 @@ int main() {
         field<float>(expectedRoom.data(), waterOffset) = 0.6f;
         field<float>(expectedRoom.data(), waterOffset + 4) = 0.8f;
         require(success(validFlow) && host.room == expectedRoom, "Water wrote wrong room layout");
+        shell = true;
+        require(!backdrop(18), "Storage shell loaded backdrop graphics");
+        shell = false;
+        require(!backdrop(-1) && !backdrop(backdropCount) && !backdropReloads,
+                "Out-of-range backdrop reached native resources");
+        require(backdrop(18) && backdrop(18) && backdropReloads == 1,
+                "Repeated arena snapshot reloaded its native surfaces");
+        require(backdrop(17) && backdropReloads == 2, "Chest backdrop was not restored");
         auto beforeClock = host.data;
         lua_State clock;
         clock.integers[0] = 0xffffffff;
@@ -485,8 +510,8 @@ int main() {
         require(!success(gone) && guest.data == guestStable,
                 "Destroyed Game received state writes");
         VirtualFree(image, 0, MEM_RELEASE);
-        std::cout
-            << "Room layouts, descriptor bounds, map ownership scopes, water and clocks passed\n";
+        std::cout << "Room layouts, descriptor bounds, map ownership scopes, backdrops, water and "
+                     "clocks passed\n";
         return 0;
     } catch (const std::exception& failure) {
         std::cerr << failure.what() << '\n';

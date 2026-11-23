@@ -4,6 +4,9 @@
 // Audited Repentance+ entrypoints. signatures.inc uses the same constants for startup checks.
 namespace isaac::engine::repentance_plus {
 namespace entry {
+inline constexpr std::uint32_t backdropInit = 0x552d80;
+inline constexpr std::uint32_t ambushStart = 0x43bdb0;
+inline constexpr std::uint32_t ambushUpdate = 0x43cce0;
 inline constexpr std::uint32_t glitchedGridStyle = 0x31abb7;
 inline constexpr std::uint32_t glitchedRockStyle = 0x321529;
 inline constexpr std::uint32_t glitchedBackdropType = 0x3f3518;

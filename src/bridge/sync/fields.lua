@@ -101,6 +101,8 @@ return {
         crawlspace = 7,
         current = 8,
         rails = 9,
+        backdrop = 10,
+        bossRush = 11,
     },
     map = {
         index = 1,

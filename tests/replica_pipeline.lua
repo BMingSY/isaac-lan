@@ -202,6 +202,11 @@ local replica = createReplica({
             context.reclaim()
         end
     end,
+    bossRush = {
+        apply = function(_, value)
+            assert(value == false)
+        end,
+    },
     gridsApply = function()
         record("grids")
     end,
@@ -217,6 +222,9 @@ local replica = createReplica({
         end,
     },
     native = {
+        room_backdrop = function(value)
+            return value == 1
+        end,
         room_rails = function(value)
             assert(scope == "room" and value == "rails")
             return record("rails")
@@ -297,7 +305,7 @@ local function packet(tick, nextEpoch)
             },
         },
         slot = 1,
-        room = { true, 0, {}, {}, "music", "layout", false, current, "rails" },
+        room = { true, 0, {}, {}, "music", "layout", false, current, "rails", 1, false },
         sound = {},
         progress = "progress",
         epoch = nextEpoch or epoch,

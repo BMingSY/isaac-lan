@@ -2,7 +2,7 @@
 #include <array>
 namespace isaac::engine::native_room_data {
 struct Bindings {
-    unsigned globalGame, descriptor, cache;
+    unsigned globalGame, descriptor, cache, backdropInit;
     int minimumRoom;
     struct Game {
         unsigned room, roomIndex, dimension, descriptors, mapOffsets, roomCount, frame;
@@ -10,7 +10,7 @@ struct Bindings {
         unsigned mapState, mapTimer;
     } game;
     struct Room {
-        unsigned descriptor, waterX, waterY;
+        unsigned descriptor, waterX, waterY, backdrop, backdropType, backdropCount;
     } room;
     struct Descriptor {
         unsigned size, gridIndex, safeGridIndex, listIndex, dimension, data, overrideData;

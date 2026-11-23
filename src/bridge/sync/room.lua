@@ -1,7 +1,7 @@
 return function(fields)
     local Room, Grid, Door = fields.room, fields.grid, fields.door
     -- Complete, immutable room views shared by peers in the same room/tick.
-    return function(native, entity, sprite, crawlspace, types, localEffect)
+    return function(native, entity, sprite, crawlspace, types, localEffect, bossRush)
         local captureTick, captureEpoch, rooms, currentGrids, previousGrids
         local function captureDoor(door, previous)
             if not door then
@@ -99,6 +99,8 @@ return function(fields)
                     [Room.crawlspace] = crawlspace.capture(),
                     [Room.current] = { current.X, current.Y },
                     [Room.rails] = assert(native.room_rails()),
+                    [Room.backdrop] = room:GetBackdropType(),
+                    [Room.bossRush] = bossRush.capture(room),
                 }
             end))
             return value

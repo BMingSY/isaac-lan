@@ -54,6 +54,8 @@ MenuManager 全局指针 RVA `0x7fd688`，页字段 `+0x38`；标题、存档、
 
 ## 房间描述符与地图缓存
 
+原版背景对象位于 `Room+0x1d34`，编号范围 0 至 60，类型位于对象 `+0x150`。已加载的客机房间切换背景时使用 `Backdrop::Init`（RVA `0x4987a0`）。Boss Rush 的 Ambush 位于 `Game+0x1c31b8`，波次字段布局与[共享房间数据契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#房间描述符与地图缓存)一致，原版 HUD 沿用游戏自身的显示。
+
 [楼层转场 Lua 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance/stage_transition_binding.h)修正原生注册的参数数量：`Game::StartStageTransition`（RVA `0x2d0aa0`）实际使用 thiscall 接收 bool、int、Player 指针并清栈十二字节，原绑定 `0x453660` 只压入两个参数。适配复用 `0x4536e0` 的三参数原生包装和闭包自身的方法指针；省略第四个 Lua 值时补 nil，显式玩家及额外参数保持不变。Hook 不持有 Lua 状态或角色，安装失败清理自身资源，状态重建后仍读取新闭包。
 
 [房间数据绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance/room_data.cpp)使用[共享组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/room_data.cpp)。编码、校验、稳定配置存储和缓存借用见[房间数据契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#房间描述符与地图缓存)。原生描述符查询 RVA `0x30e0f0` 使用 thiscall 接收索引、维度，清栈 8 字节；特殊房间只支持 `-18..-1`，更小索引在调用前拒绝，不能按忏悔＋范围写原生共享占位对象。
