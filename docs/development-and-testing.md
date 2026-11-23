@@ -304,7 +304,7 @@ Boss 整组时限按用例数量预留加载与转场时间，单项进度断言
 
 ## 开发专项入口
 
-捕风捉影使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case chasing-shadows --record`。双端在地下室和积水房间核对两名玩家、普通敌人、Boss 的本体和地面阴影，并用金币核对拾取物。夹具提供底片并跳至阴间，通过撒旦宝箱进入暗室。击败羔羊并领取奖杯后，用相同种子的普通局对照画面。离线用例 `bridge.chasing-shadows` 覆盖重复更新、恢复和退出时的效果清理。
+捕风捉影使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case chasing-shadows --record`。双端在地下室和积水房间核对两名玩家、普通敌人、Boss 的本体和地面阴影，并用金币核对拾取物。夹具跳过普通房间，验证妈腿和妈心的原生地洞、撒旦宝箱进入暗室，以及羔羊的奖杯。全队领奖后，用相同种子的普通局对照画面。离线用例 `bridge.chasing-shadows` 覆盖重复更新、恢复和退出时的效果清理。
 
 挑战45使用 [run_delete_this.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_delete_this.py)，指定 `--host`、`--client`、`--build`、`--output` 与独立 `--port`，可加 `--heap-check --record`。`--progress-template` 可提供只读原生进度基线；工具在启动前只解锁所选角色，验证挑战及路线不依赖普通解锁，结束后恢复原资料。默认角色为以撒与抹大拉；`--characters 7 7` 可选双阿撒泻勒，`--style` 设置托管策略；`--mode route --then-natural` 复用主客机进程，先做路线检查，再以双阿撒泻勒跑无辅助场景。默认 `--mode natural` 使用 LANBOT 的正常移动、射击、拾取及主动按钮；`--mode route` 将玩家维持在已生成的 Boss 房、补充魂心和弯勺、提高泪弹伤害，并通过 LANBOT 的 `next` 命令选择原生出口，报告中明确列出辅助条件，不能当作无辅助通关。两种模式均从第一层开始，检查各层推进、??? 实际出现、错误道具拾取、客机定义／库存／属性／房间一致性、双端完成事件及个人进度恢复。离线对应 `bridge.delete-this`、`bridge.challenges`、`bridge.challenge_menu`、`bridge.lanbot`、`core.challenge-rules` 与 Windows `native.generated-challenge`、`native.generated-items`。
 

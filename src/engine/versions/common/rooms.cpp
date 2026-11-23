@@ -797,7 +797,7 @@ RoomCall originalAward;
 void __attribute__((fastcall)) award(void* room, void*) {
     if (runtime::replica())
         return;
-    engine::GeneratedChallengeRewardScope scope;
+    engine::ChallengeRewardScope scope;
     if (!runtime::allowChallengeEvent("shared_award")) {
         originalAward(room);
         return;

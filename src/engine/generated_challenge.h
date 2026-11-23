@@ -2,17 +2,17 @@
 #include <cstdint>
 
 namespace isaac::engine {
-// Select the original generated-item challenge's room appearance and route
-// queries. The run itself retains its LAN identity and selected characters.
-bool installGeneratedChallenge(std::uintptr_t image, bool (*enabled)());
+// Use the selected vanilla challenge for route queries. Only DELETE THIS
+// supplies room appearance. Each run retains its LAN identity and characters.
+bool installGeneratedChallenge(std::uintptr_t image, unsigned (*rewardChallenge)());
 // Borrow the original native challenge only while a room produces its clear
 // reward. This gives locked profiles the same route as the original challenge.
-class GeneratedChallengeRewardScope {
+class ChallengeRewardScope {
   public:
-    GeneratedChallengeRewardScope();
-    ~GeneratedChallengeRewardScope();
-    GeneratedChallengeRewardScope(const GeneratedChallengeRewardScope&) = delete;
-    GeneratedChallengeRewardScope& operator=(const GeneratedChallengeRewardScope&) = delete;
+    ChallengeRewardScope();
+    ~ChallengeRewardScope();
+    ChallengeRewardScope(const ChallengeRewardScope&) = delete;
+    ChallengeRewardScope& operator=(const ChallengeRewardScope&) = delete;
 
   private:
     unsigned* challenge = nullptr;

@@ -43,14 +43,15 @@ int main() {
     std::vector<unsigned> game((bindings.challenge + 4) / 4, 0);
     auto gameAddress = reinterpret_cast<std::uintptr_t>(game.data());
     generatedChallengeImage = reinterpret_cast<std::uintptr_t>(&gameAddress) - bindings.game;
-    static bool enabled = false;
-    useGeneratedChallenge = [] { return enabled; };
+    static unsigned selected = 0;
+    selectedRewardChallenge = [] { return selected; };
     challengeField = &game[bindings.challenge / 4];
     originalChestEnding = chestFixture;
     styleOriginals.fill(reinterpret_cast<void*>(generatedStyleReturn));
     constexpr unsigned zeroFlag = 0x40;
-    for (bool requested : {false, true, false}) {
-        enabled = requested;
+    for (auto requested : {0u, isaac::compat::ids::challenge::deleteThis,
+                           isaac::compat::ids::challenge::iRule, 0u}) {
+        selected = requested;
         for (unsigned challenge : {0u, 21u, 45u}) {
             generatedChallengeValue = *challengeField = challenge;
             const auto before = game;
@@ -58,8 +59,10 @@ int main() {
                                isaac_lan_glitched_backdrop_type, isaac_lan_glitched_backdrop,
                                isaac_lan_glitched_room_config}) {
                 invokeGeneratedStyle(game.data(), thunk);
-                require(((observedGeneratedFlags & zeroFlag) != 0) == (enabled || challenge == 45),
-                        "Generated challenge selected the wrong native style branch");
+                require(
+                    ((observedGeneratedFlags & zeroFlag) != 0) ==
+                        (selected == isaac::compat::ids::challenge::deleteThis || challenge == 45),
+                    "Generated challenge selected the wrong native style branch");
                 require(game == before && observedGeneratedEAX == 0xaabbccdd &&
                             observedGeneratedEBX == 0x11223344 &&
                             observedGeneratedECX == gameAddress &&
@@ -67,16 +70,16 @@ int main() {
                             observedGeneratedEDI == gameAddress && observedGeneratedScale == 0.75f,
                         "Style branch mutated game state, GPRs or SSE state");
             }
-            expectedChallenge = enabled ? 45 : challenge;
+            expectedChallenge = selected ? selected : challenge;
             for (bool alternate : {false, true}) {
                 expectedAlternate = alternate;
                 require(generatedChestEnding(alternate) == 27 && game == before,
                         "Route query changed return value or retained its native challenge");
             }
             try {
-                GeneratedChallengeRewardScope outer;
+                ChallengeRewardScope outer;
                 require(*challengeField == expectedChallenge, "Reward context missing");
-                { GeneratedChallengeRewardScope inner; }
+                { ChallengeRewardScope inner; }
                 require(*challengeField == expectedChallenge, "Nested context restored too early");
                 throw std::runtime_error("fixture failure");
             } catch (const std::runtime_error& error) {
@@ -85,9 +88,9 @@ int main() {
             require(game == before, "Reward failure leaked a native challenge");
         }
     }
-    enabled = true;
+    selected = isaac::compat::ids::challenge::deleteThis;
     {
-        GeneratedChallengeRewardScope scope;
+        ChallengeRewardScope scope;
         gameAddress = 0;
     }
     require(*challengeField == 45, "Destroyed game context was accessed during cleanup");

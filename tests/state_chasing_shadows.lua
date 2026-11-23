@@ -55,8 +55,18 @@ local function enterBoss(level, kind)
     end
     error("Missing boss room for " .. kind)
 end
+local battles = {
+    mom = { boss = EntityType.ENTITY_MOM, departure = "womb" },
+    heart = { boss = EntityType.ENTITY_MOMS_HEART, departure = "sheol" },
+    satan = { boss = EntityType.ENTITY_SATAN, reward = PickupVariant.PICKUP_BIGCHEST },
+    lamb = { boss = EntityType.ENTITY_THE_LAMB, reward = PickupVariant.PICKUP_TROPHY },
+}
 local function finishAtLamb(tick)
     local game, level = Game(), Game():GetLevel()
+    assert(
+        not goalTick or tick - goalTick < 1200 or goal == "trophy",
+        "Stalled at " .. tostring(goal)
+    )
     if not goal then
         goal, goalTick = "downpour", tick
         level:SetStage(LevelStage.STAGE1_2, StageType.STAGETYPE_REPENTANCE)
@@ -70,48 +80,84 @@ local function finishAtLamb(tick)
         scene()
         goal, goalTick = "water", tick
     elseif goal == "water" and waterSeen and tick > goalTick + 120 then
-        for slot = 0, 1 do
-            local player = Isaac.GetPlayer(assert(native.rooms_heads()[tostring(slot)]))
-            player:AddCollectible(CollectibleType.COLLECTIBLE_NEGATIVE)
-        end
-        goal, goalTick = "sheol", tick
-        level:SetStage(LevelStage.STAGE5, StageType.STAGETYPE_ORIGINAL)
+        goal, goalTick = "depths", tick
+        level:SetStage(LevelStage.STAGE3_2, StageType.STAGETYPE_ORIGINAL)
         game:StartStageTransition(true, 0, Isaac.GetPlayer(0))
+    elseif
+        goal == "depths"
+        and level:GetStage() == LevelStage.STAGE3_2
+        and tick > goalTick + 60
+    then
+        goalRoom = enterBoss(level, battles.mom.boss)
+        goal, goalTick = "mom", tick
+    elseif goal == "womb" and level:GetStage() == LevelStage.STAGE4_1 and tick > goalTick + 90 then
+        goal, goalTick = "womb two", tick
+        level:SetStage(LevelStage.STAGE4_2, StageType.STAGETYPE_ORIGINAL)
+        game:StartStageTransition(true, 0, Isaac.GetPlayer(0))
+    elseif
+        goal == "womb two"
+        and level:GetStage() == LevelStage.STAGE4_2
+        and tick > goalTick + 60
+    then
+        goalRoom = enterBoss(level, battles.heart.boss)
+        goal, goalTick, sawBoss = "heart", tick, false
     elseif goal == "sheol" and tick > goalTick + 60 and level:GetStage() == LevelStage.STAGE5 then
-        goalRoom = enterBoss(level, EntityType.ENTITY_SATAN)
-        goal, goalTick = "satan", tick
+        goalRoom = enterBoss(level, battles.satan.boss)
+        goal, goalTick, sawBoss = "satan", tick, false
     elseif
         goal == "dark room"
         and level:GetStage() == LevelStage.STAGE6
         and tick > goalTick + 90
     then
         assert(level:GetStageType() == StageType.STAGETYPE_ORIGINAL)
-        goalRoom = enterBoss(level, EntityType.ENTITY_THE_LAMB)
+        goalRoom = enterBoss(level, battles.lamb.boss)
         goal, goalTick, sawBoss = "lamb", tick, false
         report("DARK_ROOM")
-    elseif (goal == "satan" or goal == "lamb") and level:GetCurrentRoomIndex() == goalRoom then
+    elseif battles[goal] and level:GetCurrentRoomIndex() == goalRoom then
         local player = Isaac.GetPlayer(0)
         player:SetMinDamageCooldown(100)
-        local satan = goal == "satan"
-        local boss = satan and EntityType.ENTITY_SATAN or EntityType.ENTITY_THE_LAMB
-        local reward = satan and PickupVariant.PICKUP_BIGCHEST or PickupVariant.PICKUP_TROPHY
+        local battle = battles[goal]
         for _, entity in ipairs(Isaac.GetRoomEntities()) do
-            if entity.Type == boss then
+            if entity.Type == battle.boss then
                 sawBoss = true
             end
             if entity:IsActiveEnemy(false) and tick > goalTick + 120 and tick % 15 == 0 then
                 entity:TakeDamage(1000000, DamageFlag.DAMAGE_IGNORE_ARMOR, EntityRef(player), 0)
             elseif
                 entity.Type == EntityType.ENTITY_PICKUP
-                and entity.Variant == reward
+                and entity.Variant == battle.reward
+                and entity.FrameCount >= 90
                 and entity:ToPickup().Wait <= 0
                 and game:GetRoom():IsClear()
             then
                 assert(sawBoss and game:GetVictoryLap() == 0)
                 player.Position, player.Velocity = entity.Position, Vector.Zero
-                goal, goalTick = satan and "dark room" or "trophy", tick
-                report(satan and "SATAN_CHEST" or "LAMB_TROPHY")
+                if goal == "satan" then
+                    assert(native.rooms_chest_ending() == 0, "Satan chest would end the run")
+                    goal = "dark room"
+                    report("SATAN_CHEST")
+                else
+                    goal = "trophy"
+                    report("LAMB_TROPHY")
+                end
+                goalTick = tick
                 break
+            end
+        end
+        if battle.departure and sawBoss and game:GetRoom():IsClear() and tick > goalTick + 160 then
+            local room = game:GetRoom()
+            for index = 0, room:GetGridSize() - 1 do
+                local grid = room:GetGridEntity(index)
+                if
+                    grid
+                    and grid:GetType() == GridEntityType.GRID_TRAPDOOR
+                    and grid.VarData == 0
+                then
+                    player.Position, player.Velocity = grid.Position, Vector.Zero
+                    report(goal == "mom" and "MOM_EXIT" or "HEART_EXIT")
+                    goal, goalTick = battle.departure, tick
+                    break
+                end
             end
         end
     end

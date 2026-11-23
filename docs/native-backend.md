@@ -296,7 +296,7 @@ Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；�
 
 后端在原比较后的条件跳转处接入；查询为 true 时，仅将其算术标志改为相等比较的结果，再执行原版分支。通用寄存器、栈、SSE、x87 与 MXCSR 均恢复，不写 `Game.Challenge`、诅咒、种子、布局或原生容器。房间数量抽样、随机数推进、布局与房间对象分配仍由原版负责。查询适用于首层、换层与重新生成；无活动挑战时保留原生行为。玩法匹配由上层挑战目录负责。两个 Hook 成组安装，失败只回滚本次创建的 Hook；相同图像和回调可以复用已安装组件，供外层会话装配失败后重试。[原版绑定](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-repentance.md#楼层生成)使用独立的比较位置。
 
-原版错误道具挑战的房间外观与路线查询由独立的 [generated_challenge.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/generated_challenge.h) 能力提供；调用范围、ABI、签名和借用字段的生命周期见[原版错误道具挑战环境](https://github.com/BMingSY/isaac-lan/blob/main/docs/generated-challenge.md)。
+原版挑战的清房奖励、结局宝箱查询及 DELETE THIS 的房间外观由 [generated_challenge.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/generated_challenge.h) 能力提供；调用范围、ABI、签名和借用字段的生命周期见[原版挑战的清房奖励与房间外观](https://github.com/BMingSY/isaac-lan/blob/main/docs/generated-challenge.md)。
 
 ## HUD 与本机输入
 

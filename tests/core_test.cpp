@@ -1692,7 +1692,8 @@ void challengeRules() {
     require(generated && generated->name == "挑战45" &&
                 generated->character == RunRules{}.character && generated->route == "blue_baby" &&
                 generated->goalStage == 11 && generated->goalStageType == 1 &&
-                generated->deleteThis && generated->transient && generated->difficulty == 0 &&
+                generated->rewardChallenge == isaac::compat::ids::challenge::deleteThis &&
+                generated->transient && generated->difficulty == 0 &&
                 !generated->roomOptionsLocked && !generated->friendlyFire &&
                 isaac::compat::challenges::available(*generated, {}),
             "Challenge 45 must be directly available with free characters and room options");
@@ -1702,6 +1703,7 @@ void challengeRules() {
                 shadows->goalStage == isaac::compat::ids::stage::chestOrDarkRoom &&
                 shadows->goalStageType == isaac::compat::ids::stageType::original &&
                 shadows->transient && shadows->difficulty == 0 && !shadows->roomOptionsLocked &&
+                shadows->rewardChallenge == isaac::compat::ids::challenge::iRule &&
                 shadows->hidePlayerOutlines && !luck->hidePlayerOutlines &&
                 isaac::compat::challenges::available(*shadows, {}),
             "Chasing Shadows must allow ordinary characters and end at the Lamb in the Dark Room");

@@ -21,7 +21,7 @@ struct Definition {
     bool roomOptionsLocked = false;
     bool largeFloor = false;
     bool nextPlayerShooting = false;
-    bool deleteThis = false;
+    unsigned rewardChallenge = 0;
     bool hidePlayerOutlines = false;
 };
 inline constexpr std::array definitions{
@@ -121,7 +121,7 @@ inline constexpr std::array definitions{
         false,
         false,
         false,
-        true,
+        ids::challenge::deleteThis,
     },
     Definition{
         .id = 1007,
@@ -136,6 +136,7 @@ inline constexpr std::array definitions{
         .goalStageType = ids::stageType::original,
         .nextBag = false,
         .requiredAchievements = {},
+        .rewardChallenge = ids::challenge::iRule,
         .hidePlayerOutlines = true,
     },
 };
