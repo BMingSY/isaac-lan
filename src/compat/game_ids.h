@@ -71,6 +71,10 @@ inline constexpr int options = 670;
 inline constexpr int sacredOrb = 691;
 inline constexpr int tmtrainer = 721;
 } // namespace collectible
+namespace challenge {
+inline constexpr unsigned iRule = 26;
+inline constexpr unsigned deleteThis = 45;
+} // namespace challenge
 namespace ending {
 inline constexpr unsigned epilogue = 2;
 } // namespace ending

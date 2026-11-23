@@ -23,7 +23,7 @@ struct Callbacks {
     void (*completionAward)(unsigned counter, unsigned bits, unsigned achievement);
     bool (*largeFloor)();
     bool (*deleteThis)();
-    bool (*blueBabyRoute)();
+    unsigned (*rewardChallenge)();
 };
 bool install(std::uintptr_t image, const Callbacks& callbacks);
 bool managerReady();

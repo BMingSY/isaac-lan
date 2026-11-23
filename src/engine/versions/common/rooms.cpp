@@ -797,7 +797,7 @@ RoomCall originalAward;
 void __attribute__((fastcall)) award(void* room, void*) {
     if (runtime::replica())
         return;
-    engine::GeneratedChallengeRewardScope scope;
+    engine::ChallengeRewardScope scope;
     if (!runtime::allowChallengeEvent("shared_award")) {
         originalAward(room);
         return;
@@ -2620,7 +2620,8 @@ bool render(void* g, RoomCall original, int slot) {
         audio::present();
         presentation::pickup_preview::prepare();
         presentation::items::withScreen([&] {
-            presentation::outlines::withPlayers(connected(), [&] {
+            const auto outlinePlayers = runtime::showPlayerOutlines() ? connected() : 0u;
+            presentation::outlines::withPlayers(outlinePlayers, [&] {
                 presentation::player_opacity::withPlayers(values(roster()), connected(), [&] {
                     combat_feedback::withPresentation(room->pointer, [&] { original(g); });
                 });

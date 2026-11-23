@@ -121,15 +121,17 @@ bool largeFloor() {
         session ? compat::challenges::find(session->settings().rules.id) : nullptr;
     return challengeActive() && definition && definition->largeFloor;
 }
-bool deleteThis() {
-    const auto* definition =
-        session ? compat::challenges::find(session->settings().rules.id) : nullptr;
-    return challengeActive() && definition && definition->deleteThis;
-}
-bool blueBabyRoute() {
+unsigned rewardChallenge() {
     const auto* definition =
         challengeActive() ? compat::challenges::find(session->settings().rules.id) : nullptr;
-    return definition && definition->route == compat::challenges::blueBabyRoute;
+    if (!definition || !definition->rewardChallenge || !backend::gameReady())
+        return 0;
+    return definition->nativeRewardChallenge(backend::stage().level);
+}
+bool deleteThis() {
+    const auto* definition =
+        challengeActive() ? compat::challenges::find(session->settings().rules.id) : nullptr;
+    return definition && definition->deleteThis;
 }
 bool beginNetworkRun() {
     if (saves.networkRun)
@@ -1807,7 +1809,7 @@ bool install(std::uintptr_t image, void (*log)(const std::string&), void (*halfU
     return backend::install(image, {saveGame, protectsSoloSave, saveRerun, serializeProgress,
                                     executeStart, startGame, update, consoleUpdate, consoleCommand,
                                     controls, executeMenu, requestRestart, completionAward,
-                                    largeFloor, deleteThis, blueBabyRoute});
+                                    largeFloor, deleteThis, rewardChallenge});
 }
 void configureNetwork(unsigned hz) {
     inputHz = hz;
@@ -1834,6 +1836,11 @@ bool replica() {
 bool challengeActive() {
     return session && (session->phase() == lan::Phase::running || saves.networkRun) &&
            session->settings().rules.id != 0;
+}
+bool showPlayerOutlines() {
+    const auto* definition =
+        challengeActive() ? compat::challenges::find(session->settings().rules.id) : nullptr;
+    return !definition || !definition->hidePlayerOutlines;
 }
 bool allowChallengeEvent(const char* event) {
     if (!challengeActive() || replica())

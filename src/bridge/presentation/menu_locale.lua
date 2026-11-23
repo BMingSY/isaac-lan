@@ -44,6 +44,7 @@ local english = {
     ["超大房间"] = "Extra Large Rooms",
     ["你的准星"] = "Your Crosshair",
     ["挑战45"] = "Challenge 45",
+    ["捕风捉影"] = "Chasing Shadows",
     ["幺幺幺九"] = "11/19",
     ["准备"] = "Ready",
     ["取消准备"] = "Unready",

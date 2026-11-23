@@ -13,6 +13,7 @@ sync/weapon_pose
 sync/actor_roster
 presentation/actors
 presentation/player_opacity
+presentation/challenge_shadows
 presentation/menu_locale
 presentation/menu_model
 presentation/fonts
@@ -126,6 +127,7 @@ sync/replica
 compat/routes/challenge_goal
 compat/challenges/luck_game
 compat/challenges/delete_this
+compat/challenges/chasing_shadows
 compat/challenges/battle_royale_rules
 compat/challenges/battle_royale_resources
 compat/challenges/battle_royale_rewards

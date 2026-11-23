@@ -3,6 +3,7 @@
 -- Reference: https://wofsauge.github.io/IsaacDocs/rep/enums/EntityType.html
 return {
     CacheFlag = { CACHE_ALL = 0xffff },
+    SeedEffect = { SEED_INVISIBLE_ISAAC = 14, SEED_INVISIBLE_ENEMIES = 15 },
     WeaponType = {
         WEAPON_TEARS = 1,
         WEAPON_BRIMSTONE = 2,

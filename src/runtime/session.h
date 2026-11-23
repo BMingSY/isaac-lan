@@ -23,6 +23,7 @@ void halfCompleted();
 int localViewSlot();
 bool replica();
 bool challengeActive();
+bool showPlayerOutlines();
 bool allowChallengeEvent(const char* event);
 void mapView(bool begin, int slot = -1, bool record = false);
 void playerRoomCleared(int owner, int dimension, int index);

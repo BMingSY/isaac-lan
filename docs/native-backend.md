@@ -48,6 +48,8 @@
 
 [精灵状态组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/sprite_state.cpp)通过 [忏悔＋绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance_plus/sprite_state.cpp)实现 `sprite_state(sprite)`，返回精灵状态的字节串。客机调用 `sprite_state(sprite, bytes)` 恢复状态，返回需要替换的贴图层数组，贴图相同时返回 `true`。客机使用本地替代动画时调用 `sprite_state(sprite, bytes, true)`，校验完整载荷后只恢复精灵颜色和播放速度，图层、阴影层与动画游标由本地 ANM2 管理。
 
+`sprite_has_shadow_layer(sprite)` 读取当前精灵的阴影层 ID，按 ID 核对本机图层表，并返回布尔值。借用和 Lua 自有 Sprite 均可查询。
+
 `sprite_graphics_loaded(sprite[, layerID])` 读取游戏加载后的图像状态。无图层参数时，Sprite 须含有图层，所有路径非空的图层均须有图像。指定图层时按 ID 在最多 64 层中查找，返回该层是否有图像。忏悔＋图层的图像指针位于 `+0x98`。接口接受借用或 Lua 自有的 Sprite，只检查指针是否为空，资源的装卸和所有权归游戏。
 
 精灵载荷以格式号 `2` 开头，主动画与叠加动画各保存存在标记、浮点帧、播放标记、当前／历史事件位图、图层与挂点层的 ID／帧索引。可移植契约见 [animation_pose.h](https://github.com/BMingSY/isaac-lan/blob/main/src/core/animation_pose.h)：最多 64 个图层、256 个挂点层，帧索引为 `-1` 或小于 65535 的整数；拒绝重复 ID、非法标记与非有限帧。忏悔＋的动画状态 `+0x8/+0xc` 分别引用图层／挂点帧数组，动画数据 `+0x20/+0x24` 为挂点描述数组与数量，每项 16 字节，帧数位于项内 `+0xc`。事件位图位于动画状态 `+0x18/+0x1c`。所有数组由游戏持有，恢复只按本机 ID 与帧数边界写入；空层允许游戏自身使用的初始游标 `0` 和重置游标 `-1`，不将游标用作数组下标。不分配或替换原生数组。动画名未变化时直接恢复这些完整状态，名称变化仍调用游戏动画切换接口。
@@ -163,7 +165,7 @@ Boss 演出事件使用独立序号和楼层／维度／房间身份。权威端
 
 ## 玩家轮廓
 
-[`outlines::withPlayers(connected, render)`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/player_outlines.h) 仅在本机房间绘制期间借用 LAN 在线槽位掩码，退出或异常时恢复外层掩码；不缓存角色地址，不增加同步字段。至少两名玩家在线且 `Player+0x161c` 属于有效槽位时，使用表现层的固定配色。单人、退出会话及不属于在线槽位的实体继续原版路径。
+[`outlines::withPlayers(connected, render)`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/player_outlines.h) 仅在本机房间绘制期间借用 LAN 在线槽位掩码，退出或异常时恢复外层掩码；不缓存角色地址，不增加同步字段。至少两名玩家在线且 `Player+0x161c` 属于有效槽位时，使用表现层的固定配色。挑战要求隐藏玩家时传入空掩码。单人、退出会话及不属于在线槽位的实体继续原版路径。
 
 忏悔＋后端在 `Player::Render` 的三个轮廓资格分支接入原生绘制：普通身体 Gate／Draw RVA 为 `0x394e31`／`0x394e8f`，特殊精灵为 `0x394ba1`／`0x394bfb`，幽灵／宝宝为 `0x39501c`／`0x39506c`。各边界的 `EBX` 是当前角色，`[EBP+0xc]` 是主绘制标记，前两个分支还保留 `[EBP-0x6d]` 的原生全息分身限制。跳转适配保存通用寄存器、标志与全部 XMM 寄存器，只替换 Steam 名单资格判断；身体、头部、装扮的四方向偏移绘制和颜色栈清理由原版完成。所有边界及续接入口均纳入启动签名校验。
 
@@ -296,7 +298,7 @@ Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；�
 
 后端在原比较后的条件跳转处接入；查询为 true 时，仅将其算术标志改为相等比较的结果，再执行原版分支。通用寄存器、栈、SSE、x87 与 MXCSR 均恢复，不写 `Game.Challenge`、诅咒、种子、布局或原生容器。房间数量抽样、随机数推进、布局与房间对象分配仍由原版负责。查询适用于首层、换层与重新生成；无活动挑战时保留原生行为。玩法匹配由上层挑战目录负责。两个 Hook 成组安装，失败只回滚本次创建的 Hook；相同图像和回调可以复用已安装组件，供外层会话装配失败后重试。[原版绑定](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-repentance.md#楼层生成)使用独立的比较位置。
 
-原版错误道具挑战的房间外观与路线查询由独立的 [generated_challenge.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/generated_challenge.h) 能力提供；调用范围、ABI、签名和借用字段的生命周期见[原版错误道具挑战环境](https://github.com/BMingSY/isaac-lan/blob/main/docs/generated-challenge.md)。
+原版挑战的清房奖励、结局宝箱查询及 DELETE THIS 的房间外观由 [generated_challenge.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/generated_challenge.h) 能力提供；调用范围、ABI、签名和借用字段的生命周期见[原版挑战的清房奖励与房间外观](https://github.com/BMingSY/isaac-lan/blob/main/docs/generated-challenge.md)。
 
 ## HUD 与本机输入
 

@@ -9,29 +9,30 @@ namespace {
 using native_generated_challenge::bindings;
 std::uintptr_t generatedChallengeImage;
 bool (*useGlitchedStyle)() = nullptr;
-bool (*useBlueBabyRoute)() = nullptr;
-constexpr unsigned nativeGeneratedChallenge = 45, compareBytes = 7;
+unsigned (*selectedRewardChallenge)() = nullptr;
+constexpr unsigned compareBytes = 7;
 constexpr unsigned arithmeticFlags = 0x8d5, equalFlags = 0x44;
 using ChestEnding = int(__stdcall*)(bool);
 ChestEnding originalChestEnding;
 int __stdcall generatedChestEnding(bool alternate) {
-    GeneratedChallengeRewardScope scope;
+    ChallengeRewardScope scope;
     return originalChestEnding(alternate);
 }
 std::array<void*, 5> styleOriginals{};
 } // namespace
 
-GeneratedChallengeRewardScope::GeneratedChallengeRewardScope() {
-    if (!useBlueBabyRoute || !useBlueBabyRoute())
+ChallengeRewardScope::ChallengeRewardScope() {
+    const auto selected = selectedRewardChallenge ? selectedRewardChallenge() : 0;
+    if (!selected)
         return;
     const auto game = *reinterpret_cast<std::uintptr_t*>(generatedChallengeImage + bindings.game);
     if (!game)
         return;
     challenge = reinterpret_cast<unsigned*>(game + bindings.challenge);
     previous = *challenge;
-    *challenge = nativeGeneratedChallenge;
+    *challenge = selected;
 }
-GeneratedChallengeRewardScope::~GeneratedChallengeRewardScope() {
+ChallengeRewardScope::~ChallengeRewardScope() {
     if (!challenge)
         return;
     const auto game = *reinterpret_cast<std::uintptr_t*>(generatedChallengeImage + bindings.game);
@@ -68,10 +69,11 @@ STYLE_BOUNDARY(isaac_lan_glitched_room_config, 4)
 #undef STYLE_BOUNDARY
 }
 
-bool installGeneratedChallenge(std::uintptr_t image, bool (*style)(), bool (*route)()) {
+bool installGeneratedChallenge(std::uintptr_t image, bool (*style)(),
+                               unsigned (*rewardChallenge)()) {
     if (generatedChallengeImage)
         return generatedChallengeImage == image && useGlitchedStyle == style &&
-               useBlueBabyRoute == route;
+               selectedRewardChallenge == rewardChallenge;
     if (!image)
         return false;
     const std::array replacements{isaac_lan_glitched_grid, isaac_lan_glitched_rock,
@@ -86,11 +88,11 @@ bool installGeneratedChallenge(std::uintptr_t image, bool (*style)(), bool (*rou
         return false;
     generatedChallengeImage = image;
     useGlitchedStyle = style;
-    useBlueBabyRoute = route;
+    selectedRewardChallenge = rewardChallenge;
     if (!hooks.enable()) {
         generatedChallengeImage = 0;
         useGlitchedStyle = nullptr;
-        useBlueBabyRoute = nullptr;
+        selectedRewardChallenge = nullptr;
         return false;
     }
     return true;

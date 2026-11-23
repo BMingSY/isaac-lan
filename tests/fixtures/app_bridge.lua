@@ -4,6 +4,7 @@ return function(root, native, modules)
     RoomType = RoomType or enums.RoomType
     TrinketType = TrinketType or enums.TrinketType
     CollectibleType = CollectibleType or enums.CollectibleType
+    SeedEffect = SeedEffect or enums.SeedEffect
     DoorSlot = DoorSlot or enums.DoorSlot
     RoomShape = RoomShape or enums.RoomShape
     GridRooms = GridRooms or enums.GridRooms
@@ -24,6 +25,8 @@ return function(root, native, modules)
     ModCallbacks.MC_USE_ITEM = ModCallbacks.MC_USE_ITEM or 12
     ModCallbacks.MC_PRE_USE_ITEM = ModCallbacks.MC_PRE_USE_ITEM or 13
     ModCallbacks.MC_POST_PEFFECT_UPDATE = ModCallbacks.MC_POST_PEFFECT_UPDATE or 14
+    ModCallbacks.MC_POST_PLAYER_RENDER = ModCallbacks.MC_POST_PLAYER_RENDER or 1100
+    ModCallbacks.MC_POST_NPC_RENDER = ModCallbacks.MC_POST_NPC_RENDER or 1101
     native.net_room_options = function()
         return {
             { flag = 1, key = "friendlyFire", name = "队友伤害" },
@@ -67,6 +70,7 @@ return function(root, native, modules)
         "runtime/room_rules",
         "compat/challenges/luck_game",
         "compat/challenges/delete_this",
+        "compat/challenges/chasing_shadows",
         "compat/challenges/battle_royale_rules",
         "compat/challenges/battle_royale_resources",
         "compat/challenges/battle_royale_rewards",
@@ -89,6 +93,7 @@ return function(root, native, modules)
         "presentation/chat_completion",
         "presentation/chat",
         "presentation/player_opacity",
+        "presentation/challenge_shadows",
         "diagnostics/feedback",
     }) do
         modules[name] = dofile(root .. "/src/bridge/" .. name .. ".lua")

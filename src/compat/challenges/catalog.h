@@ -8,7 +8,7 @@
 namespace isaac::compat::challenges {
 // The core run-rules regression checks this sentinel against the lobby contract.
 inline constexpr std::uint16_t unrestrictedCharacter = 65535;
-inline constexpr std::string_view blueBabyRoute = "blue_baby";
+inline constexpr std::string_view blueBabyRoute = "blue_baby", lambRoute = "lamb";
 struct Definition {
     std::uint16_t id, version, character;
     std::uint8_t difficulty;
@@ -24,6 +24,14 @@ struct Definition {
     bool nextPlayerShooting = false;
     bool deleteThis = false;
     bool crimeMode = false;
+    unsigned rewardChallenge = 0;
+    bool hidePlayerOutlines = false;
+
+    unsigned nativeRewardChallenge(int stage) const {
+        // I RULE! continues past the Lamb to Mega Satan. The Dark Room needs
+        // its ordinary Lamb chest for the LAN trophy.
+        return route == lambRoute && stage >= goalStage ? 0 : rewardChallenge;
+    }
 };
 inline constexpr std::array definitions{
     Definition{
@@ -33,7 +41,7 @@ inline constexpr std::array definitions{
         0,
         true,
         "恶魔形态",
-        "lamb",
+        lambRoute,
         6,
         ids::stage::chestOrDarkRoom,
         ids::stageType::original,
@@ -106,23 +114,36 @@ inline constexpr std::array definitions{
         true,
     },
     Definition{
-        1006,
-        1,
-        unrestrictedCharacter,
-        0,
-        true,
-        "挑战45",
-        blueBabyRoute,
-        ids::ending::epilogue,
-        ids::stage::chestOrDarkRoom,
-        ids::stageType::wrathOfTheLamb,
-        false,
-        {},
-        false,
-        false,
-        false,
-        false,
-        true,
+        .id = 1006,
+        .version = 1,
+        .character = unrestrictedCharacter,
+        .difficulty = 0,
+        .transient = true,
+        .name = "挑战45",
+        .route = blueBabyRoute,
+        .ending = ids::ending::epilogue,
+        .goalStage = ids::stage::chestOrDarkRoom,
+        .goalStageType = ids::stageType::wrathOfTheLamb,
+        .nextBag = false,
+        .requiredAchievements = {},
+        .deleteThis = true,
+        .rewardChallenge = ids::challenge::deleteThis,
+    },
+    Definition{
+        .id = 1007,
+        .version = 1,
+        .character = unrestrictedCharacter,
+        .difficulty = 0,
+        .transient = true,
+        .name = "捕风捉影",
+        .route = lambRoute,
+        .ending = ids::ending::epilogue,
+        .goalStage = ids::stage::chestOrDarkRoom,
+        .goalStageType = ids::stageType::original,
+        .nextBag = false,
+        .requiredAchievements = {},
+        .rewardChallenge = ids::challenge::iRule,
+        .hidePlayerOutlines = true,
     },
     Definition{
         .id = 1008,
@@ -138,6 +159,7 @@ inline constexpr std::array definitions{
         .nextBag = false,
         .requiredAchievements = {},
         .crimeMode = true,
+        .rewardChallenge = ids::challenge::deleteThis,
     },
 };
 inline const Definition* find(unsigned id) {

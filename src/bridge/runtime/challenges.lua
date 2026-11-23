@@ -164,6 +164,12 @@ return function(deps)
     end
     return {
         reset = reset,
+        gameStarted = function()
+            local active = effect()
+            if active and active.gameStarted then
+                active.gameStarted()
+            end
+        end,
         view = view,
         collect = collect,
         clearAward = clearAward,

@@ -169,7 +169,7 @@ bool install(std::uintptr_t base, const Callbacks& handlers) {
     };
     bool success =
         installFloorGeneration(image, callbacks.largeFloor) &&
-        installGeneratedChallenge(image, callbacks.deleteThis, callbacks.blueBabyRoute) &&
+        installGeneratedChallenge(image, callbacks.deleteThis, callbacks.rewardChallenge) &&
         hook(image + binding.entry.save, saveHook, originalSave) &&
         hook(image + binding.entry.deleteSave, deleteHook, originalDelete) &&
         (!binding.entry.deleteSlotFile ||

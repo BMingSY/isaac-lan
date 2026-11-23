@@ -89,6 +89,10 @@
 
 [开局组件](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/challenges/delete_this.lua)只由权威端初始化每个席位一次；跨房、跨层、重复视图不重复发放，后续移除错误技不会被立即补回。错误道具使用已有的[生成定义与库存契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/generated-item-definitions.md)。[原生挑战环境能力](https://github.com/BMingSY/isaac-lan/blob/main/docs/generated-challenge.md)提供原版房间外观与路线查询，不接管联机选角和奖杯完成流程。
 
+## 1007 捕风捉影
+
+所有玩家和敌人的本体隐形，靠地面阴影判断位置。普通难度，2–4 人自由选角，房主可选房间规则。经阴间的撒旦宝箱进入暗室，击败羔羊后领取奖杯，全队完成挑战。
+
 ## 当前规则：1008 幺幺幺九
 
 忏悔＋的房主可以选择「幺幺幺九」开启原版犯罪模式。种子栏留空时，每局由房主抽取新的地图种子并同步给全队。填写普通有效种子时，全队使用指定的地图种子。选择挑战即启用 `V1CE BSMT` 对应的彩蛋效果。出生房的手枪、后续掉落和楼层均由游戏生成。
