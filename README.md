@@ -1,6 +1,6 @@
 # Isaac LAN
 
-简体中文 · [English](https://github.com/BMingSY/isaac-lan/blob/main/docs/i18n/README.en.md) · [贡献指南](https://github.com/BMingSY/isaac-lan/blob/main/CONTRIBUTING.md) · [使用许可](https://github.com/BMingSY/isaac-lan/blob/main/LICENSE)
+简体中文 · [English](https://github.com/BMingSY/isaac-lan/blob/main/docs/i18n/README.en.md)
 
 《以撒的结合》的 2–4 人局域网联机扩展。一次安装即可在 Windows 版 **忏悔 v1.7.9b.J835** 和 **忏悔＋ v1.9.7.19.J511** 中使用。
 
@@ -128,3 +128,9 @@ python3 tools/build_package.py --build build-repentance --build build-repentance
 反馈包包含游戏和扩展版本、最近两次启动的联机日志、游戏的 `log.txt` 和扩展的 `config.ini`。日志上传到作者服务器，仅作者可见。路径中的 Windows 用户名会隐去。[反馈收集范围](https://github.com/BMingSY/isaac-lan/blob/main/docs/feedback.md)
 
 在 GitHub 报告问题时，请写明游戏版本、你是房主还是客机、复现步骤和使用的 Mod，并附上已有的反馈编号或相关日志。[提交 Issue](https://github.com/BMingSY/isaac-lan/issues)
+
+## 贡献与许可
+
+参与开发请参阅[贡献指南](https://github.com/BMingSY/isaac-lan/blob/main/CONTRIBUTING.md)。
+
+允许商业使用，禁止售卖本 Mod 或其修改版。详见[使用许可](https://github.com/BMingSY/isaac-lan/blob/main/LICENSE)。
