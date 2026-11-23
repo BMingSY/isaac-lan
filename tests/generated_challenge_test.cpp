@@ -1,5 +1,7 @@
+#include "compat/game_ids.h"
 #include "engine/versions/common/generated_challenge.cpp"
 #include "test_support.h"
+#include <utility>
 #include <vector>
 
 extern "C" {
@@ -43,14 +45,19 @@ int main() {
     std::vector<unsigned> game((bindings.challenge + 4) / 4, 0);
     auto gameAddress = reinterpret_cast<std::uintptr_t>(game.data());
     generatedChallengeImage = reinterpret_cast<std::uintptr_t>(&gameAddress) - bindings.game;
+    static bool style = false;
     static unsigned selected = 0;
+    useGlitchedStyle = [] { return style; };
     selectedRewardChallenge = [] { return selected; };
     challengeField = &game[bindings.challenge / 4];
     originalChestEnding = chestFixture;
     styleOriginals.fill(reinterpret_cast<void*>(generatedStyleReturn));
     constexpr unsigned zeroFlag = 0x40;
-    for (auto requested : {0u, isaac::compat::ids::challenge::deleteThis,
-                           isaac::compat::ids::challenge::iRule, 0u}) {
+    using namespace isaac::compat::ids::challenge;
+    for (const auto& [glitched, requested] :
+         {std::pair{false, 0u}, std::pair{true, deleteThis}, std::pair{false, deleteThis},
+          std::pair{false, iRule}, std::pair{false, 0u}}) {
+        style = glitched;
         selected = requested;
         for (unsigned challenge : {0u, 21u, 45u}) {
             generatedChallengeValue = *challengeField = challenge;
@@ -59,10 +66,9 @@ int main() {
                                isaac_lan_glitched_backdrop_type, isaac_lan_glitched_backdrop,
                                isaac_lan_glitched_room_config}) {
                 invokeGeneratedStyle(game.data(), thunk);
-                require(
-                    ((observedGeneratedFlags & zeroFlag) != 0) ==
-                        (selected == isaac::compat::ids::challenge::deleteThis || challenge == 45),
-                    "Generated challenge selected the wrong native style branch");
+                require(((observedGeneratedFlags & zeroFlag) != 0) ==
+                            (style || challenge == deleteThis),
+                        "Generated challenge selected the wrong native style branch");
                 require(game == before && observedGeneratedEAX == 0xaabbccdd &&
                             observedGeneratedEBX == 0x11223344 &&
                             observedGeneratedECX == gameAddress &&

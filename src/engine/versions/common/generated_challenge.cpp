@@ -1,5 +1,4 @@
 #include "engine/generated_challenge.h"
-#include "compat/game_ids.h"
 #include "engine/versions/common/branch_frame.h"
 #include "engine/versions/common/generated_challenge_bindings.h"
 #include "engine/versions/common/hooks.h"
@@ -9,6 +8,7 @@ namespace isaac::engine {
 namespace {
 using native_generated_challenge::bindings;
 std::uintptr_t generatedChallengeImage;
+bool (*useGlitchedStyle)() = nullptr;
 unsigned (*selectedRewardChallenge)() = nullptr;
 constexpr unsigned compareBytes = 7;
 constexpr unsigned arithmeticFlags = 0x8d5, equalFlags = 0x44;
@@ -45,8 +45,7 @@ __attribute__((used, force_align_arg_pointer)) void __cdecl isaac_lan_style_prep
     native_branch::Frame* frame, unsigned index) noexcept {
     (*frame)[native_branch::continuation] = reinterpret_cast<std::uintptr_t>(styleOriginals[index]);
     try {
-        if (selectedRewardChallenge &&
-            selectedRewardChallenge() == compat::ids::challenge::deleteThis)
+        if (useGlitchedStyle && useGlitchedStyle())
             (*frame)[native_branch::flags] =
                 ((*frame)[native_branch::flags] & ~arithmeticFlags) | equalFlags;
     } catch (const std::exception& error) {
@@ -70,9 +69,11 @@ STYLE_BOUNDARY(isaac_lan_glitched_room_config, 4)
 #undef STYLE_BOUNDARY
 }
 
-bool installGeneratedChallenge(std::uintptr_t image, unsigned (*rewardChallenge)()) {
+bool installGeneratedChallenge(std::uintptr_t image, bool (*style)(),
+                               unsigned (*rewardChallenge)()) {
     if (generatedChallengeImage)
-        return generatedChallengeImage == image && selectedRewardChallenge == rewardChallenge;
+        return generatedChallengeImage == image && useGlitchedStyle == style &&
+               selectedRewardChallenge == rewardChallenge;
     if (!image)
         return false;
     const std::array replacements{isaac_lan_glitched_grid, isaac_lan_glitched_rock,
@@ -86,9 +87,11 @@ bool installGeneratedChallenge(std::uintptr_t image, unsigned (*rewardChallenge)
     if (!hooks.add(image + bindings.chestEnding, generatedChestEnding, originalChestEnding))
         return false;
     generatedChallengeImage = image;
+    useGlitchedStyle = style;
     selectedRewardChallenge = rewardChallenge;
     if (!hooks.enable()) {
         generatedChallengeImage = 0;
+        useGlitchedStyle = nullptr;
         selectedRewardChallenge = nullptr;
         return false;
     }

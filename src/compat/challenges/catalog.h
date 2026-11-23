@@ -8,6 +8,7 @@
 namespace isaac::compat::challenges {
 // The core run-rules regression checks this sentinel against the lobby contract.
 inline constexpr std::uint16_t unrestrictedCharacter = 65535;
+inline constexpr std::string_view blueBabyRoute = "blue_baby";
 struct Definition {
     std::uint16_t id, version, character;
     std::uint8_t difficulty;
@@ -21,6 +22,8 @@ struct Definition {
     bool roomOptionsLocked = false;
     bool largeFloor = false;
     bool nextPlayerShooting = false;
+    bool deleteThis = false;
+    bool crimeMode = false;
     unsigned rewardChallenge = 0;
     bool hidePlayerOutlines = false;
 };
@@ -105,23 +108,20 @@ inline constexpr std::array definitions{
         true,
     },
     Definition{
-        1006,
-        1,
-        unrestrictedCharacter,
-        0,
-        true,
-        "挑战45",
-        "blue_baby",
-        ids::ending::epilogue,
-        ids::stage::chestOrDarkRoom,
-        ids::stageType::wrathOfTheLamb,
-        false,
-        {},
-        false,
-        false,
-        false,
-        false,
-        ids::challenge::deleteThis,
+        .id = 1006,
+        .version = 1,
+        .character = unrestrictedCharacter,
+        .difficulty = 0,
+        .transient = true,
+        .name = "挑战45",
+        .route = blueBabyRoute,
+        .ending = ids::ending::epilogue,
+        .goalStage = ids::stage::chestOrDarkRoom,
+        .goalStageType = ids::stageType::wrathOfTheLamb,
+        .nextBag = false,
+        .requiredAchievements = {},
+        .deleteThis = true,
+        .rewardChallenge = ids::challenge::deleteThis,
     },
     Definition{
         .id = 1007,
@@ -138,6 +138,22 @@ inline constexpr std::array definitions{
         .requiredAchievements = {},
         .rewardChallenge = ids::challenge::iRule,
         .hidePlayerOutlines = true,
+    },
+    Definition{
+        .id = 1008,
+        .version = 2,
+        .character = unrestrictedCharacter,
+        .difficulty = 0,
+        .transient = true,
+        .name = "幺幺幺九",
+        .route = blueBabyRoute,
+        .ending = ids::ending::epilogue,
+        .goalStage = ids::stage::chestOrDarkRoom,
+        .goalStageType = ids::stageType::wrathOfTheLamb,
+        .nextBag = false,
+        .requiredAchievements = {},
+        .crimeMode = true,
+        .rewardChallenge = ids::challenge::deleteThis,
     },
 };
 inline const Definition* find(unsigned id) {

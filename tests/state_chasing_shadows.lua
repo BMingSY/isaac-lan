@@ -115,7 +115,9 @@ local function finishAtLamb(tick)
         report("DARK_ROOM")
     elseif battles[goal] and level:GetCurrentRoomIndex() == goalRoom then
         local player = Isaac.GetPlayer(0)
-        player:SetMinDamageCooldown(100)
+        if not game:GetRoom():IsClear() then
+            player:SetMinDamageCooldown(100)
+        end
         local battle = battles[goal]
         for _, entity in ipairs(Isaac.GetRoomEntities()) do
             if entity.Type == battle.boss then
@@ -153,9 +155,27 @@ local function finishAtLamb(tick)
                     and grid:GetType() == GridEntityType.GRID_TRAPDOOR
                     and grid.VarData == 0
                 then
-                    player.Position, player.Velocity = grid.Position, Vector.Zero
-                    report(goal == "mom" and "MOM_EXIT" or "HEART_EXIT")
-                    goal, goalTick = battle.departure, tick
+                    if grid.State == 1 then
+                        player.Position, player.Velocity = grid.Position, Vector.Zero
+                        report(goal == "mom" and "MOM_EXIT" or "HEART_EXIT")
+                        goal, goalTick = battle.departure, tick
+                    else
+                        -- A closed trapdoor opens once all nearby players have stepped away.
+                        for slot = 0, 1 do
+                            local actor =
+                                Isaac.GetPlayer(assert(native.rooms_heads()[tostring(slot)]))
+                            if actor.Position:Distance(grid.Position) < 80 then
+                                local center = room:GetCenterPos()
+                                local offset = grid.Position.X >= center.X and -150 or 150
+                                actor.Position = room:FindFreePickupSpawnPosition(
+                                    center + Vector(offset, slot * 40),
+                                    0,
+                                    true
+                                )
+                                actor.Velocity = Vector.Zero
+                            end
+                        end
+                    end
                     break
                 end
             end

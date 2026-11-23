@@ -45,6 +45,7 @@ struct Bindings {
     void (*persistProgress)(std::uintptr_t image, std::uintptr_t progress);
     unsigned completionDefinitions = 0;
     unsigned progressTryUnlock = 0, progressIncreaseCounter = 0;
+    void (*enableCrimeMode)(std::uintptr_t image, void* seeds) = nullptr;
 };
 extern const Bindings bindings;
 } // namespace isaac::engine::native_session

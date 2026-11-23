@@ -201,6 +201,7 @@ inline constexpr std::uint32_t engineSaveRead = 0x5e3c10;
 inline constexpr std::uint32_t runtimeNetSeedConstructor = 0x601010;
 inline constexpr std::uint32_t runtimeNetParseSeed = 0x603480;
 inline constexpr std::uint32_t runtimeNetSetSeed = 0x603650;
+inline constexpr std::uint32_t addSeedEffect = 0x2f67d0;
 inline constexpr std::uint32_t engineRoomsAllocate = 0x628740;
 inline constexpr std::uint32_t engineRoomsTransition_60f550 = 0x628820;
 inline constexpr std::uint32_t inputPressed = 0x63a470;

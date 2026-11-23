@@ -1,6 +1,6 @@
 # 原版挑战的清房奖励与房间外观
 
-[联机挑战目录](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/challenges/catalog.h)指定清房奖励与结局宝箱查询使用的原版挑战编号。挑战45使用 DELETE THIS 的宝箱路线和错乱房间外观，捕风捉影使用 I RULE! 的暗室路线。开局、选角和通关仍由联机会话处理。
+[联机挑战目录](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/challenges/catalog.h)分别指定房间外观和清房奖励使用的原版挑战。挑战45与「幺幺幺九」借用 DELETE THIS 通往宝箱层的路线，只有挑战45启用错乱房间外观。「捕风捉影」借用 I RULE! 通往暗室的路线。开局、选角和奖杯完成仍由联机会话处理。
 
 ## 忏悔＋接口与校验
 

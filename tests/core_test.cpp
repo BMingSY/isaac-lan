@@ -1689,14 +1689,14 @@ void challengeRules() {
                 !aim->friendlyFire && isaac::compat::challenges::available(*aim, {}),
             "Rotated shooting must preserve ordinary characters and independent room options");
     const auto* generated = isaac::compat::challenges::find(1006);
-    require(generated && generated->name == "挑战45" &&
-                generated->character == RunRules{}.character && generated->route == "blue_baby" &&
-                generated->goalStage == 11 && generated->goalStageType == 1 &&
-                generated->rewardChallenge == isaac::compat::ids::challenge::deleteThis &&
-                generated->transient && generated->difficulty == 0 &&
-                !generated->roomOptionsLocked && !generated->friendlyFire &&
-                isaac::compat::challenges::available(*generated, {}),
-            "Challenge 45 must be directly available with free characters and room options");
+    require(
+        generated && generated->name == "挑战45" && generated->character == RunRules{}.character &&
+            generated->route == "blue_baby" && generated->goalStage == 11 &&
+            generated->goalStageType == 1 && generated->deleteThis &&
+            generated->rewardChallenge == isaac::compat::ids::challenge::deleteThis &&
+            generated->transient && generated->difficulty == 0 && !generated->roomOptionsLocked &&
+            !generated->friendlyFire && isaac::compat::challenges::available(*generated, {}),
+        "Challenge 45 must be directly available with free characters and room options");
     const auto* shadows = isaac::compat::challenges::find(1007);
     require(shadows && shadows->version == 1 && shadows->character == RunRules{}.character &&
                 shadows->route == "lamb" &&
@@ -1704,10 +1704,20 @@ void challengeRules() {
                 shadows->goalStageType == isaac::compat::ids::stageType::original &&
                 shadows->transient && shadows->difficulty == 0 && !shadows->roomOptionsLocked &&
                 shadows->rewardChallenge == isaac::compat::ids::challenge::iRule &&
-                shadows->hidePlayerOutlines && !luck->hidePlayerOutlines &&
+                !shadows->deleteThis && shadows->hidePlayerOutlines && !luck->hidePlayerOutlines &&
                 isaac::compat::challenges::available(*shadows, {}),
             "Chasing Shadows must allow ordinary characters and end at the Lamb in the Dark Room");
-    require(!isaac::compat::challenges::find(65535), "Unknown challenge accepted");
+    const auto* crime = isaac::compat::challenges::find(1008);
+    require(crime && crime->name == "幺幺幺九" && crime->version == 2 && crime->crimeMode &&
+                !crime->deleteThis && !generated->crimeMode &&
+                crime->rewardChallenge == isaac::compat::ids::challenge::deleteThis &&
+                crime->character == RunRules{}.character && crime->route == "blue_baby" &&
+                crime->goalStage == generated->goalStage &&
+                crime->goalStageType == generated->goalStageType &&
+                crime->ending == generated->ending && crime->transient &&
+                !crime->roomOptionsLocked && isaac::compat::challenges::available(*crime, {}),
+            "Crime mode must allow ordinary lobby choices and end at the Blue Baby trophy");
+    require(!isaac::compat::challenges::find(0xffff), "Unknown challenge accepted");
     std::array<std::uint8_t, 642> achievements{};
     require(!isaac::compat::challenges::available(*large, achievements),
             "Original challenge unlock was bypassed");
