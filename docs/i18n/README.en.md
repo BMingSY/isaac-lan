@@ -54,7 +54,7 @@ Close the game first. The uninstaller keeps your settings, multiplayer saves and
 
 ## Settings and logs
 
-The first launch creates `isaac-lan/config.ini` in the game directory. Restart the game after editing it.
+The first launch creates `isaac-lan/config.ini` in the game directory. On later launches, Isaac LAN adds missing settings and keeps your existing values. Restart the game after editing the file.
 
 ```ini
 [network]
@@ -66,6 +66,8 @@ input_hz = 60
 [players]
 ; Opacity of other players on your screen, from 0 (invisible) to 100 (original).
 others_opacity = 100
+; Predict your own movement as a guest. Set false to show only positions the host confirms.
+movement_prediction = true
 
 [logging]
 ; Available levels are DEBUG, INFO, WARN and ERROR.
@@ -81,7 +83,8 @@ sample_interval_ms = 1000
 ; Chat background opacity, from 0 (transparent) to 100 (opaque).
 background_opacity = 70
 ; PNG, JPG/JPEG or BMP. Use an absolute path or a path relative to config.ini.
-; Leave empty for a solid background. Images are scaled and retain transparency.
+; For example, backgrounds/chat.png. Leave empty for a solid background.
+; Images are scaled to the chat panel and retain transparency.
 background_image =
 ; Solid background, border/dividers and UI text. Use six hex digits without #.
 background_color = 231B18
@@ -121,4 +124,4 @@ For GitHub reports, include the game and extension versions, host or guest role,
 
 ## Contributing and license
 
-Contributions are welcome in English or Chinese. You can play, modify and share Isaac LAN for noncommercial purposes under PolyForm Noncommercial 1.0.0. Selling the mod or including it in a paid product requires separate permission from the rights holders. Third-party components retain their own licenses. [Contribution guide](https://github.com/BMingSY/isaac-lan/blob/main/CONTRIBUTING.md#english) · [Project license](https://github.com/BMingSY/isaac-lan/blob/main/LICENSE) · [Third-party notices](https://github.com/BMingSY/isaac-lan/tree/main/third_party)
+Contributions are welcome in English or Chinese. You can use Isaac LAN commercially, including in monetized streams, videos and paid hosting. Anyone distributing the mod or a modified version must make that copy available free of charge. Third-party components retain their own licenses. [Contribution guide](https://github.com/BMingSY/isaac-lan/blob/main/CONTRIBUTING.md#english) · [Project license](https://github.com/BMingSY/isaac-lan/blob/main/LICENSE) · [Third-party notices](https://github.com/BMingSY/isaac-lan/tree/main/third_party)

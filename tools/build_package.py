@@ -76,8 +76,8 @@ def write_installer(output):
     output.mkdir(parents=True, exist_ok=False)
     shutil.copy2(ROOT / "package/install.py", output)
     shutil.copy2(ROOT / "package/install.ps1", output)
-    for name in ("README.md", "README.en.md", "LICENSE"):
-        shutil.copy2(ROOT / name, output)
+    for document in ("README.md", "docs/i18n/README.en.md", "LICENSE"):
+        shutil.copy2(ROOT / document, output)
     shutil.copy2(ROOT / "docs/faq.md", output / "FAQ.md")
     for mode in ("Install", "Uninstall"):
         (output / f"{mode}.cmd").write_bytes(

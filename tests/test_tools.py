@@ -368,8 +368,8 @@ class PackagingTests(unittest.TestCase):
             original = (self.build / name).read_bytes()
             self.assertEqual((output / name).read_bytes(), original)
             self.assertEqual(payload["files"][name], hashlib.sha256(original).hexdigest())
-        for name in ("README.md", "README.en.md", "LICENSE"):
-            self.assertEqual((output / name).read_bytes(), (ROOT / name).read_bytes())
+        for document in (ROOT / "README.md", ROOT / "docs/i18n/README.en.md", ROOT / "LICENSE"):
+            self.assertEqual((output / document.name).read_bytes(), document.read_bytes())
         self.assertEqual((output / "FAQ.md").read_bytes(), (ROOT / "docs/faq.md").read_bytes())
         self.assertEqual(
             (output / "install.ps1").read_bytes(), (ROOT / "package/install.ps1").read_bytes()
@@ -405,8 +405,10 @@ class PackagingTests(unittest.TestCase):
             self.assertIsNone(zipped.testzip())
             self.assertEqual(zipped.namelist(), sorted(zipped.namelist()))
             self.assertEqual(set(zipped.namelist()), {archive.stem + "/" + name for name in FILES})
-            for name in ("LICENSE", "README.en.md"):
-                self.assertEqual(zipped.read(archive.stem + "/" + name), (ROOT / name).read_bytes())
+            for document in (ROOT / "LICENSE", ROOT / "docs/i18n/README.en.md"):
+                self.assertEqual(
+                    zipped.read(archive.stem + "/" + document.name), document.read_bytes()
+                )
             self.assertEqual(
                 zipped.read(archive.stem + "/FAQ.md"), (ROOT / "docs/faq.md").read_bytes()
             )
