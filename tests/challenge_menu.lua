@@ -425,7 +425,16 @@ end
 draw()
 count = #commands
 draw(13)
-assert(#commands == count and status.challenge == 0)
+assert(#commands == count and status.challenge == 0 and labels["全员需解锁底片与里该隐"])
+draw(40)
+assert(
+    not labels["全员需解锁底片与里该隐"],
+    "Back inherited the first challenge's unlock hint"
+)
+draw(38)
+assert(labels["全员需解锁底片与里该隐"])
+draw(0, true, 65, 216)
+assert(not labels["全员需解锁底片与里该隐"], "Hovering Back kept the previous hint")
 available = true
 -- Guest sees selected rules but has no mode-changing action.
 status.challenge, status.hosting, status.slot = 1001, 0, 1
@@ -952,13 +961,13 @@ local function visibleRules()
     assert(count == 6 and labelPositions["返回"].y == 214)
 end
 visibleRules()
-assert(labels["1–6 / 12"] and labels["[ ] 规则 5"] and not labels["[ ] 规则 6"])
+assert(labels["1-6 / 12"] and labels["[ ] 规则 5"] and not labels["[ ] 规则 6"])
 for _ = 1, 6 do
     draw(40)
 end
 draw()
 visibleRules()
-assert(labels["2–7 / 12"] and not labels["[x] 队友伤害"] and labels["[ ] 规则 6"])
+assert(labels["2-7 / 12"] and not labels["[x] 队友伤害"] and labels["[ ] 规则 6"])
 local previousMask = status.roomOptions
 draw(13)
 draw()
@@ -968,21 +977,21 @@ for _ = 1, 6 do
 end
 draw()
 visibleRules()
-assert(labels["7–12 / 12"] and labels["[ ] 规则 11"])
+assert(labels["7-12 / 12"] and labels["[ ] 规则 11"])
 draw(13) -- Back stays accessible after the final rule.
 draw()
 assert(labels["房间规则：友伤 +3"])
 draw(13)
 draw()
-assert(labels["1–6 / 12"], "Reopening rules retained an unrelated scroll offset")
+assert(labels["1-6 / 12"], "Reopening rules retained an unrelated scroll offset")
 previousCommands = #commands
 draw(0, true, 180, 202, true) -- Mouse page-down control.
 draw()
 visibleRules()
-assert(labels["7–12 / 12"] and #commands == previousCommands)
+assert(labels["7-12 / 12"] and #commands == previousCommands)
 draw(0, true, 159, 202, true) -- Mouse page-up control.
 draw()
-assert(labels["1–6 / 12"])
+assert(labels["1-6 / 12"])
 previousMask = status.roomOptions
 draw(0, true, 70, 117, true) -- Adjacent hitboxes must not toggle two rules.
 assert(#commands == previousCommands + 1 and status.roomOptions == (previousMask ~ 2))
@@ -1084,6 +1093,7 @@ _IsaacLan.net_challenges = function()
         [1005] = "你的准星",
         [1006] = "挑战45",
         [1007] = "捕风捉影",
+        [1008] = "幺幺幺九",
     }) do
         result[tostring(id)] = {
             id = id,
@@ -1097,7 +1107,7 @@ _IsaacLan.net_challenges = function()
     return result
 end
 status.phase, status.hosting, status.slot, status.challenge = 2, 1, 0, 1001
-for index = 1, 7 do
+for index = 1, 8 do
     _IsaacLanMenuOpen(true)
     draw(40)
     draw(40)
@@ -1110,7 +1120,39 @@ for index = 1, 7 do
     assert(status.challenge == 1000 + index, "Challenge selection was overwritten in one frame")
     assert(#commands == before + 1, "A confirmation activated multiple menu rows")
 end
-print("PASS each challenge confirmation executes exactly once")
+_IsaacLanMenuOpen(true)
+draw(40)
+draw(40)
+draw(13)
+draw()
+assert(labels["1-6 / 8"] and labels["1006 挑战45"] and not labels["1007 捕风捉影"])
+assert(labelPositions["返回"].y == 214)
+local beforePage = #commands
+draw(0, true, 180, 202, true)
+assert(labels["3-8 / 8"] and labels["1008 幺幺幺九"] and not labels["1001 恶魔形态"])
+assert(#commands == beforePage and labelPositions["返回"].y == 214)
+draw(0, true, 159, 202, true)
+assert(labels["1-6 / 8"] and #commands == beforePage)
+draw(0, true, 180, 202, true)
+local last = labelPositions["1008 幺幺幺九"]
+draw(0, true, last.x, last.y, true)
+assert(status.challenge == 1008 and #commands == beforePage + 1)
+draw(13)
+draw()
+assert(labels["1-6 / 8"], "Reopening challenges must reset its scroll")
+local allChallenges = _IsaacLan.net_challenges
+_IsaacLan.net_challenges = function()
+    local definitions = allChallenges()
+    definitions["1004"].team_available = false
+    return definitions
+end
+local locked = labelPositions["1004 超大房间"]
+draw(0, true, locked.x, locked.y, true)
+assert(labels["全员需解锁子宫"] and not labels["全员需解锁底片与里该隐"])
+draw(0, true, 65, 216, true)
+assert(not labels["全员需解锁子宫"] and #commands == beforePage + 1)
+_IsaacLan.net_challenges = allChallenges
+print("PASS challenge paging, fixed Back, unlock hints and single activation")
 
 -- Drive the actual menu entry with the same extra arguments as the native
 -- frontend, proving the notice owns input before any ordinary menu action.
@@ -1175,7 +1217,7 @@ _IsaacLanMenuOpen(true)
 draw()
 clickLabel("房间规则：友伤 +2")
 clickLabel("自动传送：关闭 >")
-assert(labels["自动传送"] and labels["已选 0 类"] and labels["1–6 / 9"])
+assert(labels["自动传送"] and labels["已选 0 类"] and labels["1-6 / 9"])
 assert(status.ready0 == 1 and status.ready1 == 1, "Opening the type list cleared readiness")
 clickLabel("[ ] Boss 房")
 assert(not labels["[ ] 干净卧室"] and not labels["[ ] 传送出口"])
@@ -1194,7 +1236,7 @@ draw()
 assert(labels["自动传送：2 类 >"] and labels["已启用 4 项"])
 draw(13)
 draw()
-assert(labels["1–6 / 9"], "Nested Back did not restore the auto-teleport entry")
+assert(labels["1-6 / 9"], "Nested Back did not restore the auto-teleport entry")
 clickLabel("全选")
 assert(status.roomOptions == (7 | allRoomFlags) and labels["已选 7 类"])
 clickLabel("清空")

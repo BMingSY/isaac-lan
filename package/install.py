@@ -228,16 +228,53 @@ def payloads(package):
         yield directory, read_json(directory / "payload.json", "PACKAGE_INVALID"), backend
 
 
+def uninstall_hashes(package):
+    # Manually copied installations have no record. Older bundles keep these
+    # optional hashes in the backend manifests. No source DLLs are needed.
+    try:
+        index = read_json(package / "payload.json", "PACKAGE_INVALID")
+    except (InstallerError, OSError):
+        return {}
+    names = list(OWNED)
+    files = index.get("files")
+    hashes = {}
+    if index.get("format") == 3:
+        names = ["winmm.dll"]
+        parent = package / "backends"
+        backends = index.get("backends")
+        for backend in backends if isinstance(backends, list) else ():
+            if not isinstance(backend, str) or not installed_backend(backend):
+                continue
+            name = backend_file(backend)
+            names.append(name)
+            directory = parent / backend
+            if files is None and not parent.is_symlink() and not directory.is_symlink():
+                try:
+                    manifest = read_json(directory / "payload.json", "PACKAGE_INVALID")
+                    check_manifest(manifest, OWNED, "PACKAGE_INVALID")
+                except (InstallerError, OSError):
+                    continue
+                if manifest.get("backend") == backend:
+                    hashes["winmm.dll"] = manifest["files"]["winmm.dll"]
+                    hashes[name] = manifest["files"]["isaac_lan_probe.dll"]
+    elif index.get("format") != 1:
+        return {}
+    if isinstance(files, dict):
+        for name in names:
+            checksum = files.get(name)
+            if isinstance(checksum, str) and re.fullmatch(r"[0-9a-f]{64}", checksum):
+                hashes[name] = checksum
+    return hashes
+
+
 def select_payload(package, executable):
-    image = regular(executable).read_bytes() if executable is not None else None
+    image = regular(executable).read_bytes()
     matched_build = None
     record = None
     sources = {}
     details = []
     for directory, payload, backend in payloads(package):
-        files = [("files", OWNED)]
-        if image is not None:
-            files.append(("linux_files", ("install.py", "game-profile.json")))
+        files = [("files", OWNED), ("linux_files", ("install.py", "game-profile.json"))]
         for field, names in files:
             check_manifest(payload, names, "PACKAGE_INVALID", field)
             for name in names:
@@ -283,8 +320,6 @@ def select_payload(package, executable):
             record["backends"][backend] = payload["game_build"]
             record["files"][name] = payload["files"]["isaac_lan_probe.dll"]
             sources[name] = directory / "isaac_lan_probe.dll"
-        if image is None:
-            continue
         profile = read_json(directory / "game-profile.json", "PACKAGE_INVALID")
         if (
             profile.get("format") != 1
@@ -302,7 +337,7 @@ def select_payload(package, executable):
         if matched_build is not None:
             raise InstallerError("PACKAGE_INVALID", "Multiple game backends match this executable")
         matched_build = profile["game_build"]
-    if image is not None and matched_build is None:
+    if matched_build is None:
         raise InstallerError("GAME_INCOMPATIBLE", "\n".join(details))
     return matched_build, record, sources
 
@@ -393,10 +428,12 @@ def install_files(package, game, mode):
         backup_metadata = True
     payload = None
     sources = {}
-    if mode != "Uninstall" or (not previous and (package / "payload.json").is_file()):
+    unrecorded = mode == "Uninstall" and not previous
+    if unrecorded:
+        previous = uninstall_hashes(package)
+    if mode != "Uninstall":
         try:
-            executable = None if mode == "Uninstall" else game / "isaac-ng.exe"
-            matched_build, payload, sources = select_payload(package, executable)
+            matched_build, payload, sources = select_payload(package, game / "isaac-ng.exe")
         except InstallerError as error:
             if mode != "Status" or error.code != "GAME_INCOMPATIBLE":
                 raise
@@ -413,10 +450,8 @@ def install_files(package, game, mode):
                 "gameBuild": matched_build,
             }
     package_hashes = payload["files"] if payload else {}
-    # A valid record survives a missing marker. With no record, a byte-for-byte
-    # match against the verified package also identifies a manual installation.
     names = list(dict.fromkeys((*sources, *previous)))
-    if mode == "Uninstall" and not previous:
+    if unrecorded:
         backends = directory / "backends"
         candidates = list(OWNED)
         if not backends.is_symlink() and backends.is_dir():

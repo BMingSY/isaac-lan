@@ -153,13 +153,15 @@ public class Checker {
         ]
         return {path.name: path.read_bytes() if path.exists() else None for path in paths}
 
-    def run_installer(self, mode="Install", code=None, inject="", game=None):
+    def run_installer(self, mode="Install", code=None, inject="", game=None, interactive=False):
         wrapper = self.root / "run.ps1"
         wrapper.write_text(
             "param([string]$Installer, [string]$GameDirectory, [string]$Mode)\n"
             "$ErrorActionPreference = 'Stop'\n$global:LASTEXITCODE = 0\n"
             + inject
-            + "\n& $Installer -Mode $Mode -GameDirectory $GameDirectory\nexit $LASTEXITCODE\n",
+            + "\n& $Installer -Mode $Mode"
+            + ("" if interactive else " -GameDirectory $GameDirectory")
+            + "\nexit $LASTEXITCODE\n",
             encoding="utf-8",
         )
         result = powershell(
@@ -393,6 +395,105 @@ if (Get-Command Get-FileHash -ErrorAction SilentlyContinue) { throw 'Get-FileHas
         self.assertTrue(all(value is None for value in self.installed_files().values()))
         (self.package / "payload.json").write_text("damaged")
         self.assertIn("not installed", self.run_installer("Uninstall"))
+
+    def test_incomplete_bundle_uninstall_without_installation_record(self):
+        backend = "repentance_plus"
+        name = f"isaac-lan/backends/{backend}/isaac_lan_probe.dll"
+        target = self.game / name
+        target.parent.mkdir(parents=True)
+        target.write_bytes(b"installed extension")
+        (self.game / "winmm.dll").write_bytes(b"another extension")
+        index = {
+            "format": 3,
+            "backends": [backend, "repentance"],
+            "files": {
+                name: hashlib.sha256(target.read_bytes()).hexdigest(),
+                "winmm.dll": hashlib.sha256(b"our loader").hexdigest(),
+                "save.dat": hashlib.sha256((self.game / "save.dat").read_bytes()).hexdigest(),
+            },
+        }
+        for file in (*OWNED, "isaac_lan_check.exe"):
+            (self.package / file).unlink()
+        (self.package / "payload.json").write_text(json.dumps(index))
+        output = self.run_installer("Uninstall")
+        self.assertIn("Preserved existing files: winmm.dll", output)
+        self.assertFalse(target.exists())
+        self.assertEqual((self.game / "winmm.dll").read_bytes(), b"another extension")
+        # Old bundles lack root hashes. One surviving backend manifest is enough.
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"installed extension")
+        del index["files"]
+        (self.package / "payload.json").write_text(json.dumps(index))
+        self.assertIn("Preserved existing files:", self.run_installer("Uninstall"))
+        self.assertTrue(target.is_file())
+        manifest = self.package / "backends" / backend / "payload.json"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text(
+            json.dumps(
+                {
+                    "format": 1,
+                    "backend": backend,
+                    "files": {
+                        "isaac_lan_probe.dll": hashlib.sha256(target.read_bytes()).hexdigest(),
+                        "winmm.dll": hashlib.sha256(b"our loader").hexdigest(),
+                    },
+                }
+            )
+        )
+        self.run_installer("Uninstall")
+        self.assertFalse(target.exists())
+        self.assertEqual((self.game / "winmm.dll").read_bytes(), b"another extension")
+
+    def test_uninstall_picker_suggests_installed_steam_library_and_can_cancel(self):
+        steam = self.root / "Steam"
+        library = self.root / "library [two]"
+        game = library / "steamapps" / "common" / "The Binding of Isaac Rebirth"
+        game.mkdir(parents=True)
+        (game / "isaac-ng.exe").write_text("compatible")
+        self.run_installer(game=game)
+        (game / "isaac-ng.exe").unlink()
+        (steam / "steamapps").mkdir(parents=True)
+        (steam / "steamapps/libraryfolders.vdf").write_text(
+            '"libraryfolders"\n{\n "1"\n {\n "path" '
+            + json.dumps(windows_path(library))
+            + "\n }\n}\n"
+        )
+        mock = r"""
+$global:expectedGame = $GameDirectory
+$global:fixtureRoot = $PSScriptRoot
+function Get-ItemPropertyValue {
+    param($LiteralPath, $Name, $ErrorAction)
+    if ($Name -eq 'SteamPath') { return (Join-Path $global:fixtureRoot 'Steam') }
+    if ($Name -eq 'InstallLocation') { return (Join-Path $global:fixtureRoot 'game [test]') }
+}
+function New-Object {
+    param($TypeName)
+    if ($TypeName -ne 'System.Windows.Forms.OpenFileDialog') { throw "Unexpected dialog: $TypeName" }
+    $dialog = [pscustomobject]@{ Title=''; Filter=''; FileName=''; InitialDirectory=''; CheckFileExists=$true }
+    $dialog | Add-Member ScriptMethod ShowDialog {
+        if ($this.InitialDirectory -ne $global:expectedGame -or $this.FileName -ne 'isaac-ng.exe' -or $this.CheckFileExists) {
+            throw "Unexpected suggestion: $($this.InitialDirectory) / $($this.FileName)"
+        }
+        $this.FileName = Join-Path $this.InitialDirectory $this.FileName
+        return $global:result
+    }
+    $dialog | Add-Member ScriptMethod Dispose {}
+    return $dialog
+}
+"""
+        self.run_installer(
+            "Uninstall", game=game, interactive=True, inject=mock + "\n$global:result = 2"
+        )
+        self.assertTrue((game / ".isaac-lan-install").is_file())
+        self.run_installer(
+            "Uninstall", game=game, interactive=True, inject=mock + "\n$global:result = 1"
+        )
+        self.assertFalse((game / ".isaac-lan-install").exists())
+        self.assertFalse((game / "winmm.dll").exists())
+        (self.game / "isaac-ng.exe").unlink()
+        self.run_installer(
+            "Uninstall", game=self.game, interactive=True, inject=mock + "\n$global:result = 2"
+        )
 
     def test_running_game_and_locked_file(self):
         self.run_installer(

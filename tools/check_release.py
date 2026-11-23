@@ -191,6 +191,17 @@ def check(archive, tag, *, require_stripped=False, allow_legacy=False):
             backend: check_payload(zipped, root, prefix, backend, tag, require_stripped, not legacy)
             for backend, prefix in directories.items()
         }
+        if "files" in index and not legacy:
+            uninstall_files = {
+                "winmm.dll": hashlib.sha256(zipped.read(root + "winmm.dll")).hexdigest()
+            }
+            for backend, directory in directories.items():
+                name = f"isaac-lan/backends/{backend}/isaac_lan_probe.dll"
+                uninstall_files[name] = hashlib.sha256(
+                    zipped.read(directory + "isaac_lan_probe.dll")
+                ).hexdigest()
+            if index["files"] != uninstall_files:
+                raise ValueError("Uninstall file hashes differ from the release")
         for name in ("Install.cmd", "Uninstall.cmd"):
             contents = zipped.read(root + name)
             if b"\r\n" not in contents or b"install.ps1" not in contents:

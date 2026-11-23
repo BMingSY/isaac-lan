@@ -1,4 +1,8 @@
 local UNRESTRICTED_CHARACTER = 65535
+local challengeUnlockHints = {
+    [1001] = "全员需解锁底片与里该隐",
+    [1004] = "全员需解锁子宫",
+}
 -- Menu decisions and actions are independent of fonts, sprites and mouse geometry.
 return function(Phase, Command, endpoint, characters, text)
     local CHALLENGE_MODE, MODE_COUNT = 4, 5
@@ -44,15 +48,15 @@ return function(Phase, Command, endpoint, characters, text)
     end
     local function back(ui)
         if ui.page == "autoTeleport" then
-            ui.page, ui.selection, ui.ruleScroll = "rules", ui.autoReturn or 1, ui.autoScroll or 1
+            ui.page, ui.selection, ui.listScroll = "rules", ui.autoReturn or 1, ui.autoScroll or 1
             ui.autoReturn, ui.autoScroll = nil, nil
             return true
         elseif ui.page == "rules" then
             ui.page, ui.selection = "lan", ui.ruleReturn or 1
-            ui.ruleReturn, ui.ruleScroll = nil, nil
+            ui.ruleReturn, ui.listScroll = nil, nil
             return true
         elseif ui.page == "challenges" then
-            ui.page, ui.selection = "lan", 3
+            ui.page, ui.selection, ui.listScroll = "lan", 3, nil
             return true
         end
         return false
@@ -110,7 +114,7 @@ return function(Phase, Command, endpoint, characters, text)
             local index = #rows + 1
             row(text("房间规则：%s", summary), function()
                 if not rulesLocked then
-                    ui.page, ui.selection, ui.ruleScroll, ui.ruleReturn = "rules", 1, 1, index
+                    ui.page, ui.selection, ui.listScroll, ui.ruleReturn = "rules", 1, 1, index
                 end
             end, not rulesLocked, nil, nil, not host and not rulesLocked and deps.accent or nil)
         end
@@ -231,8 +235,8 @@ return function(Phase, Command, endpoint, characters, text)
                             selectedRooms == 0 and text("关闭") or text("%d 类", selectedRooms)
                         ),
                         function()
-                            ui.autoReturn, ui.autoScroll = index, ui.ruleScroll
-                            ui.page, ui.selection, ui.ruleScroll = "autoTeleport", 1, 1
+                            ui.autoReturn, ui.autoScroll = index, ui.listScroll
+                            ui.page, ui.selection, ui.listScroll = "autoTeleport", 1, 1
                         end,
                         not rulesLocked,
                         nil,
@@ -262,20 +266,27 @@ return function(Phase, Command, endpoint, characters, text)
             table.sort(ids)
             for _, id in ipairs(ids) do
                 local definition = challenges[tostring(id)]
-                row(id .. " " .. text(definition.name), function()
-                    if command("challenge", tostring(id)) then
-                        ui.difficulty = definition.difficulty
-                        ui.page, ui.selection = "lan", 3
-                    end
-                end, definition.team_available, nil, nil, deps.accent)
+                row(
+                    id .. " " .. text(definition.name),
+                    function()
+                        if command("challenge", tostring(id)) then
+                            ui.difficulty = definition.difficulty
+                            back(ui)
+                        end
+                    end,
+                    definition.team_available,
+                    nil,
+                    nil,
+                    definition.team_available and deps.accent or nil
+                )
+                if not definition.team_available then
+                    rows[#rows].unlockHint = challengeUnlockHints[id]
+                        or "队伍尚未解锁此挑战"
+                end
             end
             row(text("返回"), function()
                 back(ui)
             end)
-            local preview = challenges[tostring(ids[ui.selection] or ids[1])]
-            if preview and not preview.team_available then
-                notice = "unavailable"
-            end
         elseif phase == Phase.lobby then
             local selection = characters.selection(
                 choice,
@@ -301,7 +312,7 @@ return function(Phase, Command, endpoint, characters, text)
                     local nextMode = ((challenge and CHALLENGE_MODE or ui.difficulty) + delta)
                         % MODE_COUNT
                     if nextMode == CHALLENGE_MODE then
-                        ui.page, ui.selection = "challenges", 1
+                        ui.page, ui.selection, ui.listScroll = "challenges", 1, 1
                     elseif command("challenge", "0") then
                         ui.difficulty = nextMode
                     end
@@ -313,7 +324,7 @@ return function(Phase, Command, endpoint, characters, text)
                         ),
                     function()
                         if challenge then
-                            ui.page, ui.selection = "challenges", 1
+                            ui.page, ui.selection, ui.listScroll = "challenges", 1, 1
                         else
                             changeMode(1)
                         end
