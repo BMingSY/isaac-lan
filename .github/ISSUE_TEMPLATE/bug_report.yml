@@ -1,0 +1,48 @@
+name: 故障报告 / Bug report
+description: 报告安装、联机或游戏中的异常。 Report an installation, connection or gameplay problem.
+title: "[BUG] "
+labels: ["bug"]
+body:
+  - type: input
+    id: versions
+    attributes:
+      label: 游戏和扩展版本 / Game and Isaac LAN versions
+      description: 请写明忏悔或忏悔＋、游戏版本号和 Isaac LAN 版本。 Include the edition, game build and extension version. If unknown, say so.
+      placeholder: "Repentance+ v1.9.7.19.J511 / Isaac LAN v0.10.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: 哪一端遇到问题？ / Who saw the problem?
+      options:
+        - 房主 / Host
+        - 客机 / Guest
+        - 两端都有 / Both
+        - 尚未联机或不确定 / Before connecting or unsure
+    validations:
+      required: true
+  - type: textarea
+    id: symptoms
+    attributes:
+      label: 实际现象与预期 / What happened and what did you expect?
+      description: 如果两端看到的情况不同，请分别描述。 If the host and guest saw different things, describe both views.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤 / Steps to reproduce
+      description: 偶发问题可以写出事前最后几个操作。 For intermittent problems, describe what you did just before the issue.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境和其他 Mod / Setup and other mods
+      description: 系统、启用的 Mod。联机问题请补充玩家数及直连或组网方式。 Include your OS and enabled mods. For connection issues, include the player count and connection type.
+  - type: input
+    id: feedback
+    attributes:
+      label: 游戏内反馈编号 / In-game feedback ID
+      description: 已用 /feedback 提交的，填写编号即可。 If you used /feedback, share the ID here. Keep the full feedback package private.

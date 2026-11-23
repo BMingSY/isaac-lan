@@ -368,7 +368,8 @@ class PackagingTests(unittest.TestCase):
             original = (self.build / name).read_bytes()
             self.assertEqual((output / name).read_bytes(), original)
             self.assertEqual(payload["files"][name], hashlib.sha256(original).hexdigest())
-        self.assertEqual((output / "README.md").read_bytes(), (ROOT / "README.md").read_bytes())
+        for name in ("README.md", "README.en.md", "LICENSE"):
+            self.assertEqual((output / name).read_bytes(), (ROOT / name).read_bytes())
         self.assertEqual((output / "FAQ.md").read_bytes(), (ROOT / "docs/faq.md").read_bytes())
         self.assertEqual(
             (output / "install.ps1").read_bytes(), (ROOT / "package/install.ps1").read_bytes()
@@ -404,6 +405,8 @@ class PackagingTests(unittest.TestCase):
             self.assertIsNone(zipped.testzip())
             self.assertEqual(zipped.namelist(), sorted(zipped.namelist()))
             self.assertEqual(set(zipped.namelist()), {archive.stem + "/" + name for name in FILES})
+            for name in ("LICENSE", "README.en.md"):
+                self.assertEqual(zipped.read(archive.stem + "/" + name), (ROOT / name).read_bytes())
             self.assertEqual(
                 zipped.read(archive.stem + "/FAQ.md"), (ROOT / "docs/faq.md").read_bytes()
             )
@@ -610,6 +613,20 @@ class PackagingTests(unittest.TestCase):
         self.rewrite_archive(archive, lambda files: files.pop(archive.stem + "/FAQ.md"))
         with self.assertRaisesRegex(ValueError, "missing or unexpected"):
             check(archive, self.tag)
+
+    def test_check_accepts_older_readme_layout_only_in_legacy_mode(self):
+        archive = self.archive()
+        self.rewrite_archive(archive, lambda files: files.pop(archive.stem + "/LICENSE"))
+        for allow_legacy in (False, True):
+            with self.assertRaisesRegex(ValueError, "missing or unexpected"):
+                check(archive, self.tag, allow_legacy=allow_legacy)
+        self.rewrite_archive(archive, lambda files: files.pop(archive.stem + "/README.en.md"))
+        with self.assertRaisesRegex(ValueError, "missing or unexpected"):
+            check(archive, self.tag)
+        # These package fixtures contain stand-ins for the native binaries.
+        with mock_patch("check_release.check_payload", return_value={}):
+            result = check(archive, self.tag, allow_legacy=True)
+        self.assertEqual(set(result["imports"]), {"repentance", "repentance_plus"})
 
     def test_check_rejects_duplicate_members(self):
         archive = self.archive()

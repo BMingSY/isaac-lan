@@ -1,0 +1,23 @@
+name: 功能建议 / Feature request
+description: 说明希望改善的使用场景。 Suggest an improvement for a specific situation.
+title: "[功能请求] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: use_case
+    attributes:
+      label: 使用场景 / What are you trying to do?
+      description: 描述谁会遇到这个问题，以及现在遇到的困难。 Describe who is affected and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: desired_behavior
+    attributes:
+      label: 期望效果 / What would you like to happen?
+      description: 举一个例子，说明改进后玩家能做什么。 Give an example of what a player could do with this change.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 现有办法或相关讨论 / Workarounds or related discussions
