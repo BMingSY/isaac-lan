@@ -7,12 +7,14 @@
 #ifdef ISAAC_LAN_TEST_REPENTANCE
 #include "engine/versions/repentance/entrypoints.h"
 namespace backend = isaac::engine::repentance;
-constexpr unsigned layerStride = 0x9c, layerFlagsOffset = 0x88, cropOffset = 0x8c;
+constexpr unsigned layerStride = 0x9c, layerFlagsOffset = 0x88, cropOffset = 0x8c,
+                   imageOffset = 0x94;
 constexpr unsigned nativeBlendCount = 4;
 #else
 #include "engine/versions/repentance_plus/entrypoints.h"
 namespace backend = isaac::engine::repentance_plus;
-constexpr unsigned layerStride = 0xa0, layerFlagsOffset = 0x8c, cropOffset = 0x90;
+constexpr unsigned layerStride = 0xa0, layerFlagsOffset = 0x8c, cropOffset = 0x90,
+                   imageOffset = 0x98;
 constexpr unsigned nativeBlendCount = 5;
 #endif
 struct lua_State {
@@ -165,15 +167,17 @@ lua_State capture(NativeSprite& object) {
     require(sprite::state(&L) == 1, "Sprite capture return count changed");
     return L;
 }
-lua_State applyPose(NativeSprite& object, const std::string& packet) {
+lua_State applyPose(NativeSprite& object, const std::string& packet, bool useLocalPose = false) {
     lua_State L;
-    L.top = 2;
+    L.top = useLocalPose ? 3 : 2;
     L.input = packet;
     L.wrapper = {0x87654321, address(object.object.data())};
     require(sprite::state(&L) == 1, "Sprite restore return count changed");
     return L;
 }
 void configureLua() {
+    sprite::lua.checkInteger = [](lua_State* L, int) { return L->integer; };
+    sprite::lua.toBoolean = [](lua_State* L, int index) { return int(index == 3 && L->top == 3); };
     sprite::lua.getTop = [](lua_State* L) { return L->top; };
     sprite::lua.toUserdata = [](lua_State* L, int) -> void* {
         return L->validWrapper ? L->wrapper.data() : nullptr;
@@ -267,6 +271,27 @@ int main() {
         golden += hexBytes("00000001000000020000000300000004");
         golden += hexBytes(nativeBlendCount == 4 ? "00000000" : "00000005");
         golden += hexBytes("80000400");
+        auto imageProbe = capture(one);
+        imageProbe.top = 2;
+        imageProbe.integer = 7;
+        field<Address>(one.layers[0].data(), imageOffset) = 0;
+        require(sprite::graphicsLoaded(&imageProbe) == 1 && !imageProbe.success,
+                "A missing spritesheet was treated as loaded");
+        field<Address>(one.layers[0].data(), imageOffset) = 1;
+        require(sprite::graphicsLoaded(&imageProbe) == 1 && imageProbe.success,
+                "A loaded spritesheet was rejected");
+        imageProbe.integer = 2;
+        require(sprite::graphicsLoaded(&imageProbe) == 1 && !imageProbe.success,
+                "A missing layer used a different layer's image");
+        imageProbe.top = 1;
+        field<unsigned>(one.object.data(), 0x80) = 2;
+        field<Address>(one.layers[1].data(), imageOffset) = 0;
+        require(sprite::graphicsLoaded(&imageProbe) == 1 && !imageProbe.success,
+                "ANM2 with a missing referenced image was accepted");
+        one.setPath(1, "");
+        require(sprite::graphicsLoaded(&imageProbe) == 1 && imageProbe.success,
+                "An unused image layer rejected a complete ANM2");
+        field<unsigned>(one.object.data(), 0x80) = 1;
         const Snapshot oneBefore(one);
         const auto packet = capture(one).output;
         require(packet == golden && oneBefore.matches(one),
@@ -327,6 +352,14 @@ int main() {
         guest.animate(0, {2, 7, 15}, {8, 14, 9});
         guest.animate(1, {7, 2, 15}, {14, 8, 9});
         const auto hostPacket = capture(host).output;
+        const Snapshot localPose(guest);
+        field<float>(guest.object.data(), 0xa8) = 0.5f;
+        field<float>(guest.object.data(), 0x104) = 2;
+        require(!applyPose(guest, hostPacket + 'x', true).success &&
+                    field<float>(guest.object.data(), 0xa8) == 0.5f,
+                "A malformed fallback pose modified the Sprite");
+        require(applyPose(guest, hostPacket, true).success && localPose.matches(guest),
+                "Fallback failed to restore tint and speed or overwrote local ANM2 state");
         const auto guestResources = guest.layers;
         const auto guestAnimationData = guest.animations;
         const auto beforePointers = guest.object;

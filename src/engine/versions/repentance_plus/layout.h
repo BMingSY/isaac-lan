@@ -359,6 +359,7 @@ inline constexpr unsigned overlayOwner = 0x50;
 } // namespace sprite
 namespace spriteLayer {
 inline constexpr unsigned size = 0xa0, data = 0, id = 0, path = 8, flags = 0x8c;
+inline constexpr unsigned image = 0x98;
 inline constexpr std::array<unsigned, 3> booleans{0x32, 0x33, 0x74};
 inline constexpr std::array<unsigned, 18> numbers{0x34, 0x38, 0x3c, 0x40, 0x44, 0x48,
                                                   0x4c, 0x50, 0x54, 0x58, 0x5c, 0x60,

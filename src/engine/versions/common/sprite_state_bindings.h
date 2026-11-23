@@ -14,7 +14,7 @@ struct Bindings {
         unsigned layers, layerCount;
     } sprite;
     struct Layer {
-        unsigned stride, data, id, path;
+        unsigned stride, data, id, path, image;
         std::array<unsigned, layerFlags> booleans;
         std::array<unsigned, layerValues> numbers;
         // The canonical fifth blend word is absent in Repentance and must be zero.

@@ -30,9 +30,9 @@ MenuManager 全局指针 RVA `0x7fd688`，页字段 `+0x38`；标题、存档、
 
 ## 精灵状态
 
-[精灵绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance/sprite_state.cpp)复用[共享精灵状态组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/sprite_state.cpp)。`sprite_state`、`sprite_animation_length` 的范围、返回值及完整载荷校验见[精灵契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#实体引用与房间数据)。Sprite 大小 `0x114`，接受 8 字节借用包装或 `0x11c` 字节 Lua 自有包装；仅客机可恢复状态，返回后不保留对象引用。
+[精灵绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance/sprite_state.cpp)复用[共享精灵状态组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/sprite_state.cpp)。`sprite_state`、`sprite_graphics_loaded` 和 `sprite_animation_length` 的范围、返回值及完整载荷校验见[精灵契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#实体引用与房间数据)。Sprite 大小 `0x114`，接受 8 字节借用包装或 `0x11c` 字节 Lua 自有包装；仅客机可恢复状态，返回后不保留对象引用。
 
-主／叠加动画为 Sprite `+0x30/+0x50`，图层数组／数量为 `+0x7c/+0x80`，阴影层为 `+0x10c`。忏悔图层步长为 `0x9c`，只有 `+0x78/+0x7c/+0x80/+0x84` 四个混合参数；标志 `+0x88`、裁剪偏移 `+0x8c/+0x90`，资源指针 `+0x94/+0x98` 不写入。格式 2 的第五混合槽采集为零，接收非零值即拒绝，不把它写到标志或资源字段。
+主／叠加动画为 Sprite `+0x30/+0x50`，图层数组／数量为 `+0x7c/+0x80`，阴影层为 `+0x10c`。忏悔图层步长为 `0x9c`，只有 `+0x78/+0x7c/+0x80/+0x84` 四个混合参数；标志 `+0x88`、裁剪偏移 `+0x8c/+0x90`，图像检查只读取 `+0x94` 处的指针是否为空，两个资源字段 `+0x94/+0x98` 均由游戏管理。格式 2 的第五混合槽采集为零，接收非零值即拒绝，不把它写到标志或资源字段。
 
 动画状态的数据、图层帧和挂点帧指针为 `+4/+8/+0xc`；动画数据的图层／数量为 `+0x18/+0x1c`，挂点／数量为 `+0x20/+0x24`，总帧数为 `+0x30`。图层映射从 `+0x38` 开始；描述项步长 `0x10`，图层／挂点帧数分别位于项内 `+8/+0xc`。恢复按本机 ID 和帧数匹配，清空未匹配的挂点游标。两组动画和全部载荷在写入前完成校验。
 

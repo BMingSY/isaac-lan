@@ -12,6 +12,22 @@ local env = setmetatable({
     EntityCollisionClass = { ENTCOLL_NONE = 0 },
     EntityGridCollisionClass = { GRIDCOLL_NONE = 0 },
 }, { __index = _G })
+local assets, probes = {}, 0
+env.Sprite = function()
+    probes = probes + 1
+    return {
+        Load = function(self, path)
+            self.file = path
+        end,
+        IsLoaded = function(self)
+            return assets[self.file] ~= nil
+        end,
+        ReplaceSpritesheet = function(self, layer, path)
+            self.layer, self.sheet = layer, path
+        end,
+        LoadGraphics = function() end,
+    }
+end
 local laserReads, laserWrites = 0, 0
 local sizeWrites = 0
 local spriteChanges = true
@@ -49,8 +65,16 @@ local component = assert(loadfile(root .. "/src/bridge/sync/entity_codec.lua", "
             sprite.entity.boss = boss
             return true
         end,
-        sprite_state = function(_, bytes)
-            return bytes and spriteChanges or ""
+        sprite_graphics_loaded = function(sprite, layer)
+            assert(layer == sprite.layer)
+            return assets[sprite.sheet or sprite.file] == true
+        end,
+        sprite_state = function(sprite, bytes, useLocalPose)
+            if not bytes then
+                return ""
+            end
+            sprite.usedLocalPose = useLocalPose
+            return useLocalPose or spriteChanges
         end,
         laser_path = function(_, bytes)
             if bytes then
@@ -388,6 +412,79 @@ assert(wire.encode(replaced) == wire.encode(spriteChanges) and loaded == 1)
 spriteChanges = true
 component.apply(beam, value)
 assert(#replaced == 2 and loaded == 1, "Unchanged sprite reloaded graphics")
+-- Missing NPC resources must never replace the live local body. Exercise the
+-- entity entry point so classification, not an entity-type whitelist, selects this path.
+do
+    local fields = dofile(root .. "/src/bridge/sync/fields.lua")
+    local boss = entity(237, 0, true)
+    local state = component.capture(boss, false)
+    local desired = wire.decode(wire.encode(expectedSprite))
+    state[fields.entity.sprite] = desired
+    local live = setmetatable(
+        { entity = boss, file = "local.anm2", loads = 0, sheets = {} },
+        { __index = sourceSprite }
+    )
+    boss.sprite = live
+    function live:GetFilename()
+        return self.file
+    end
+    function live:Load(path)
+        self.loads, self.file = self.loads + 1, path
+    end
+    function live:GetAnimation()
+        return self.animation or "Idle"
+    end
+    function live:GetDefaultAnimation()
+        return "Walk"
+    end
+    function live:SetFrame(name, frame)
+        if name ~= "HostOnly" then
+            self.animation, self.frame = name, frame
+        end
+    end
+    function live:ReplaceSpritesheet(id, path)
+        self.sheets[id] = path
+    end
+    function live:LoadGraphics()
+        self.reloads = (self.reloads or 0) + 1
+    end
+    desired[fields.sprite.path], desired[fields.sprite.animation] = "host.anm2", "HostOnly"
+    for _ = 1, 2 do
+        component.apply(boss, state)
+        assert(live.file == "local.anm2" and live.usedLocalPose and live.animation == "Walk")
+        assert(live.frame == desired[fields.sprite.frame] and live.loads == 0 and probes == 1)
+    end
+    assets["host.anm2"] = false -- Metadata is present but its spritesheet is absent.
+    component.resetView()
+    component.apply(boss, state)
+    assert(live.usedLocalPose and live.loads == 0 and probes == 2)
+    assets["host.anm2"] = true
+    component.resetView()
+    desired[fields.sprite.animation] = "Walk"
+    component.apply(boss, state)
+    assert(not live.usedLocalPose and live.loads == 1 and live.file == "host.anm2")
+    spriteChanges = { { 1, "absent.png" } }
+    local before = probes
+    for _ = 1, 3 do
+        component.apply(boss, state)
+    end
+    assert(probes == before + 1 and not live.sheets[1] and not live.reloads)
+    assets["shared.png"] = true
+    spriteChanges = { { 1, "absent.png" }, { 2, "shared.png" }, { 3, "" } }
+    component.apply(boss, state)
+    assert(
+        not live.sheets[1]
+            and live.sheets[2] == "shared.png"
+            and live.sheets[3] == ""
+            and live.reloads == 1
+    )
+    assets["absent.png"] = true
+    component.reset()
+    spriteChanges = { { 1, "absent.png" } }
+    component.apply(boss, state)
+    assert(live.sheets[1] == "absent.png" and live.reloads == 2)
+    spriteChanges = true
+end
 source.MaxDistance = {}
 assert(not pcall(component.capture, source, false), "Unsupported userdata scalar must be rejected")
 source.MaxDistance = math.huge
@@ -523,4 +620,55 @@ local negative = component.sprite(beam.sprite)
 beam.sprite.Rotation = 0.0
 local positive = component.sprite(beam.sprite, negative)
 assert(positive ~= negative and 1 / positive[8] > 0 and 1 / negative[8] < 0)
+-- Pickup.Price removes the current child as a price decoration, even on an
+-- unchanged price. A haunted chest keeps its authoritative Polty in that slot.
+do
+    local fields = dofile(root .. "/src/bridge/sync/fields.lua")
+    local kind = enums.EntityType.ENTITY_PICKUP
+    local sourceChest, chest = entity(kind, 0), entity(kind, 0)
+    sourceChest.Variant, chest.Variant = 58, 58
+    sourceChest.ToPickup = function(self)
+        return self
+    end
+    chest.ToPickup = sourceChest.ToPickup
+    local sourceGhost, ghost = entity(816, 0, true), entity(816, 0, true)
+    sourceChest.Child, sourceGhost.SpawnerEntity = sourceGhost, sourceChest
+    local values = { component.capture(sourceChest, false), component.capture(sourceGhost, false) }
+    local objects = { [values[1][fields.entity.id]] = chest, [values[2][fields.entity.id]] = ghost }
+    local decoration = entity(enums.EntityType.ENTITY_EFFECT, 0)
+    chest.Price, chest.Child = nil, decoration
+    local priceWrites = 0
+    setmetatable(chest, {
+        __newindex = function(self, name, value)
+            if name == "Price" then
+                priceWrites = priceWrites + 1
+                if self.Child then
+                    self.Child.removed, self.Child = true, nil
+                end
+            else
+                rawset(self, name, value)
+            end
+        end,
+    })
+    local reconcile = dofile(root .. "/src/bridge/sync/entities.lua")(fields)(enums.EntityType, {})
+    for _ = 1, 3 do
+        reconcile(values, {
+            ref = function(id)
+                return objects[id]
+            end,
+            key = function(e)
+                return e
+            end,
+            entities = function()
+                return { chest, ghost }
+            end,
+            apply = function(e, v)
+                assert(not e.removed, "Price synchronization retired a live entity")
+                component.apply(e, v)
+            end,
+        })
+        assert(chest.Child == ghost and ghost.SpawnerEntity == chest and not ghost.removed)
+    end
+    assert(decoration.removed and priceWrites == 3)
+end
 print("PASS portable entity fields, native laser state and replica lifecycle flag ownership")

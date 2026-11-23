@@ -46,7 +46,9 @@
 
 主机房间占格索引逐次比较对应维度的 169 个原生格子值，变化时重建，仅缓存复制值。地图掉落物每房最多 4096 项，每项仅接受原生类型 5／6 的六个元数据字段；相同已校验字节复用本机地图缓存向量。该向量只在地图缓存调用期间借给描述符，随后恢复原有保存向量，楼层与会话清理时释放。缓存不延后读取主机字段，不改变同步格式或原生对象所有权。
 
-[精灵状态组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/sprite_state.cpp)通过 [忏悔＋绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance_plus/sprite_state.cpp)实现 `sprite_state(sprite)`，复制完整精灵层状态为字节串；客机的 `sprite_state(sprite, bytes)` 恢复状态，返回需要替换的贴图层数组，没有贴图变化时返回 `true`。返回值不持有原生引用；Lua 只在数组非空时替换贴图并调用 `LoadGraphics`。捕获缓冲预留容量不改变字段或编码字节。
+[精灵状态组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/sprite_state.cpp)通过 [忏悔＋绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance_plus/sprite_state.cpp)实现 `sprite_state(sprite)`，返回精灵状态的字节串。客机调用 `sprite_state(sprite, bytes)` 恢复状态，返回需要替换的贴图层数组，贴图相同时返回 `true`。客机使用本地替代动画时调用 `sprite_state(sprite, bytes, true)`，校验完整载荷后只恢复精灵颜色和播放速度，图层、阴影层与动画游标由本地 ANM2 管理。
+
+`sprite_graphics_loaded(sprite[, layerID])` 读取游戏加载后的图像状态。无图层参数时，Sprite 须含有图层，所有路径非空的图层均须有图像。指定图层时按 ID 在最多 64 层中查找，返回该层是否有图像。忏悔＋图层的图像指针位于 `+0x98`。接口接受借用或 Lua 自有的 Sprite，只检查指针是否为空，资源的装卸和所有权归游戏。
 
 精灵载荷以格式号 `2` 开头，主动画与叠加动画各保存存在标记、浮点帧、播放标记、当前／历史事件位图、图层与挂点层的 ID／帧索引。可移植契约见 [animation_pose.h](https://github.com/BMingSY/isaac-lan/blob/main/src/core/animation_pose.h)：最多 64 个图层、256 个挂点层，帧索引为 `-1` 或小于 65535 的整数；拒绝重复 ID、非法标记与非有限帧。忏悔＋的动画状态 `+0x8/+0xc` 分别引用图层／挂点帧数组，动画数据 `+0x20/+0x24` 为挂点描述数组与数量，每项 16 字节，帧数位于项内 `+0xc`。事件位图位于动画状态 `+0x18/+0x1c`。所有数组由游戏持有，恢复只按本机 ID 与帧数边界写入；空层允许游戏自身使用的初始游标 `0` 和重置游标 `-1`，不将游标用作数组下标。不分配或替换原生数组。动画名未变化时直接恢复这些完整状态，名称变化仍调用游戏动画切换接口。
 
