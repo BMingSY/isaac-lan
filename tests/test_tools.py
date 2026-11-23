@@ -414,12 +414,21 @@ class PackagingTests(unittest.TestCase):
         with ZipFile(archive) as zipped:
             root = archive.stem + "/"
             index = json.loads(zipped.read(root + "payload.json"))
-            self.assertEqual(index, {"format": 3, "backends": ["repentance_plus", "repentance"]})
+            self.assertEqual(index["format"], 3)
+            self.assertEqual(index["backends"], ["repentance_plus", "repentance"])
+            self.assertEqual(
+                index["files"]["winmm.dll"],
+                hashlib.sha256(zipped.read(root + "winmm.dll")).hexdigest(),
+            )
             for backend in index["backends"]:
                 prefix = root + f"backends/{backend}/"
                 manifest = json.loads(zipped.read(prefix + "payload.json"))
                 self.assertEqual(manifest["backend"], backend)
                 self.assertEqual(manifest["game_build"], source_profile(backend)["game_build"])
+                self.assertEqual(
+                    index["files"][f"isaac-lan/backends/{backend}/isaac_lan_probe.dll"],
+                    hashlib.sha256(zipped.read(prefix + "isaac_lan_probe.dll")).hexdigest(),
+                )
                 for name in BINARIES:
                     source = (
                         self.build
@@ -436,6 +445,25 @@ class PackagingTests(unittest.TestCase):
             lambda files: files.update({root + "backends/repentance_plus/payload.json": wrong}),
         )
         with self.assertRaisesRegex(ValueError, "manifest"):
+            check(archive, self.tag)
+
+    def test_release_checks_optional_uninstall_hashes(self):
+        archive = self.archive()
+        path = archive.stem + "/payload.json"
+        with ZipFile(archive) as zipped:
+            index = json.loads(zipped.read(path))
+        index["files"]["winmm.dll"] = "0" * 64
+        self.rewrite_archive(
+            archive, lambda files: files.update({path: json.dumps(index).encode()})
+        )
+        # These packaging fixtures use short byte strings in place of PE images.
+        with mock_patch("check_release.check_payload", return_value={}):
+            with self.assertRaisesRegex(ValueError, "Uninstall file hashes"):
+                check(archive, self.tag)
+            del index["files"]
+            self.rewrite_archive(
+                archive, lambda files: files.update({path: json.dumps(index).encode()})
+            )
             check(archive, self.tag)
 
     def test_release_requires_each_backend_once(self):

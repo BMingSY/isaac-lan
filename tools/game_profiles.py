@@ -156,7 +156,11 @@ def lab_profile(lab):
 
 
 def bundle_backends(index, *, allow_legacy=False):
-    if index == {"format": 3, "backends": list(RELEASE_BACKENDS)}:
+    if (
+        index.get("format") == 3
+        and index.get("backends") == list(RELEASE_BACKENDS)
+        and index.keys() <= {"format", "backends", "files"}
+    ):
         return RELEASE_BACKENDS
     if allow_legacy:
         names = index.get("backends")

@@ -41,7 +41,7 @@ local characters = _IsaacLanModules["presentation/menu_characters"]()
 local endpoint = _IsaacLanModules["core/endpoint"]
 local model =
     _IsaacLanModules["presentation/menu_model"](Phase, Command, endpoint, characters, message)
-local RULE_LIST_ROWS, RULE_LIST_TOP, RULE_LIST_GAP, RULE_BACK_Y = 6, 100, 17, 214
+local LIST_ROWS, LIST_TOP, LIST_GAP, LIST_BACK_Y = 6, 100, 17, 214
 local CHARACTER_SWAP_ICON_LAYER, CHARACTER_SWAP_KEY_LAYER = 1, 2
 local challenges = _IsaacLan.net_challenges()
 local roomOptions = _IsaacLan.net_room_options()
@@ -53,7 +53,7 @@ function _IsaacLanMenuOpen(returning)
             and "modes"
         or "lan"
     ui.selection, ui.editing = 1, nil
-    ui.ruleReturn, ui.ruleScroll = nil, nil
+    ui.ruleReturn, ui.listScroll = nil, nil
     ui.autoReturn, ui.autoScroll = nil, nil
     _IsaacLan.menu_text_end()
 end
@@ -253,7 +253,7 @@ function _IsaacLanMenuRender(
             phase ~= Phase.lobby
             and (ui.page == "rules" or ui.page == "autoTeleport" or ui.page == "challenges")
         then
-            ui.page, ui.ruleReturn, ui.ruleScroll = "lan", nil, nil
+            ui.page, ui.ruleReturn, ui.listScroll = "lan", nil, nil
             ui.autoReturn, ui.autoScroll = nil, nil
         end
         _IsaacLan.menu_text_end()
@@ -340,6 +340,7 @@ function _IsaacLanMenuRender(
         end,
     })
     local rulesPage = ruleCount ~= nil
+    local listPage = rulesPage or ui.page == "challenges"
     local heading = message(
         modes and "联机模式"
             or ui.page == "autoTeleport" and "自动传送"
@@ -370,8 +371,6 @@ function _IsaacLanMenuRender(
             100,
             12
         )
-    elseif notice == "unavailable" then
-        centered(message("全员需解锁底片与里该隐"), 240, 250, 10, red)
     elseif notice == "returning" then
         centered(message("队友结算中"), 110, 100, 12)
     elseif notice == "waiting" then
@@ -468,15 +467,15 @@ function _IsaacLanMenuRender(
             pointer(37 + shift, y + 5)
         end
     end
-    if rulesPage then
+    if listPage then
         local total = #rows - 1
-        local maxFirst = math.max(1, total - RULE_LIST_ROWS + 1)
-        local first = math.min(ui.ruleScroll or 1, maxFirst)
+        local maxFirst = math.max(1, total - LIST_ROWS + 1)
+        local first = math.min(ui.listScroll or 1, maxFirst)
         if ui.selection <= total then
             first = math.min(first, ui.selection)
-            first = math.max(first, ui.selection - RULE_LIST_ROWS + 1)
+            first = math.max(first, ui.selection - LIST_ROWS + 1)
         end
-        if total > RULE_LIST_ROWS then
+        if total > LIST_ROWS then
             local function scroll(x, delta, label, enabled)
                 text(label, x, 198, 10, enabled and ink or faded)
                 if clicked and enabled and hit(x - 3, 195, 18, 16) then
@@ -484,21 +483,21 @@ function _IsaacLanMenuRender(
                     ui.selection = first
                 end
             end
-            scroll(156, -RULE_LIST_ROWS, "↑", first > 1)
-            scroll(177, RULE_LIST_ROWS, "↓", first < maxFirst)
+            scroll(156, -LIST_ROWS, "↑", first > 1)
+            scroll(177, LIST_ROWS, "↓", first < maxFirst)
             text(
-                first .. "–" .. math.min(total, first + RULE_LIST_ROWS - 1) .. " / " .. total,
+                first .. "-" .. math.min(total, first + LIST_ROWS - 1) .. " / " .. total,
                 49,
                 198,
                 10,
                 faded
             )
         end
-        ui.ruleScroll = first
-        for i = first, math.min(total, first + RULE_LIST_ROWS - 1) do
-            renderRow(i, rows[i], RULE_LIST_TOP + (i - first) * RULE_LIST_GAP, RULE_LIST_GAP)
+        ui.listScroll = first
+        for i = first, math.min(total, first + LIST_ROWS - 1) do
+            renderRow(i, rows[i], LIST_TOP + (i - first) * LIST_GAP, LIST_GAP)
         end
-        renderRow(#rows, rows[#rows], RULE_BACK_Y, 22)
+        renderRow(#rows, rows[#rows], LIST_BACK_Y, 22)
     else
         for i, item in ipairs(rows) do
             renderRow(i, item, yStart + (i - 1) * gap, math.min(gap, 22))
@@ -552,7 +551,17 @@ function _IsaacLanMenuRender(
         and ui.errorText == ""
         and model.compatibilityError(status)
     local messageColor = red
-    if errorText == "" and phase == Phase.lobby and challenge and challenge.nextBag == 1 then
+    local selected = rows[ui.selection]
+    if errorText == "" and ui.page == "challenges" and selected and selected.unlockHint then
+        errorText = message(selected.unlockHint)
+    end
+    if
+        errorText == ""
+        and ui.page == "lan"
+        and phase == Phase.lobby
+        and challenge
+        and challenge.nextBag == 1
+    then
         local missing = {}
         for i = 0, count - 1 do
             if status["eligible" .. i] ~= true then
@@ -569,10 +578,7 @@ function _IsaacLanMenuRender(
         messageColor = amber
     end
     local footerY = compatibilityLines and 206 or (errorText ~= "" and 235 or 243)
-    if not resources.native_lobby and notice == "unavailable" then
-        footerY = math.min(footerY, 227)
-    end
-    if not rulesPage and phase == Phase.lobby and ui.page ~= "challenges" then
+    if not listPage and phase == Phase.lobby then
         if not host then
             text(message("房主地址：%s", ui.ip), 25, footerY - 12, 10)
         end

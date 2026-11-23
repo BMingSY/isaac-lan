@@ -3,6 +3,7 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 
@@ -152,6 +153,36 @@ def universal_bundle(tmp_path):
     bundle = tmp_path / "universal"
     build_bundle(builds, bundle)
     return bundle, profiles
+
+
+@pytest.mark.parametrize("root_hashes", [True, False])
+def test_uninstall_incomplete_unrecorded_bundle(package_game, universal_bundle, root_hashes):
+    _, game = package_game
+    bundle, _ = universal_bundle
+    installer.install(bundle, game)
+    (game / "isaac-lan/installation.json").unlink()
+    (game / ".isaac-lan-install").unlink()
+    (game / "isaac-ng.exe").unlink()
+    (game / "winmm.dll").write_bytes(b"another loader")
+    (bundle / "winmm.dll").unlink()
+    if root_hashes:
+        shutil.rmtree(bundle / "backends")
+    else:
+        index = json.loads((bundle / "payload.json").read_text())
+        del index["files"]
+        (bundle / "payload.json").write_text(json.dumps(index))
+        shutil.rmtree(bundle / "backends/repentance")
+        (bundle / "backends/repentance_plus/isaac_lan_probe.dll").unlink()
+    vanilla = installer.backend_file("repentance")
+    plus = installer.backend_file("repentance_plus")
+    result = installer.install(bundle, game, "Uninstall")
+    assert not result["installed"] and not (game / plus).exists()
+    assert (game / vanilla).exists() == (not root_hashes)
+    assert (game / "winmm.dll").read_bytes() == b"another loader"
+    assert set(result["preservedFiles"]) == (
+        {"winmm.dll"} if root_hashes else {"winmm.dll", vanilla}
+    )
+    assert not installer.install(bundle, game, "Uninstall")["installed"]
 
 
 def test_bundle_routes_installs_upgrades_game_switch_and_uninstall(package_game, universal_bundle):
