@@ -46,6 +46,7 @@ return function(fields)
                 if
                     expected[id]
                     and entity
+                    and attachment.path ~= path
                     and entity:Exists()
                     and entity.Type == types.ENTITY_LASER
                     and native.laser_project(path, true) == expected[id]

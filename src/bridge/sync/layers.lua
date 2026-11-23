@@ -1,5 +1,5 @@
--- Split complete views by update frequency. Only this module knows game fields;
--- the transport carries two opaque byte strings and an exact revision dependency.
+-- Split a complete combat view from its reliable dependency and optional laser detail.
+-- The transport treats each payload as opaque.
 return function(fields, project, expand)
     local Actor, Room, Entity, Inventory =
         fields.actor, fields.room, fields.entity, fields.inventory
