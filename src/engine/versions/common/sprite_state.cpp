@@ -227,6 +227,17 @@ void validateAnimation(Address state, const pose::State& value) {
         count(nullData + i * bindings.animationLayer.stride, bindings.animationLayer.nullFrameCount,
               pose::maxFrames);
 }
+int hasShadowLayer(lua_State* L) {
+    try {
+        const auto s = sprite(L);
+        const int layer = at<int>(s, bindings.sprite.shadow);
+        lua.pushBoolean(L, layer >= 0 && findLayer(s, layer));
+    } catch (const std::exception& error) {
+        runtime::abort(error.what());
+        lua.pushBoolean(L, false);
+    }
+    return 1;
+}
 int animationLength(lua_State* L) {
     try {
         const auto data =
@@ -400,6 +411,8 @@ bool bind(lua_State* L, HMODULE module, Address base) {
     lua.setField(L, -2, "sprite_graphics_loaded");
     lua.pushClosure(L, animationLength, 0);
     lua.setField(L, -2, "sprite_animation_length");
+    lua.pushClosure(L, hasShadowLayer, 0);
+    lua.setField(L, -2, "sprite_has_shadow_layer");
     return true;
 }
 } // namespace isaac::engine::native_sprite

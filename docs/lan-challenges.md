@@ -89,6 +89,10 @@
 
 [开局组件](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/challenges/delete_this.lua)只由权威端初始化每个席位一次；跨房、跨层、重复视图不重复发放，后续移除错误技不会被立即补回。错误道具使用已有的[生成定义与库存契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/generated-item-definitions.md)。[原生挑战环境能力](https://github.com/BMingSY/isaac-lan/blob/main/docs/generated-challenge.md)提供原版房间外观与路线查询，不接管联机选角和奖杯完成流程。
 
+## 1007 捕风捉影
+
+所有玩家和敌人的本体隐形，靠地面阴影判断位置。普通难度，2–4 人自由选角，房主可选房间规则。击败妈腿后领取奖杯，全队完成挑战。
+
 ## 规则与生命周期
 
 切换规则清空全员准备状态；加入、选角、准备和启动分别校验本机存档资格及规则代次。普通选角使用原生菜单目录与可选判定，包含本机已加载的 Mod 角色。新开局所需的消耗型资格不重复限制已有角色恢复。

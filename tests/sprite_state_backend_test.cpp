@@ -249,6 +249,8 @@ int main() {
         require(emptyPacket == emptyGolden && emptyBefore.matches(empty),
                 "Empty Sprite encoding changed or capture modified its resources");
         auto wrapper = capture(empty);
+        require(sprite::hasShadowLayer(&wrapper) == 1 && !wrapper.success,
+                "Sprite without an authored shadow requested its own layer");
         wrapper.userdataBytes = 0x11c;
         wrapper.output.clear();
         sprite::state(&wrapper);
@@ -259,11 +261,16 @@ int main() {
             sprite::state(&wrapper);
             require(wrapper.output.empty() && !wrapper.success,
                     "Invalid Sprite userdata was dereferenced");
+            sprite::hasShadowLayer(&wrapper);
+            require(!wrapper.success, "Invalid Sprite wrapper reported a shadow layer");
         }
 
         NativeSprite one;
         field<unsigned>(one.object.data(), 0x80) = 1;
         field<int>(one.object.data(), 0x10c) = 7;
+        auto withShadow = capture(one);
+        require(sprite::hasShadowLayer(&withShadow) == 1 && withShadow.success,
+                "Authored shadow layer must be matched by ID");
         auto golden = hexBytes("02000000000007") + std::string(88, '\0') +
                       hexBytes("3f800000aabbccdd010001000700057368656574010001");
         for (unsigned i = 0; i < 18; ++i)

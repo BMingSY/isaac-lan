@@ -2620,7 +2620,8 @@ bool render(void* g, RoomCall original, int slot) {
         audio::present();
         presentation::pickup_preview::prepare();
         presentation::items::withScreen([&] {
-            presentation::outlines::withPlayers(connected(), [&] {
+            const auto outlinePlayers = runtime::showPlayerOutlines() ? connected() : 0u;
+            presentation::outlines::withPlayers(outlinePlayers, [&] {
                 presentation::player_opacity::withPlayers(values(roster()), connected(), [&] {
                     combat_feedback::withPresentation(room->pointer, [&] { original(g); });
                 });

@@ -1816,6 +1816,11 @@ bool challengeActive() {
     return session && (session->phase() == lan::Phase::running || saves.networkRun) &&
            session->settings().rules.id != 0;
 }
+bool showPlayerOutlines() {
+    const auto* definition =
+        challengeActive() ? compat::challenges::find(session->settings().rules.id) : nullptr;
+    return !definition || !definition->hidePlayerOutlines;
+}
 bool allowChallengeEvent(const char* event) {
     if (!challengeActive() || replica())
         return true;

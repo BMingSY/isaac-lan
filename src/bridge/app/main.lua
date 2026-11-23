@@ -202,6 +202,13 @@ local battle = _IsaacLanModules["compat/challenges/battle_royale"]({
         }),
     }),
 })
+local shadows = _IsaacLanModules["compat/challenges/chasing_shadows"](Game, SeedEffect)
+local renderShadow = _IsaacLanModules["presentation/challenge_shadows"](
+    shadows.active,
+    native.sprite_has_shadow_layer
+)
+callback(ModCallbacks.MC_POST_PLAYER_RENDER, renderShadow)
+callback(ModCallbacks.MC_POST_NPC_RENDER, renderShadow)
 challenge = _IsaacLanModules["runtime/challenges"]({
     native = native,
     game = Game,
@@ -214,6 +221,7 @@ challenge = _IsaacLanModules["runtime/challenges"]({
     },
     effects = {
         [battleRules.id] = battle,
+        [1007] = shadows,
         [1006] = _IsaacLanModules["compat/challenges/delete_this"]({
             party = allocation.party,
             scoped = allocation.scoped,
@@ -559,6 +567,7 @@ callback(ModCallbacks.MC_POST_GAME_STARTED, function(_, continued)
     _IsaacLanState.reset()
     continuedRun = continued
     if lifecycle.gameStarted(continued) then
+        challenge.gameStarted()
         math.randomseed(game:GetSeeds():GetStartSeed())
         log("GAME_STARTED " .. game:GetSeeds():GetStartSeedString())
         if status.firstTick > 0 then
