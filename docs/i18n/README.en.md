@@ -124,4 +124,6 @@ For GitHub reports, include the game and extension versions, host or guest role,
 
 ## Contributing and license
 
-Contributions are welcome in English or Chinese. You can use Isaac LAN commercially, including in monetized streams, videos and paid hosting. Anyone distributing the mod or a modified version must make that copy available free of charge. Third-party components retain their own licenses. [Contribution guide](https://github.com/BMingSY/isaac-lan/blob/main/CONTRIBUTING.md#english) · [Project license](https://github.com/BMingSY/isaac-lan/blob/main/LICENSE) · [Third-party notices](https://github.com/BMingSY/isaac-lan/tree/main/third_party)
+To contribute, see the [contribution guide](https://github.com/BMingSY/isaac-lan/blob/main/CONTRIBUTING.md#english).
+
+Do not sell this mod or any modified version of it. See the [project license](https://github.com/BMingSY/isaac-lan/blob/main/LICENSE).
