@@ -8,6 +8,7 @@
 namespace isaac::compat::challenges {
 // The core run-rules regression checks this sentinel against the lobby contract.
 inline constexpr std::uint16_t unrestrictedCharacter = 65535;
+inline constexpr std::string_view blueBabyRoute = "blue_baby";
 struct Definition {
     std::uint16_t id, version, character;
     std::uint8_t difficulty;
@@ -22,6 +23,7 @@ struct Definition {
     bool largeFloor = false;
     bool nextPlayerShooting = false;
     bool deleteThis = false;
+    bool crimeMode = false;
 };
 inline constexpr std::array definitions{
     Definition{
@@ -110,7 +112,7 @@ inline constexpr std::array definitions{
         0,
         true,
         "挑战45",
-        "blue_baby",
+        blueBabyRoute,
         ids::ending::epilogue,
         ids::stage::chestOrDarkRoom,
         ids::stageType::wrathOfTheLamb,
@@ -121,6 +123,21 @@ inline constexpr std::array definitions{
         false,
         false,
         true,
+    },
+    Definition{
+        .id = 1008,
+        .version = 2,
+        .character = unrestrictedCharacter,
+        .difficulty = 0,
+        .transient = true,
+        .name = "幺幺幺九",
+        .route = blueBabyRoute,
+        .ending = ids::ending::epilogue,
+        .goalStage = ids::stage::chestOrDarkRoom,
+        .goalStageType = ids::stageType::wrathOfTheLamb,
+        .nextBag = false,
+        .requiredAchievements = {},
+        .crimeMode = true,
     },
 };
 inline const Definition* find(unsigned id) {

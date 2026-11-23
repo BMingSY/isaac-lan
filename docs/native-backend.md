@@ -290,6 +290,8 @@ Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；�
 
 ## 楼层生成
 
+联机开局在新建的 0x5c 字节 `Seeds` 上设置房主的普通地图种子。启用犯罪模式时，[忏悔＋会话绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance_plus/session_backend.cpp)在交给 `Manager::StartNewGame` 之前调用原生 `Seeds::AddSeedEffect(80)`。该入口 RVA 为 `0x2f67d0`，使用 `thiscall` 并校验入口签名。游戏负责分配效果集合节点并消费按值传入的开局对象。此能力只用于本次开局，忏悔后端不提供该入口。
+
 [floor_generation.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/floor_generation.h) 接受运行层提供的同步布尔查询，仅选择原版超大层生成分支。忏悔＋的房间数量判断位于 RVA `0x34895f`，布局判断位于 RVA `0x34940f`；两处均为对 `Game+0x26594` 原生挑战编号的七字节比较指令。入口与后续条件跳转受启动签名校验。
 
 后端在原比较后的条件跳转处接入；查询为 true 时，仅将其算术标志改为相等比较的结果，再执行原版分支。通用寄存器、栈、SSE、x87 与 MXCSR 均恢复，不写 `Game.Challenge`、诅咒、种子、布局或原生容器。房间数量抽样、随机数推进、布局与房间对象分配仍由原版负责。查询适用于首层、换层与重新生成；无活动挑战时保留原生行为。玩法匹配由上层挑战目录负责。两个 Hook 成组安装，失败只回滚本次创建的 Hook；相同图像和回调可以复用已安装组件，供外层会话装配失败后重试。[原版绑定](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-repentance.md#楼层生成)使用独立的比较位置。

@@ -23,6 +23,7 @@ struct Callbacks {
     void (*completionAward)(unsigned counter, unsigned bits, unsigned achievement);
     bool (*largeFloor)();
     bool (*deleteThis)();
+    bool (*blueBabyRoute)();
 };
 bool install(std::uintptr_t image, const Callbacks& callbacks);
 bool managerReady();
@@ -65,7 +66,8 @@ void hideConsole();
 std::string executeConsole(std::string_view command);
 void controls();
 std::uint32_t parseSeed(std::string_view text);
-void start(std::uint32_t seed, int character, unsigned difficulty);
+bool supportsCrimeMode();
+bool start(std::uint32_t seed, int character, unsigned difficulty, bool crimeMode);
 void requestContinue();
 lan::Stage stage();
 void applyStage(const lan::Stage& value);

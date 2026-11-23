@@ -169,7 +169,7 @@ bool install(std::uintptr_t base, const Callbacks& handlers) {
     };
     bool success =
         installFloorGeneration(image, callbacks.largeFloor) &&
-        installGeneratedChallenge(image, callbacks.deleteThis) &&
+        installGeneratedChallenge(image, callbacks.deleteThis, callbacks.blueBabyRoute) &&
         hook(image + binding.entry.save, saveHook, originalSave) &&
         hook(image + binding.entry.deleteSave, deleteHook, originalDelete) &&
         (!binding.entry.deleteSlotFile ||
@@ -361,13 +361,21 @@ std::uint32_t parseSeed(std::string_view text) {
     using Parse = std::uint32_t(__cdecl*)(const SmallString*);
     return reinterpret_cast<Parse>(image + binding.entry.parseSeed)(&value);
 }
-void start(std::uint32_t seed, int character, unsigned difficulty) {
+bool supportsCrimeMode() {
+    return binding.enableCrimeMode != nullptr;
+}
+bool start(std::uint32_t seed, int character, unsigned difficulty, bool crimeMode) {
+    if (crimeMode && !supportsCrimeMode())
+        return false;
     Seeds seeds{};
     using Set = void(__attribute__((thiscall))*)(void*, std::uint32_t);
     reinterpret_cast<Method>(image + binding.entry.constructSeeds)(&seeds);
     reinterpret_cast<Set>(image + binding.entry.setSeed)(&seeds, seed);
+    if (crimeMode)
+        binding.enableCrimeMode(image, &seeds);
     reinterpret_cast<Start>(image + binding.entry.startNew)(reinterpret_cast<void*>(manager()),
                                                             character, 0, seeds, difficulty);
+    return true;
 }
 void requestContinue() {
     at<bool>(manager(), binding.managerLayout.continueRequested) = true;

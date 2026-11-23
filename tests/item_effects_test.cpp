@@ -18,7 +18,7 @@
 #include <cstring>
 
 namespace isaac::engine {
-bool installGeneratedChallenge(std::uintptr_t, bool (*)()) {
+bool installGeneratedChallenge(std::uintptr_t, bool (*)(), bool (*)()) {
     return true;
 }
 } // namespace isaac::engine
