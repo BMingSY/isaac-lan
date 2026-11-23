@@ -21,6 +21,8 @@ return function(fields)
                 return {
                     parent = follows and parent or 0,
                     path = value[Entity.laserPath],
+                    x = 0,
+                    y = 0,
                     endpoint = value[Entity.laserEndPoint],
                 }
             elseif
@@ -29,6 +31,27 @@ return function(fields)
                 and parent ~= 0
             then
                 return { parent = parent }
+            end
+        end
+        -- Runtime admits detail only for the committed generation and tick. Updating
+        -- the stored path lets the normal render pass apply the current parent offset.
+        local function refine(bytes, motion, ref, tick, expected)
+            local at = 1
+            while at <= #bytes do
+                local id, path
+                id, path, at = string.unpack(">i8s2", bytes, at)
+                local model = motion[id]
+                local attachment = model and model.attachment
+                local entity = attachment and attachment.path and model.tick == tick and ref(id)
+                if
+                    expected[id]
+                    and entity
+                    and entity:Exists()
+                    and entity.Type == types.ENTITY_LASER
+                    and native.laser_project(path, true) == expected[id]
+                then
+                    attachment.path, attachment.x, attachment.y = path, nil, nil
+                end
             end
         end
         local function present(motion, ref)
@@ -51,7 +74,7 @@ return function(fields)
                 local value = false
                 if holders[identifier] then
                     value = offset(holders[identifier])
-                elseif model.actor then
+                elseif model.actor or (model.track and model.track.npc) then
                     value = model.display - model.target
                 elseif model.attachment and model.attachment.parent ~= 0 then
                     value = offset(model.attachment.parent)
@@ -100,6 +123,6 @@ return function(fields)
                 end
             end
         end
-        return { capture = capture, present = present }
+        return { capture = capture, present = present, refine = refine }
     end
 end

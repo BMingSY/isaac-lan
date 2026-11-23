@@ -15,7 +15,7 @@
 
 namespace isaac::lan {
 using RunRules = isaac::RunRules;
-constexpr std::uint16_t protocolVersion = 56;
+constexpr std::uint16_t protocolVersion = 57;
 constexpr std::size_t maxPlayers = 4;
 constexpr std::size_t actionCount = 16;
 constexpr std::uint16_t maxInputValue = 65535;
@@ -23,6 +23,7 @@ constexpr unsigned allPlayersMask = (1u << maxPlayers) - 1;
 constexpr std::size_t maxMessageSize = 4096;
 constexpr std::size_t maxSnapshotSize = 8 * 1024 * 1024;
 constexpr std::size_t maxWorldSize = 2 * 1024 * 1024;
+constexpr std::size_t maxWorldDetail = 64 * 1024;
 enum class Message : std::uint8_t {
     hello = 1,
     welcome,
@@ -310,6 +311,14 @@ struct WorldState {
     // revision and only delivers a view with the exact matching dependency.
     std::vector<std::uint8_t> stable;
     std::uint32_t revision = 0;
+    std::vector<std::uint8_t>
+        detail;              // Optional sender payload, excluded from the gameplay baseline.
+    std::uint32_t fence = 0; // Receiver-local delivery generation.
+};
+
+struct WorldDetail {
+    std::uint32_t fence, tick;
+    std::vector<std::uint8_t> bytes;
 };
 
 class Writer {

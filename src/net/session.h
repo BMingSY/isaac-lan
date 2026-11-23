@@ -65,7 +65,9 @@ class Session {
     bool ready();
     bool publish(unsigned slot, WorldState state);
     bool captureRequested(unsigned slot) const;
+    std::size_t detailBudget(unsigned slot) const;
     std::optional<WorldState> takeState();
+    std::unique_ptr<WorldDetail> takeDetail(const WorldState& applied);
     bool beginStage(const Stage&);
     std::optional<Stage> takeStage();
     bool cinematicReady();

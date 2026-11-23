@@ -449,13 +449,16 @@ void publishState() {
         lua.rawGetI(state, registry, captureStateRef);
         lua.pushInteger(state, slot);
         lua.pushInteger(state, currentTick);
-        if (!call(captureStateRef, 2, 2, top))
+        lua.pushInteger(state, session->detailBudget(slot));
+        if (!call(captureStateRef, 3, 3, top))
             return;
         captureCost.sample(began, "capture");
         std::size_t size = 0;
-        const auto bytes = lua.toString(state, -2, &size);
+        const auto bytes = lua.toString(state, -3, &size);
         std::size_t stableSize = 0;
-        const auto stable = lua.toString(state, -1, &stableSize);
+        const auto stable = lua.toString(state, -2, &stableSize);
+        std::size_t detailSize = 0;
+        const auto detail = lua.toString(state, -1, &detailSize);
         if (!bytes || !size || size + stableSize + sizeof(std::uint32_t) > lan::maxWorldSize) {
             lua.setTop(state, top);
             fail("Invalid authoritative world state");
@@ -470,6 +473,8 @@ void publishState() {
         packet.bytes.assign(bytes, bytes + size);
         if (stableSize)
             packet.stable.assign(stable, stable + stableSize);
+        if (detail && detailSize <= lan::maxWorldDetail)
+            packet.detail.assign(detail, detail + detailSize);
         session->publish(slot, std::move(packet));
         lua.setTop(state, top);
     }
@@ -1981,7 +1986,14 @@ void present() {
     // Movement displayed between network samples belongs to the upcoming
     // input, not the last sent sample (which the host may already acknowledge).
     lua.pushInteger(state, nextInputTick);
-    if (call(presentRef, 2, 0, top)) {
+    int arguments = 2;
+    if (view.authoritative)
+        if (auto detail = session->takeDetail(*view.authoritative)) {
+            lua.pushLString(state, reinterpret_cast<const char*>(detail->bytes.data()),
+                            detail->bytes.size());
+            ++arguments;
+        }
+    if (call(presentRef, arguments, 0, top)) {
         if (diagnostics::enabled() && nextInputTick)
             if (auto elapsed = inputLatency.present(nextInputTick - 1))
                 diagnostics::sample("input.present", *elapsed);

@@ -3197,6 +3197,56 @@ void reliableReceive() {
         rejects([&] { receiver.floor(changed); }, "Mixed rewind metadata accepted");
     }
 }
+void worldDetail() {
+    Group group(2);
+    group.ready();
+    auto publish = [&](unsigned tick, std::size_t extra) {
+        group.step(tick);
+        WorldState state;
+        state.tick = tick;
+        state.connected = 3;
+        state.bytes = {static_cast<std::uint8_t>(tick), 19, 21};
+        state.detail.assign(extra, static_cast<std::uint8_t>(tick));
+        require(group.peers[0]->publish(1, state), "Core publication rejected");
+        std::optional<WorldState> received;
+        until([&] {
+            group.poll();
+            received = group.peers[1]->takeState();
+            return received.has_value();
+        });
+        require(received->bytes == state.bytes && received->tick == tick &&
+                    received->detail.empty(),
+                "Optional bytes altered the independently delivered core");
+        group.peers[1]->applied(tick);
+        until([&] {
+            group.poll();
+            return group.peers[0]->resources().inFlightStates == 0;
+        });
+        return *received;
+    };
+    publish(0, 0);
+    Sleep(200); // Supply a receiver-clock delivery window before probing detail.
+    const auto first = publish(1, 0);
+    const auto next = publish(2, 128);
+    require(!group.peers[1]->takeDetail(first), "Future detail attached to an old frame");
+    std::unique_ptr<WorldDetail> received;
+    until([&] {
+        group.poll();
+        received = group.peers[1]->takeDetail(next);
+        return bool(received);
+    });
+    require(received->bytes == std::vector<std::uint8_t>(128, 2) &&
+                !group.peers[1]->takeDetail(next),
+            "Detail changed bytes or applied twice");
+    auto differentScene = publish(3, 64);
+    ++differentScene.fence;
+    require(!group.peers[1]->takeDetail(differentScene), "Detail crossed a run/floor fence");
+    const auto newest = publish(4, maxWorldDetail);
+    require(!group.peers[1]->takeDetail(newest),
+            "Oversized decoration occupied the gameplay budget");
+    const auto overflow = publish(5, maxWorldDetail + 1);
+    require(!group.peers[1]->takeDetail(overflow), "Over-limit detail blocked or altered the core");
+}
 void worldDeltas() {
     Group g(4);
     g.ready();
@@ -3537,6 +3587,7 @@ int main(int argc, char** argv) {
         argc, argv,
         {{"codec", codec},
          {"world-deltas", worldDeltas},
+         {"world-detail", worldDetail},
          {"sampled-compression", sampledCompression},
          {"capture-demand", captureDemand},
          {"wire-compression", wireCompression},

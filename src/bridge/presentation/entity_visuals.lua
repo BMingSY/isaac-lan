@@ -71,7 +71,10 @@ return function(fields)
                         -- Never cross an unconfirmed animation boundary or invent an event.
                         local frame =
                             math.min(visual.length - 1, visual.frame + age * rate * visual.speed)
-                        sprite:SetFrame(visual.animation, math.floor(frame))
+                        local target = math.floor(frame)
+                        if sprite:GetFrame() ~= target then
+                            sprite:SetFrame(visual.animation, target)
+                        end
                     end
                 end
                 if visual.height then

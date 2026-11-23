@@ -14,12 +14,116 @@ local cases = {
     { name = "tears-500", tears = 500 },
     { name = "lasers-64", lasers = 64 },
 }
+if options.combat then
+    cases = { cases[1], cases[2], { name = "moving-enemy-fire", lasers = 64, combat = true } }
+end
 local tick, renders, linked, chosen, finished = 0, 0, false, false, false
 local samples, tracked, lastRender = {}, {}, nil
 local measured, origin, other, floorSeed = false, nil, nil, nil
 local checkedViews, afterFloor, lastChecked = 0, 0, -math.huge
 local populationTick = -math.huge
 local comboLasers = 0
+local shooter, hostileShot
+local combatViews, combatTicks, combatBirths, combatRetirements = 0, -1, 0, 0
+local lastShot
+local combatPositions = {}
+local function inspectCombat(t, at)
+    assert(t > combatTicks, "A combat view moved backwards")
+    combatTicks = t
+    local enemy, shots = nil, {}
+    for _, e in ipairs(Isaac.GetRoomEntities()) do
+        if e:Exists() then
+            if e.Type == EntityType.ENTITY_GAPER then
+                enemy = e
+            elseif e.Type == EntityType.ENTITY_PROJECTILE then
+                shots[#shots + 1] = e
+            end
+        end
+    end
+    assert(#shots <= 1, "A retired hostile shot remained visible")
+    local shot = shots[1]
+    if shot then
+        assert(
+            enemy and shot.SpawnerEntity and GetPtrHash(shot.SpawnerEntity) == GetPtrHash(enemy),
+            "Shot arrived without its shooter at tick " .. t
+        )
+    end
+    local function mark(entity)
+        if not entity then
+            return "0,0,0"
+        end
+        local data = entity:GetData()
+        local id = config.host and data.__isaac_lan_entity or data.__isaac_lan_replica
+        return string.format("%d,%.3f,%.3f", assert(id), entity.Position.X, entity.Position.Y)
+    end
+    combatPositions[#combatPositions + 1] = t
+        .. ","
+        .. at
+        .. ","
+        .. mark(enemy)
+        .. ","
+        .. mark(shot)
+    if #combatPositions >= 30 then
+        Isaac.DebugString("LAN_COMBAT_POSITIONS " .. table.concat(combatPositions, ";"))
+        combatPositions = {}
+    end
+    local id = shot
+        and (
+            config.host and shot:GetData().__isaac_lan_entity or shot:GetData().__isaac_lan_replica
+        )
+    if id and id ~= lastShot then
+        combatBirths = combatBirths + 1
+    end
+    if not id and lastShot then
+        combatRetirements = combatRetirements + 1
+    end
+    lastShot, combatViews = id, combatViews + 1
+end
+local function moveCombat(t)
+    local age = (t - firstTick) % 90
+    local x = 280 + age
+    local function clear(pointer)
+        if pointer and pointer.Ref then
+            pointer.Ref:Remove()
+        end
+    end
+    if age >= 70 then
+        clear(shooter)
+        shooter = nil
+    else
+        if not shooter or not shooter.Ref then
+            local e = Isaac.Spawn(EntityType.ENTITY_GAPER, 0, 0, Vector(x, 240), Vector.Zero, nil)
+            e:AddEntityFlags(EntityFlag.FLAG_FREEZE)
+            e.HitPoints, e.MaxHitPoints = 10000, 10000
+            shooter = EntityPtr(e)
+        end
+        shooter.Ref.Position, shooter.Ref.Velocity = Vector(x, 240), Vector.Zero
+    end
+    if age >= 45 then
+        clear(hostileShot)
+        hostileShot = nil
+    else
+        if not hostileShot or not hostileShot.Ref then
+            local shot = Isaac.Spawn(
+                EntityType.ENTITY_PROJECTILE,
+                0,
+                0,
+                Vector(x, 240),
+                Vector.Zero,
+                shooter.Ref
+            ):ToProjectile()
+            shot.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
+            shot.GridCollisionClass = EntityGridCollisionClass.GRIDCOLL_NONE
+            hostileShot = EntityPtr(shot)
+        end
+        local shot = hostileShot.Ref:ToProjectile()
+        shot.Height, shot.FallingSpeed, shot.FallingAccel = -20, 0, 0
+        shot.Position, shot.Velocity = Vector(x + age * 2, 240), Vector.Zero
+    end
+    local p = Isaac.GetPlayer(0)
+    p.Position, p.Velocity = Vector(170 + 2 * math.abs(t % 120 - 60), 220), Vector.Zero
+end
+
 local observer = RegisterMod("Projectile pressure observations", 1)
 local function observeLaser()
     if tick >= firstTick + duration and tick < firstTick + 2 * duration then
@@ -32,9 +136,10 @@ local items = {
     CollectibleType.COLLECTIBLE_BRIMSTONE,
     CollectibleType.COLLECTIBLE_SACRED_HEART,
 }
-local function phase()
-    local index = math.floor((tick - firstTick) / duration) + 1
-    return cases[index], index, (tick - firstTick) % duration
+local function phase(at)
+    at = at or tick
+    local index = math.floor((at - firstTick) / duration) + 1
+    return cases[index], index, (at - firstTick) % duration
 end
 local function sample(name, value)
     local case, index, elapsed = phase()
@@ -57,11 +162,20 @@ native.diagnostics_sample = function(name, value)
 end
 local function report()
     assert(comboLasers > 0, "Reported loadout never fired a laser")
+    if combatViews > 0 then
+        Isaac.DebugString("LAN_COMBAT_POSITIONS " .. table.concat(combatPositions, ";"))
+        assert(combatBirths >= 2 and combatRetirements >= 2, "Combat lifecycle was not exercised")
+        Isaac.DebugString("LAN_COMBAT_COHERENCE " .. json.encode({
+            views = combatViews,
+            births = combatBirths,
+            retirements = combatRetirements,
+        }))
+    end
     for index, case in ipairs(cases) do
         local metrics = assert(samples[index], "Missing pressure phase: " .. case.name)
         assert(metrics.render and metrics.render.count >= 100, "Insufficient steady frames")
         local views = metrics[config.host and "capture" or "apply"]
-        assert(views and views.count >= 100, "Insufficient completed views")
+        assert(views and views.count >= (case.combat and 1 or 100), "Insufficient completed views")
         assert(
             metrics.tears
                 and metrics.tears.count >= 3
@@ -188,7 +302,7 @@ local function setup(case)
         end
         room:SetClear(true)
         room:Update()
-        tracked = {}
+        tracked, shooter, hostileShot = {}, nil, nil
         local player = Isaac.GetPlayer(assert(native.rooms_heads()["1"]))
         for _, item in ipairs(items) do
             if player:HasCollectible(item) then
@@ -369,6 +483,12 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             setup(case)
         end
         verifyLifecycle(t)
+        if case and case.combat then
+            if elapsed == warmup or elapsed == duration - 10 then
+                Isaac.DebugString("LAN_COMBAT_WINDOW " .. case.name .. " " .. Isaac.GetTime())
+            end
+            moveCombat(t)
+        end
         if options.verify and #tracked > 0 then
             assert(native.rooms_with_player(1, function()
                 updateTracked(t)
@@ -378,17 +498,27 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         end
     end, function(...)
         local began = Isaac.GetTime()
-        local bytes, stable = collect(...)
+        local bytes, stable, detail = collect(...)
+        local _, t = ...
+        local case = phase(t)
+        if case and case.combat then
+            inspectCombat(t, began)
+        end
         sample("capture", Isaac.GetTime() - began)
         sample("raw_bytes", #bytes)
-        return bytes, stable
+        return bytes, stable, detail
     end, function(bytes, t, ack, between, stable)
         tick = t
         local began = Isaac.GetTime()
         local result = restore(bytes, t, ack, between, stable)
-        sample("apply", Isaac.GetTime() - began)
+        local appliedAt = Isaac.GetTime()
+        sample("apply", appliedAt - began)
         sample("raw_bytes", #bytes)
         if result ~= false then
+            local case = phase()
+            if case and case.combat then
+                inspectCombat(t, appliedAt)
+            end
             verifyLinks(bytes, t, stable)
         end
         return result

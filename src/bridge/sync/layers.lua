@@ -1,6 +1,6 @@
 -- Split complete views by update frequency. Only this module knows game fields;
 -- the transport carries two opaque byte strings and an exact revision dependency.
-return function(fields)
+return function(fields, project, expand)
     local Actor, Room, Entity, Inventory =
         fields.actor, fields.room, fields.entity, fields.inventory
     local Location, HOST_SLOT = fields.location, 0
@@ -44,7 +44,66 @@ return function(fields)
         end
         return false
     end
-    local function split(view, memo)
+    -- Actors, NPC poses, hazards and every entity link always travel together.
+    -- Only an explicitly player-spawned beam may use a bounded drawing approximation.
+    local function projectRoom(view, realtime, cache)
+        if not project then
+            return
+        end
+        local source = view.room[Room.entities]
+        if cache and cache[source] then
+            local known = cache[source]
+            realtime.room[Room.entities] = known.entities
+            return known.details
+        end
+        local projected, players, details
+        for index, entity in ipairs(source) do
+            local path = entity[Entity.laserPath]
+            if path then
+                if not projected then
+                    projected, players = copy(source), {}
+                    for _, actor in ipairs(view.actors) do
+                        players[actor[Actor.entity][Entity.id]] = true
+                    end
+                end
+                local spawner = entity[Entity.spawner]
+                local owner = spawner ~= 0 and spawner or entity[Entity.parent]
+                local bytes, refine = project(path, players[owner] == true)
+                local value = copy(entity)
+                value[Entity.laserPath] = bytes
+                projected[index] = value
+                if refine then
+                    details = details or {}
+                    details[#details + 1] = entity
+                end
+            end
+        end
+        if projected then
+            realtime.room[Room.entities] = projected
+        end
+        if cache then
+            cache[source] = { entities = projected or source, details = details }
+        end
+        return details
+    end
+    local detailHeaderBytes = string.packsize(">i8I2")
+    local function detailWithin(records, tick, budget)
+        if not records or not budget or budget <= 0 then
+            return
+        end
+        local parts = {}
+        for i = 0, #records - 1 do
+            local record = records[(tick + i) % #records + 1]
+            local size = detailHeaderBytes + #record[Entity.laserPath]
+            if size <= budget then
+                parts[#parts + 1] =
+                    string.pack(">i8s2", record[Entity.id], record[Entity.laserPath])
+                budget = budget - size
+            end
+        end
+        return #parts > 0 and table.concat(parts) or nil
+    end
+    local function split(view, memo, projections, detailBudget)
         -- Capture owns this memo for one immutable generation. Projection copies
         -- actor/room containers, so cache their unchanged children instead. A
         -- single recipient needs no extra fragments; room data is shared only
@@ -75,15 +134,18 @@ return function(fields)
             end
             actors[index], realtime.actors[index] = stable, value
         end
-        if memo and sharedRoom(view) then
-            share(memo, view.room[Room.entities])
-            share(memo, view.room[Room.grids])
-        end
         realtime.room = copy(view.room)
         for index, field in ipairs(roomFields) do
             room[index], realtime.room[field] = view.room[field], false
         end
-        return realtime, { sharedValues, actors, room }
+        local detail = projectRoom(view, realtime, projections)
+        if memo and sharedRoom(view) then
+            share(memo, realtime.room[Room.entities])
+            share(memo, realtime.room[Room.grids])
+        end
+        return realtime,
+            { sharedValues, actors, room },
+            detailWithin(detail, view.tick, detailBudget)
     end
     local function join(view, stable)
         assert(
@@ -114,6 +176,19 @@ return function(fields)
         for index, field in ipairs(roomFields) do
             assert(view.room[field] == false, "Duplicate room field")
             view.room[field] = stable[3][index]
+        end
+        if expand then
+            for _, entity in ipairs(view.room[Room.entities]) do
+                if entity[Entity.laserPath] then
+                    local wire = entity[Entity.laserPath]
+                    local raw, refinable = expand(wire)
+                    entity[Entity.laserPath] = raw
+                    if refinable then
+                        view.laserRefinements = view.laserRefinements or {}
+                        view.laserRefinements[entity[Entity.id]] = wire
+                    end
+                end
+            end
         end
         return view
     end

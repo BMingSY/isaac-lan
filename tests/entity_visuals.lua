@@ -6,6 +6,9 @@ local sprite = { name = "Idle", frame = 2, PlaybackSpeed = 1 }
 function sprite:GetAnimation()
     return self.name
 end
+function sprite:GetFrame()
+    return self.frame
+end
 function sprite:SetFrame(name, frame)
     assert(name == self.name)
     self.frame, writes = frame, writes + 1
@@ -46,6 +49,9 @@ presentation.present(visual, entity, 1.05)
 assert(sprite.frame == 3 and entity.Height > -23)
 presentation.present(visual, entity, 1.06)
 local displayed = entity.Height
+local unchanged = writes
+presentation.present(visual, entity, 1.06)
+assert(writes == unchanged, "Repeated beam/tear render rewrote a settled animation frame")
 -- Restore authority before observing the next snapshot; no cumulative height drift.
 entity.Height = -22.8
 visual = presentation.observe(visual, entity, value, 1.06, 1.03)

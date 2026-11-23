@@ -26,7 +26,14 @@ class WorldPacing {
     double rate = initialRate, credit = minimumBurstDatagrams * datagram::mtu;
     std::optional<Clock::time_point> updated, adjusted;
     bool received = false;
-    PathLatency path;
+    PathLatency path, deliveryPath;
+    struct DeliveryWindow {
+        std::uint64_t bytes, milliseconds;
+        int minimumRtt;
+    };
+    std::optional<DeliveryWindow> deliveryWindow;
+    int baseRtt = -1;
+    std::size_t detailAllowance = 0;
     std::optional<Clock::time_point> delayedSince;
     unsigned delayedReceipts = 0;
     double burst() const {
@@ -51,6 +58,50 @@ class WorldPacing {
   public:
     double bytesPerSecond() const {
         return rate;
+    }
+    std::size_t optionalBudget() const {
+        return detailAllowance;
+    }
+    void delivery(std::uint64_t bytes, std::uint64_t milliseconds, int rtt, Clock::time_point now) {
+        constexpr auto routeHistory = std::chrono::seconds(30);
+        constexpr std::uint64_t windowMs = 150;
+        constexpr double utilization = 0.72, probeGain = 1.12, drainGain = 0.90;
+        constexpr double detailSeconds = 0.008;
+        if (deliveryWindow &&
+            (bytes < deliveryWindow->bytes || milliseconds < deliveryWindow->milliseconds))
+            return;
+        baseRtt = deliveryPath.observe(rtt, now, routeHistory);
+        if (!deliveryWindow) {
+            deliveryWindow = DeliveryWindow{bytes, milliseconds, rtt};
+            return;
+        }
+        auto& window = *deliveryWindow;
+        window.minimumRtt = std::min(window.minimumRtt, rtt);
+        const auto elapsed = milliseconds - window.milliseconds;
+        if (elapsed < windowMs)
+            return;
+        const auto delivered = (bytes - window.bytes) * 1000.0 / elapsed;
+        const bool queued = window.minimumRtt > baseRtt + queueAllowanceMs;
+        const bool saturated = delivered >= utilization * rate;
+        advance(now);
+        if (queued)
+            rate = std::clamp(std::min(rate, delivered * drainGain), minimumRate, maximumRate);
+        else if (saturated)
+            rate = std::clamp(std::max(rate, delivered) * probeGain, minimumRate, maximumRate);
+        // Empty rooms cannot demonstrate link capacity. Probe optional drawing data
+        // only in clear windows and leave room for the next gameplay publication.
+        detailAllowance =
+            queued || rtt > baseRtt + queueAllowanceMs
+                ? 0
+                : static_cast<std::size_t>(std::max(0.0, rate - delivered) * detailSeconds);
+        credit = std::min(credit, burst());
+        adjusted = now;
+        window = {bytes, milliseconds, rtt};
+    }
+    std::size_t flightBudget(int fallbackRtt) const {
+        const auto latency = baseRtt >= 0 ? baseRtt : fallbackRtt;
+        const auto interval = (std::max(latency, 0) + queueAllowanceMs) / 1000.0;
+        return std::max<std::size_t>(2 * datagram::mtu, static_cast<std::size_t>(rate * interval));
     }
     bool ready(std::size_t bytes, Clock::time_point now) {
         advance(now);

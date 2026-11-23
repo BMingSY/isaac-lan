@@ -46,10 +46,12 @@ struct ConnectionPipe {
     SpscQueue<NetworkSample, 64> samples;
     SpscQueue<WorldTransfer::Trace, 8> traces;
     LatestMailbox<WorldPublication> publication;
+    LatestMailbox<WorldDetail> detail;
     std::atomic<WorldGeneration> generation{};
     std::atomic<std::uint64_t> coalescedInputs{0};
     std::atomic<int> minimumLatency{-1};
     std::atomic<bool> captureRequested{true};
+    std::atomic<std::size_t> detailBudget{0};
     WorldObservation world;
     std::atomic<State> state;
     std::atomic<bool> closing{false}, answerPing{false};

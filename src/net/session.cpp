@@ -1840,6 +1840,8 @@ bool Session::publish(unsigned slot, WorldState state) {
         state.bytes.size() + state.stable.size() + (state.stable.empty() ? 0 : 4) > maxWorldSize ||
         state.tick >= impl->nextConsume)
         return false;
+    if (state.detail.size() > maxWorldDetail)
+        state.detail.clear();
     if (auto& p = impl->peers[slot]; p && p->ready)
         p->pending = std::move(state);
     return true;
@@ -1852,6 +1854,12 @@ bool Session::captureRequested(unsigned slot) const {
     return peer && peer->ready && !peer->pending && peer->pipe &&
            peer->pipe->captureRequested.load(std::memory_order_acquire);
 }
+std::size_t Session::detailBudget(unsigned slot) const {
+    if (!slot || slot >= impl->playerCount || !impl->peers[slot] || !impl->peers[slot]->pipe)
+        return 0;
+    return std::min(maxWorldDetail,
+                    impl->peers[slot]->pipe->detailBudget.load(std::memory_order_relaxed));
+}
 std::optional<WorldState> Session::takeState() {
     if (impl->hosting || !impl->localReady || !impl->receivedState)
         return {};
@@ -1860,6 +1868,22 @@ std::optional<WorldState> Session::takeState() {
     impl->activeMask = value->connected;
     impl->takenWorldEpoch = value->epoch;
     return value;
+}
+std::unique_ptr<WorldDetail> Session::takeDetail(const WorldState& applied) {
+    if (impl->hosting || impl->state != Phase::running || !impl->peers[0] || !impl->peers[0]->pipe)
+        return {};
+    auto& peer = *impl->peers[0];
+    if (auto latest = peer.pipe->detail.take())
+        peer.pendingDetail = std::move(latest);
+    if (!peer.pendingDetail)
+        return {};
+    const auto key = std::pair{peer.pendingDetail->fence, peer.pendingDetail->tick};
+    const auto current = std::pair{applied.fence, applied.tick};
+    if (key < current)
+        peer.pendingDetail.reset();
+    else if (key == current)
+        return std::move(peer.pendingDetail);
+    return {};
 }
 void Session::applied(std::uint32_t tick) {
     if (impl->hosting || impl->state != Phase::running ||

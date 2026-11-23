@@ -8,7 +8,7 @@ return function(fields)
         local entity, inventory, sprite = deps.entity, deps.inventory, deps.sprite
         local poop, craftingBag = deps.poop, deps.craftingBag
         local captureTick, captureEpoch, captureActors, captureVisuals = nil, nil, {}, {}
-        local inventoryCatalog = {}
+        local inventoryCatalog, projectedRooms = {}, {}
         local captureEncoded, locations, shared = {}, nil, nil
         local captureStarted = 0
         local previousActors, previousEncoded, previousMap = {}, {}, {}
@@ -19,11 +19,11 @@ return function(fields)
             captureActors, captureVisuals, captureEncoded = {}, {}, {}
             previousActors, previousEncoded, previousMap, currentMap = {}, {}, {}, {}
             currentGrids = {}
-            inventoryCatalog = {}
+            inventoryCatalog, projectedRooms = {}, {}
             locations, shared = nil, nil
             roomState = deps.roomFactory()
         end
-        local function capture(slot, tick, layered)
+        local function capture(slot, tick, layered, detailBudget)
             local game = deps.game()
             local level = game:GetLevel()
             local epoch = native.net_floor_epoch()
@@ -51,7 +51,7 @@ return function(fields)
                 captureTick, captureEpoch = tick, epoch
                 captureStarted = deps.clock and deps.clock() or 0
                 captureActors, captureVisuals, captureEncoded = {}, {}, {}
-                inventoryCatalog = {}
+                inventoryCatalog, projectedRooms = {}, {}
                 locations, shared = nil, nil
             end
             locations = locations or native.rooms_positions()
@@ -249,9 +249,11 @@ return function(fields)
             value.items = deps.items.capture(slot)
             value.combat = native.combat_events and assert(native.combat_events(slot)) or nil
             if layered then
-                local realtime, stable = deps.layers.split(value, captureEncoded)
+                local realtime, stable, detail =
+                    deps.layers.split(value, captureEncoded, projectedRooms, detailBudget)
                 return encode(worldSchema.pack(realtime), captureEncoded),
-                    encode(stable, captureEncoded)
+                    encode(stable, captureEncoded),
+                    detail
             end
             return encode(worldSchema.pack(value), captureEncoded)
         end

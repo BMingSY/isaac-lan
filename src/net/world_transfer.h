@@ -53,6 +53,7 @@ class WorldTransfer {
     int minimumLatency = 0;
     int networkLatency = -1;
     unsigned sinceComparison = 0;
+    std::optional<std::uint32_t> transportReceipt;
 
   public:
     void resetSender() {
@@ -69,6 +70,7 @@ class WorldTransfer {
         sentAt = {};
         pacing = {};
         sinceComparison = 0;
+        transportReceipt.reset();
     }
     void resetReceiver() {
         decoded.clear();
@@ -111,11 +113,22 @@ class WorldTransfer {
     std::size_t inFlightStates() const {
         return flight.size();
     }
+    std::size_t optionalBudget() const {
+        return pacing.optionalBudget();
+    }
+    std::size_t flightLimit() const {
+        return transportReceipt ? std::min(maxInFlightBytes, pacing.flightBudget(minimumLatency))
+                                : maxInFlightBytes;
+    }
     bool permitDatagram(std::size_t bytes) {
         return pacing.consume(bytes, Clock::now());
     }
     void observeLatency(int milliseconds) {
         networkLatency = milliseconds;
+    }
+    void accountDetail(std::size_t bytes) {
+        pacing.reserve(bytes, Clock::now());
+        totals.wire += bytes;
     }
     void accountWire(std::uint32_t tick, std::size_t bytes, bool reliable = false) {
         for (auto& value : flight)
@@ -163,8 +176,27 @@ class WorldTransfer {
             return true;
         if (!flight.empty() && Clock::now() - flight.front().started >= lostStateAge)
             return true;
-        return flight.size() < window(latency) && inFlightBytes() < maxInFlightBytes &&
+        return flight.size() < window(latency) && inFlightBytes() < flightLimit() &&
                cachedBytes() < maxCachedBytes;
+    }
+    void delivered(std::uint32_t tick, std::uint64_t bytes, std::uint64_t milliseconds) {
+        if (transportReceipt && tick <= *transportReceipt)
+            return;
+        const auto found = std::find_if(flight.begin(), flight.end(), [&](const Cached& item) {
+            return item.tick == tick && item.complete;
+        });
+        // An application receipt on the other channel may already have retired this entry.
+        const Cached* view = found != flight.end() ? &*found : nullptr;
+        if (!view && baseline && baseline->tick == tick)
+            view = &*baseline;
+        if (!view)
+            return;
+        const auto now = Clock::now();
+        const auto ms = std::chrono::duration<double, std::milli>(now - view->transmitted).count();
+        // Receipt is generated on the network thread before Lua applies the world.
+        // A queued relay can delay these probes without changing ENet's smoothed RTT.
+        pacing.delivery(bytes, milliseconds, static_cast<int>(ms), now);
+        transportReceipt = tick;
     }
     bool acknowledge(std::uint32_t epoch, std::uint32_t tick) {
         if (epoch < sendEpoch)
@@ -177,11 +209,12 @@ class WorldTransfer {
             baseline = std::move(recovery);
             recovery.reset();
             baselineAt = Clock::now();
-            pacing.acknowledge(
-                baseline->wireBytes,
-                std::chrono::duration<double, std::milli>(baselineAt - baseline->transmitted)
-                    .count(),
-                networkLatency, baselineAt);
+            if (!transportReceipt)
+                pacing.acknowledge(
+                    baseline->wireBytes,
+                    std::chrono::duration<double, std::milli>(baselineAt - baseline->transmitted)
+                        .count(),
+                    networkLatency, baselineAt);
             while (!flight.empty() && flight.front().tick <= tick)
                 flight.pop_front();
             return true;
@@ -195,10 +228,12 @@ class WorldTransfer {
             return false;
         baseline = *found;
         baselineAt = Clock::now();
-        pacing.acknowledge(
-            baseline->wireBytes,
-            std::chrono::duration<double, std::milli>(baselineAt - baseline->transmitted).count(),
-            networkLatency, baselineAt);
+        if (!transportReceipt)
+            pacing.acknowledge(
+                baseline->wireBytes,
+                std::chrono::duration<double, std::milli>(baselineAt - baseline->transmitted)
+                    .count(),
+                networkLatency, baselineAt);
         flight.erase(flight.begin(), std::next(found));
         return true;
     }
@@ -225,7 +260,7 @@ class WorldTransfer {
             while (!flight.empty() && Clock::now() - flight.front().started >= lostStateAge)
                 flight.pop_front();
             if (!pacing.ready(datagram::mtu, Clock::now()) ||
-                flight.size() >= window(minimumLatency) || inFlightBytes() >= maxInFlightBytes ||
+                flight.size() >= window(minimumLatency) || inFlightBytes() >= flightLimit() ||
                 cachedBytes() + pending->bytes.capacity() > maxCachedBytes)
                 return {};
             sending = std::move(pending);
