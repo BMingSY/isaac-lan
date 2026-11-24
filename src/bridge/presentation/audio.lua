@@ -1,6 +1,8 @@
 -- Audience selection is performed by the engine before these events arrive.
 return function(native, sfxManager)
     local unpack = string.unpack
+    local levelFormat = ">I4ff"
+    local levelSize, nativeLoopDelay = string.packsize(levelFormat), 2
     local hostLoops, replicaLoops, lastSound = {}, {}, 0
     local function soundEvents(bytes)
         local result, cursor = {}, 1
@@ -12,8 +14,8 @@ return function(native, sfxManager)
         end
         return result
     end
-    local function captureSound(slot)
-        local bytes = native.sound_events(slot)
+    local function captureSound(slot, view)
+        local bytes, levels = native.sound_events(slot, view.dimension, view.index)
         local loops = hostLoops[slot] or {}
         hostLoops[slot] = loops
         for _, event in ipairs(soundEvents(bytes)) do
@@ -21,9 +23,18 @@ return function(native, sfxManager)
                 loops[event[3]] = event
             end
         end
-        local playing = {}
+        local playing, mixed = {}, {}
+        for cursor = 1, #(levels or ""), levelSize do
+            local id, volume, pitch = unpack(levelFormat, levels, cursor)
+            -- The active-loop tuple is the existing wire representation. The
+            -- room mixer supplies levels without manufacturing Play events.
+            playing[#playing + 1] = { 0, 0, id, volume, nativeLoopDelay, 1, pitch, 0 }
+            mixed[id] = true
+        end
         for id, event in pairs(loops) do
-            if sfxManager():IsPlaying(id) then
+            if mixed[id] then
+                loops[id] = nil
+            elseif sfxManager():IsPlaying(id) then
                 playing[#playing + 1] = event
             else
                 loops[id] = nil
@@ -43,9 +54,17 @@ return function(native, sfxManager)
         end
         local playing = {}
         for _, event in ipairs(value[2]) do
-            playing[event[3]] = true
-            if not replicaLoops[event[3]] or not sfx:IsPlaying(event[3]) then
-                sfx:Play(event[3], event[4], event[5], true, event[7], event[8])
+            local id, previous = event[3], replicaLoops[event[3]]
+            playing[id] = event
+            if not previous or not sfx:IsPlaying(id) then
+                sfx:Play(id, event[4], event[5], true, event[7], event[8])
+            else
+                if previous[4] ~= event[4] then
+                    sfx:AdjustVolume(id, event[4])
+                end
+                if previous[7] ~= event[7] then
+                    sfx:AdjustPitch(id, event[7])
+                end
             end
         end
         for id in pairs(replicaLoops) do
@@ -59,6 +78,9 @@ return function(native, sfxManager)
         capture = captureSound,
         apply = applySound,
         reset = function()
+            for id in pairs(replicaLoops) do
+                sfxManager():Stop(id)
+            end
             hostLoops, replicaLoops, lastSound = {}, {}, 0
         end,
     }

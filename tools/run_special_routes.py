@@ -185,6 +185,7 @@ def main():
         for name in (
             "endings",
             "floor-sources",
+            "room-ambience",  # The seed needs the unlocked room pool for wet and dry Dross rooms.
             "hourglass-routes",
             "campaign",
             "victory-lap",
@@ -210,6 +211,7 @@ def main():
             command += ["--" + option.replace("_", "-"), str(mod.resolve())]
     report = {"passed": False, "restored": False, "cases": {}, "command": command}
     try:
+        native_options = {}
         if any(
             name in cases
             for name in (
@@ -227,15 +229,22 @@ def main():
         ):
             # Prerequisite unlocks can queue native achievement screens and
             # pause world updates. This owned profile is restored in finally.
+            native_options["PopUps"] = 0
+        if "room-ambience" in cases:
+            native_options["SFXVolume"] = 0.2
+        if native_options:
             for lab in labs:
                 options = log_path(lab).parent / "options.ini"
                 text = options.read_text()
-                if re.search(r"(?m)^PopUps=", text):
-                    text = re.sub(r"(?m)^PopUps=.*$", "PopUps=0", text)
-                else:
-                    text += "\nPopUps=0\n"
+                for key, value in native_options.items():
+                    pattern = rf"(?m)^{key}=.*$"
+                    setting = f"{key}={value}"
+                    if re.search(pattern, text):
+                        text = re.sub(pattern, setting, text)
+                    else:
+                        text += f"\n{setting}\n"
                 options.write_text(text)
-            report["native_options"] = {"PopUps": 0}
+            report["native_options"] = native_options
         with (output / "engine.log").open("w") as log:
             result = run_engine(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
         for index, name in enumerate(cases, 1):

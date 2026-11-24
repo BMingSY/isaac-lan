@@ -4,7 +4,8 @@
 
 namespace isaac::engine::native_audio {
 const Bindings bindings{
-    .entry = {repentance::entry::audioPlay, repentance::entry::musicPlay,
+    .entry = {repentance::entry::audioPlay, repentance::entry::audioUpdateLoop,
+              repentance::entry::roomUpdateAmbience, repentance::entry::musicPlay,
               repentance::entry::musicCrossfade, repentance::entry::roomUpdateMusic},
     .globals = {repentance::globals::game, repentance::globals::manager},
     .layout = {repentance::layout::game::room, repentance::layout::game::roomIndex,

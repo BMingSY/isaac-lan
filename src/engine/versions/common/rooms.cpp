@@ -25,6 +25,7 @@
 #include "compat/bosses/rotgut.h"
 #include "compat/enemies/room_transitions.h"
 #include "compat/routes/mines.h"
+#include "compat/routes/crawlspace.h"
 #include "compat/routes/mirror.h"
 #include "compat/routes/curses.h"
 #include "compat/routes/home.h"
@@ -1420,7 +1421,12 @@ void transitionRequest(void* g, int index, int direction, int animation, void* p
         engine::items::initializeBlueRoom(g, at<int>(game(), layout.game.roomIndex), index,
                                           direction))
         index = compat::items::blueRoomIndex;
-    const int leave = at<int>(game(), layout.game.leaveDoor);
+    // A staircase has no wall aperture. LeaveDoor can still describe the
+    // last player who walked out of the shared source room.
+    const int leave =
+        compat::routes::crawlspaceStairs(at<int>(game(), layout.game.roomIndex), index, animation)
+            ? -1
+            : at<int>(game(), layout.game.leaveDoor);
     const auto mirrorEntry = compat::routes::mirrorEntrance(animation, leave);
     int enter =
         mirrorEntry.value_or(leave >= 0 && leave < 8 ? (leave % 4 + 2) % 4 + (leave / 4) * 4 : -1);
@@ -1556,6 +1562,7 @@ void canonical() {
         }
 }
 void destroy(Room& room) {
+    audio::forgetRoomAmbience(room.key.dimension, room.key.index);
     if (sharedOwner == &room)
         selectSharedState(nullptr);
     engine<RoomCall>(bindings.entry.ambushDestroyWaveQueue)(&room.ambush.pendingWaves);
@@ -2942,15 +2949,24 @@ void protectArrivals(unsigned mask) {
 unsigned connected() {
     return connectedMask;
 }
+std::optional<SoundRoom> soundRoom(const void* pointer) {
+    if (!enabled)
+        return std::nullopt;
+    SoundRoom view;
+    for (auto player : participants) {
+        if (const auto room = findRoom(player);
+            room && room->pointer == reinterpret_cast<Address>(pointer)) {
+            view.dimension = room->key.dimension;
+            view.index = room->key.index;
+            view.audience |= 1u << slotOf(player);
+        }
+    }
+    return view;
+}
 unsigned soundAudience() {
     if (!enabled)
         return 0;
-    const auto current = at<Address>(game(), layout.game.room);
-    unsigned mask = 0;
-    for (auto player : participants)
-        if (const auto room = findRoom(player); room && room->pointer == current)
-            mask |= 1u << slotOf(player);
-    return mask;
+    return soundRoom(reinterpret_cast<void*>(at<Address>(game(), layout.game.room)))->audience;
 }
 std::uintptr_t presentationPlayer(void* explicitPlayer) {
     return enabled ? currentActor(explicitPlayer) : 0;

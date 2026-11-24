@@ -400,6 +400,8 @@ Seeds 含游戏管理的容器；传值调用由原生入口消费一次，扩�
 
 [声音绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance/audio.cpp) 连接[共享声音组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/audio.cpp)。音效入口 `0x488de0` 为 `thiscall void(SFXManager*, int id, float volume, int delay, bool loop, float pitch, float pan)`，清理 24 字节栈参数；即使原生实现未消费某个参数，转发仍保留完整调用栈。音乐播放 `0x3a2070` 与渐变 `0x3a2170` 均接收 Music、ID 与 float 参数，清理八字节；房间选曲 `0x3a9f20` 以 ECX 接收 Room，无栈参数。
 
+房间环境音入口 RVA `0x3bcfe0` 以 ECX 接收 Room，无栈参数。其循环音效更新入口 RVA `0x4896b0` 为 `thiscall void(SFXManager*, int id, float volume, float pitch)`，由被调方清理 12 字节栈参数。两处入口通过签名校验。共享声音组件按实际房间确定听者，游戏持有声道。水流底声来自当前房间，其余房间循环采用房主提供的活动声源和参数，接口格式见[共享声音组件](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#房间音乐)。
+
 Music 位于 `Manager+0x29a78`，当前／排队曲目 ID 为 `+0x30c/+0x310`。进入房间的播放音量来自设置对象 `Manager+0x29df8` 的 `+0x18`，即原生选曲实际读取的位置。该字段属于设置对象，不作为 Music 的内部成员访问。房间键由当前楼层代次、`Game+0x1819c` 维度及 `+0x18194` 索引组成，借用 Room 指针来自 `+0x18190`。
 
 作用域暂借当前／排队 ID，使后台房间完成原生选曲而不更换实际声道；离开前记录原生直接写入的队列，再恢复外层或实际播放 ID。未知房间在空 ID 下求值一次，失败恢复临时 ID。房间、Music、SFXManager 和实际音频流仍由游戏持有，不复制或释放流对象。嵌套视角恢复外层房间，重复快照不重新请求曲目，跨房加入正在播放的队列目标，跨层及会话重置不复用旧归属。

@@ -244,7 +244,7 @@ return function(fields)
             if deps.projectMap then
                 value.map = deps.projectMap(shared.map, slot)
             end
-            value.sound = deps.audio.capture(slot)
+            value.sound = deps.audio.capture(slot, view)
             value.presentation = native.presentation_events(slot)
             value.items = deps.items.capture(slot)
             value.combat = native.combat_events and assert(native.combat_events(slot)) or nil
