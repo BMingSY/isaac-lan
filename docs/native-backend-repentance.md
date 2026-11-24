@@ -333,7 +333,7 @@ Seeds 含游戏管理的容器；传值调用由原生入口消费一次，扩�
 
 ## 输入设备与查询适配
 
-[设备绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance/input_devices.cpp) 使用原生扫描 `0x59d3b0` 和轮询 `0x59d720`，两者均无参数、调用方清栈。`InputManager::Update` 的 `0x56a150` 接收 ECX 中的管理器。三个入口通过[公共设备组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/input_devices.cpp) 串行化完整遍历、回调与释放过程；同线程原生连接回调可以重入轮询，离开联机后继续保护设备断开清理。
+[设备绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance/input_devices.cpp) 使用原生扫描 `0x59d3b0` 和轮询 `0x59d720`，两者均无参数、调用方清栈。`InputManager::Update` 的 `0x56a150` 接收 ECX 中的管理器。三个入口通过[公共设备组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/input_devices.cpp) 串行化设备遍历、回调与释放，同线程原生连接回调可以重入轮询。虚拟手柄接入和断开时使用同一把锁执行原生扫描，覆盖关闭 `ControllerHotplug` 的配置。
 
 输入管理器是 RVA `0x7e7c98` 的内嵌对象，其指针列表首尾为 `+4/+8`，元素四字节；设备 ID 位于 `+8`。只有至少四个正编号设备都存在时才分配联机 ID `1..4`，保留键盘、其他设备和容器顺序。退出只恢复仍在列表内且仍使用所分配编号的设备；不解引用已移除对象，不覆盖原生独立更改的编号。设备及容器由游戏创建和销毁，组件只保存恢复所需的身份记录，不取得所有权。
 

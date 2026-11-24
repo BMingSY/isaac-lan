@@ -44,6 +44,11 @@ int presentationController = -1;
 bool hookDevices() {
     return engine::native_devices::install(image, logger);
 }
+void setVirtualDevices(bool available) {
+    // With ControllerHotplug off, the game will not discover an XInput change on its own.
+    if (virtualDevices.exchange(available) != available)
+        engine::native_devices::rescan(image);
+}
 void assignLanDeviceIds() {
     if (virtualDevices)
         engine::native_devices::assignLanIds(image);
@@ -277,7 +282,7 @@ isaac::lua::API lua{};
 int enable(lua_State* L) {
     const bool ok = hookDevices() && hookQuery() && hookMouseAim();
     if (ok)
-        virtualDevices = true;
+        setVirtualDevices(true);
     lua.pushBoolean(L, ok);
     if (ok)
         logger("input_virtual=ENABLED");
@@ -606,7 +611,7 @@ void setMenuOwner(unsigned slot) {
 void leaveLan() {
     reset();
     engine::native_devices::restoreIds(image);
-    virtualDevices = false;
+    setVirtualDevices(false);
     if (logger)
         logger("input_virtual=DISABLED");
 }

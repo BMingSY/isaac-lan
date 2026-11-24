@@ -13,6 +13,7 @@ struct Bindings {
 };
 extern const Bindings bindings;
 bool install(std::uintptr_t image, void (*log)(const std::string&));
+void rescan(std::uintptr_t image);
 void assignLanIds(std::uintptr_t image);
 void restoreIds(std::uintptr_t image);
 std::vector<int> ids(std::uintptr_t image);
