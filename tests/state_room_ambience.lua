@@ -17,12 +17,14 @@ local fireSteps = {
     { false, true, true }, -- Guest alone by the fire.
     { true, true, true }, -- Host joins the guest.
     { true, false, true }, -- Guest leaves; host stays by the fire.
-    { true, false, false }, -- Host extinguishes it.
+    { true, true, true }, -- Guest comes back while it is still lit.
+    { true, true, false }, -- Both see the host extinguish it.
+    { true, false, false }, -- Guest leaves the ashes.
     { true, true, false }, -- Guest returns to the extinguished fire.
 }
-local firePeriod = 80
-local fireStart, fireViewStart, fireChecks, fireBaseline, hearth, quiet, flame
-fireChecks = 0
+local firePeriod, extinguishStep = 80, 6
+local fireStart, hearth, quiet, flame
+local fireChecks, fireSince, fireBaseline, lastFireStarts = 0, nil, nil, nil
 
 local function changeFloor(stage, kind)
     assert(native.rooms_with_player(0, function()
@@ -32,44 +34,56 @@ local function changeFloor(stage, kind)
 end
 
 local function observeFire(tick, level)
-    fireViewStart = fireViewStart or tick
-    local elapsed = tick - fireViewStart
-    local index = math.floor(elapsed / firePeriod) + 1
-    local age, step = elapsed % firePeriod, fireSteps[index]
-    if not step or age < 48 or age > 66 then
+    local index = fireChecks + 1
+    local step = fireSteps[index]
+    if not step then
         return
     end
-    local atFire = level:GetCurrentRoomIndex() == level:GetStartingRoomIndex()
-    assert(atFire == step[host and 1 or 2], "Fire fixture did not reach arrangement " .. index)
-    if host and index == 5 then
-        local source = assert(flame and flame.Ref, "Missing extinguished fireplace")
-        assert(
-            source.HitPoints <= 1,
-            "Fire did not reach its native ash state: hp=" .. source.HitPoints
-        )
+    local origin, positions = level:GetStartingRoomIndex(), native.rooms_positions()
+    local atFire = level:GetCurrentRoomIndex() == origin
+    -- Each client may finish the native floor transition on a different frame.
+    -- Observe the actual party and replicated fireplace before checking its channel.
+    local ready = atFire == step[host and 1 or 2]
+        and (positions["0"].index == origin) == step[1]
+        and (positions["1"].index == origin) == step[2]
+    if ready and atFire then
+        local lit, ashes = false, false
+        for _, source in ipairs(Isaac.FindByType(EntityType.ENTITY_FIREPLACE)) do
+            lit = lit or source.HitPoints > 1
+            ashes = ashes or source.HitPoints <= 1
+        end
+        ready = lit == step[3] and (index < extinguishStep or ashes)
+    end
+    if not ready then
+        fireSince, fireBaseline = nil, nil
+        return
+    end
+    fireSince = fireSince or tick
+    if tick - fireSince < 12 then
+        return
     end
     local playing = SFXManager():IsPlaying(fire)
     assert(playing == (atFire and step[3]), "Wrong fire channel in arrangement " .. index)
     local starts = string.unpack(">I4", native.audio_state(fire), 21)
-    if index ~= fireChecks then
-        assert(index == fireChecks + 1, "Missed a fire arrangement")
-        local previous = fireSteps[index - 1]
-        if previous and previous[host and 1 or 2] and previous[3] and atFire and step[3] then
-            assert(starts == fireBaseline, "Another player crossing the door restarted the fire")
-        end
-        fireChecks, fireBaseline = index, starts
-        Isaac.DebugString(
-            "LAN_NETWORK SIDE room-ambience fire="
-                .. index
-                .. " playing="
-                .. tostring(playing)
-                .. " starts="
-                .. starts
-        )
-    else
-        assert(starts == fireBaseline, "Fire crackle restarted in arrangement " .. index)
+    fireBaseline = fireBaseline or starts
+    assert(starts == fireBaseline, "Fire crackle restarted in arrangement " .. index)
+    if tick - fireSince < 28 then
+        return
     end
-    if index == #fireSteps and age >= 60 then
+    local previous = fireSteps[index - 1]
+    if previous and previous[host and 1 or 2] and previous[3] and atFire and step[3] then
+        assert(starts == lastFireStarts, "Another player crossing the door restarted the fire")
+    end
+    Isaac.DebugString(
+        "LAN_NETWORK SIDE room-ambience fire="
+            .. index
+            .. " playing="
+            .. tostring(playing)
+            .. " starts="
+            .. starts
+    )
+    fireChecks, lastFireStarts, fireSince, fireBaseline = index, starts, nil, nil
+    if index == #fireSteps then
         for kind in pairs(floors) do
             for i = 1, #arrangements do
                 assert(checked[kind .. ":" .. i], "Missing water arrangement " .. kind .. ":" .. i)
@@ -173,7 +187,10 @@ function _IsaacLanFrame()
         assert(native.api_with_local_view(function()
             observe(status.verified)
         end))
-        assert(status.verified < 2400, "Water audio arrangements did not finish")
+        assert(
+            status.verified < 2400,
+            "Room ambience arrangements did not finish, fire=" .. fireChecks
+        )
     end
     return status
 end
@@ -237,7 +254,7 @@ local function driveFire(t, level)
                 end
             end))
         end
-    elseif index == 5 and age >= 5 and age < 44 and age % 3 == 0 then
+    elseif index == extinguishStep and age >= 5 and age < 44 and age % 3 == 0 then
         assert(native.rooms_with_player(0, function()
             local source = assert(flame and flame.Ref, "Missing lit fireplace")
             if source.HitPoints > 1 then
