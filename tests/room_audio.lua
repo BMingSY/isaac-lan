@@ -52,3 +52,28 @@ guest.reset()
 guest.reset()
 assert(starts == 2 and stops == 2 and not playing[fire])
 print("PASS per-room sustained sound, adjustments, replay and cleanup")
+
+local laugh =
+    dofile(assert(arg[1]) .. "/tests/fixtures/game_enums.lua").SoundEffect.SOUND_MOM_VOX_EVILLAUGH
+local beep, plays = 3, {}
+local listener = makeAudio({}, function()
+    return {
+        Play = function(_, id, v, delay, loop, p, pan)
+            assert(v == 0.5 and delay == 10 and not loop and p == 1.25 and pan == -0.5)
+            plays[#plays + 1] = id
+        end,
+    }
+end, laugh)
+local function event(serial, tick, id)
+    return string.pack(">I4I4I4fI4Bff", serial, tick, id, 0.5, 10, 0, 1.25, -0.5)
+end
+local warning = event(1, 100, laugh)
+listener.apply({ event(3, 110, beep), {} }, 120)
+listener.apply({ warning .. event(2, 100, beep), {} }, 130)
+listener.apply({ warning, {} }, 130)
+listener.apply({ event(4, 100, laugh) .. event(5, 120, beep), {} }, 131)
+assert(#plays == 2 and plays[1] == beep and plays[2] == laugh)
+listener.reset()
+listener.apply({ warning .. event(2, 100, laugh), {} }, 100)
+assert(#plays == 4 and plays[3] == laugh and plays[4] == laugh)
+print("PASS delayed room warnings, unseen serials, expiry and session reset")

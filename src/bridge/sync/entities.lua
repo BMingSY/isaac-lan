@@ -91,8 +91,8 @@ return function(fields)
                 end
                 if e then
                     local data = e:GetData()
-                    if data then
-                        data.__isaac_lan_replica = v[Entity.id]
+                    if type(data) == "table" then
+                        rawset(data, "__isaac_lan_replica", v[Entity.id])
                     end
                     env.apply(e, v, registered)
                     if not cached then

@@ -421,7 +421,10 @@ for _, build in ipairs({
         end,
         getEntityData = function(_, entity, key)
             if entity and not entity.grid then
-                return entity:GetData()[key]
+                local data = entity:GetData()
+                if type(data) == "table" then
+                    return data[key]
+                end
             end
         end,
     }
@@ -472,7 +475,9 @@ for _, build in ipairs({
     assert(replica.data.EID_DescribeOnFirstFrame == nil, "Adapter changed upstream entity data")
     replica.data.__isaac_lan_replica = nil
     assert(not describable(replica), "EID changed a native entity's first-frame rule")
-    replica.data.__isaac_lan_replica = 7
+    replica.data = 17
+    assert(not describable(replica), "Scalar entity data was mistaken for a replica marker")
+    replica.data = { __isaac_lan_replica = 7 }
     p.ready = 0
     assert(not describable(replica), "EID exposed an uncommitted replica")
     p.ready = 1
@@ -509,7 +514,11 @@ for _, build in ipairs({
     end
     local near, far, effect = pickup(71, 60), pickup(72, 81), pickup(73, 20, 1000)
     local foreign = pickup(75, 10)
-    local roomEntities, indexed = { near, far, effect }, false
+    local scalar = pickup(76, 10)
+    scalar.GetData = function()
+        return 17
+    end
+    local roomEntities, indexed = { near, far, effect, scalar }, false
     p.env.Isaac.GetRoomEntities = function()
         assert(p.scope == 1, "EID radius fallback left the local view")
         return roomEntities

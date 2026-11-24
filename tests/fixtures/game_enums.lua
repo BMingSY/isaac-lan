@@ -3,6 +3,7 @@
 -- Reference: https://wofsauge.github.io/IsaacDocs/rep/enums/EntityType.html
 return {
     BackdropType = { MEGA_SATAN = 18 },
+    SoundEffect = { SOUND_MOM_VOX_EVILLAUGH = 84 },
     CacheFlag = { CACHE_ALL = 0xffff },
     SeedEffect = { SEED_INVISIBLE_ISAAC = 14, SEED_INVISIBLE_ENEMIES = 15 },
     WeaponType = {

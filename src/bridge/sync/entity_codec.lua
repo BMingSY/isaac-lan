@@ -28,28 +28,29 @@ return function(wire)
             return Color(table.unpack(c))
         end
         local nextID = 1
+        local fallbackIDs = setmetatable({}, { __mode = "k" })
         local numericCapture = {}
         local function id(e, kind)
             if not e or not e:Exists() or localEffect(e, kind) then
                 return 0
             end
+            local data = e:GetData()
+            local identifier
             if native.combat_identity then
-                local identifier = assert(native.combat_identity(e:GetSprite()))
-                -- Synchronization identity belongs to the native registry.
-                -- The Lua table is only a diagnostic mirror; an absent table
-                -- must not replace or discard a successfully assigned ID.
-                local data = e:GetData()
-                if data then
-                    data.__isaac_lan_entity = identifier
+                identifier = assert(native.combat_identity(e:GetSprite()))
+            else
+                identifier = fallbackIDs[e]
+                    or (type(data) == "table" and rawget(data, "__isaac_lan_entity"))
+                if not identifier then
+                    identifier, nextID = nextID, nextID + 1
                 end
-                return identifier
+                fallbackIDs[e] = identifier
             end
-            local d = e:GetData()
-            if not d.__isaac_lan_entity then
-                d.__isaac_lan_entity = nextID
-                nextID = nextID + 1
+            -- The native registry owns the ID. Some entities expose a scalar as their Lua data.
+            if type(data) == "table" then
+                rawset(data, "__isaac_lan_entity", identifier)
             end
-            return d.__isaac_lan_entity
+            return identifier
         end
         local common, schema = schemas.common, schemas.byType
         local types = schemas.types
@@ -484,6 +485,7 @@ return function(wire)
             reset = function()
                 npcAssets = {}
                 nextID, numericCapture = 1, {}
+                fallbackIDs = setmetatable({}, { __mode = "k" })
                 if tethers then
                     tethers.reset()
                 end

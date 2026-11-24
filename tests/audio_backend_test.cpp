@@ -8,9 +8,10 @@
 #include <limits>
 
 struct lua_State {
-    int top = 0, dimension = 0, index = 0;
+    int top = 0, dimension = 0, index = 0, warning = -1;
     long long integer = 0;
-    std::string input, output;
+    std::string input;
+    std::vector<std::string> outputs;
     bool success = false;
 };
 namespace {
@@ -86,8 +87,8 @@ void playMusic(int id, float parameter = 0.4f, bool fade = false) {
         image + (fade ? backend::entry::musicCrossfade : backend::entry::musicPlay))(musicManager(),
                                                                                      id, parameter);
 }
-void playSound(int id = 12, float volume = 0.6f) {
-    reinterpret_cast<Sound>(image + backend::entry::audioPlay)(sfx.data(), id, volume, 7, true,
+void playSound(int id = 12, float volume = 0.6f, bool loop = true) {
+    reinterpret_cast<Sound>(image + backend::entry::audioPlay)(sfx.data(), id, volume, 7, loop,
                                                                1.2f, -0.25f);
 }
 void __attribute__((thiscall)) nativeSound(void* receiver, int id, float volume, int delay,
@@ -185,6 +186,8 @@ void setup() {
             return L->dimension;
         if (argument == 3)
             return L->index;
+        if (argument == 4)
+            return L->warning;
         return L->integer;
     };
     audio::lua.checkString = [](lua_State* L, int, std::size_t* size) {
@@ -192,8 +195,7 @@ void setup() {
         return L->input.c_str();
     };
     audio::lua.pushLString = [](lua_State* L, const char* data, std::size_t size) {
-        L->output.assign(data, size);
-        return L->output.c_str();
+        return L->outputs.emplace_back(data, size).c_str();
     };
     audio::lua.pushBoolean = [](lua_State* L, int result) { L->success = result != 0; };
 }
@@ -221,7 +223,7 @@ std::string soundEvents(int slot) {
     lua_State L;
     L.integer = slot;
     require(audio::capture(&L) == 1, "Capture sounds result count");
-    return L.output;
+    return L.outputs.front();
 }
 std::string roomLevels(int slot, int index, int dimension = 0) {
     lua_State L;
@@ -230,7 +232,7 @@ std::string roomLevels(int slot, int index, int dimension = 0) {
     L.dimension = dimension;
     L.top = 3;
     require(audio::capture(&L) == 2, "Room capture omitted its active levels");
-    return L.output;
+    return L.outputs.back();
 }
 std::string levelBytes(int id, float volume, float pitch) {
     lan::Writer w(lan::Message::world);
@@ -255,7 +257,7 @@ std::string encode(Request value) {
 std::string captureMusic() {
     lua_State L;
     require(audio::musicState(&L) == 1, "Capture music result count");
-    return L.output;
+    return L.outputs.empty() ? std::string{} : L.outputs.front();
 }
 bool applyMusic(const std::string& bytes) {
     lua_State L;
@@ -315,6 +317,39 @@ void soundRouting() {
     audio::reset();
     require(soundEvents(0).empty(), "Session reset retained sound events");
 }
+void roomWarnings() {
+    reset();
+    constexpr int laugh = 84, other = 12;
+    const auto forGuest = [&](int index, int dimension = 0) {
+        lua_State L;
+        L.integer = 1;
+        L.index = index;
+        L.dimension = dimension;
+        L.top = 4;
+        L.warning = laugh;
+        require(audio::capture(&L) == 2, "Missing room audio results");
+        return L.outputs.front();
+    };
+    playSound(laugh, 1, false);
+    const auto warning = soundEvents(0);
+    require(!warning.empty() && soundEvents(1).empty(), "Original sound audience changed");
+    playSound(other, 1, false);
+    playSound(laugh, 1, true);
+    tick += 30;
+    require(forGuest(70) == warning && forGuest(71).empty() && forGuest(70, 1).empty(),
+            "Only the one-shot warning may follow a late entrant into its source room");
+    ++epoch;
+    require(forGuest(70).empty(), "Warning leaked to the same room index on another floor");
+    --epoch;
+    ++tick;
+    require(forGuest(70).empty(), "Expired warning was replayed");
+    audience = 3;
+    playSound(laugh, 1, false);
+    require(!forGuest(70).empty() && forGuest(71).empty(),
+            "A fresh warning followed an original listener out of its room");
+    audio::forgetRoomSounds(0, 70);
+    require(forGuest(70).empty(), "Unloaded room retained a warning");
+}
 void roomLoops() {
     constexpr int fire = 269, water = isaac::compat::ids::sound::waterFlowLoop, swarm = 4;
     for (bool guest : {false, true}) {
@@ -364,7 +399,7 @@ void roomLoops() {
         audience = 0;
         roomLoop(sound, 0.0f);
         require(loopPlaying[sound], "An empty virtual room stopped the physical channel");
-        audio::forgetRoomAmbience(0, 70);
+        audio::forgetRoomSounds(0, 70);
         require(roomLevels(0, 70).empty(), "Unloaded room retained its mixer levels");
         audience = 1;
         roomLoop(sound, 0.6f);
@@ -571,6 +606,7 @@ int main() {
     try {
         setup();
         soundRouting();
+        roomWarnings();
         roomLoops();
         roomMusic();
         selectorCleanup();

@@ -1562,7 +1562,7 @@ void canonical() {
         }
 }
 void destroy(Room& room) {
-    audio::forgetRoomAmbience(room.key.dimension, room.key.index);
+    audio::forgetRoomSounds(room.key.dimension, room.key.index);
     if (sharedOwner == &room)
         selectSharedState(nullptr);
     engine<RoomCall>(bindings.entry.ambushDestroyWaveQueue)(&room.ambush.pendingWaves);

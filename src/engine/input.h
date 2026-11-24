@@ -50,9 +50,10 @@ class AnimationConfirmScope {
 void install(std::uintptr_t image, void (*logger)(const std::string&), bool installed = false);
 FARPROC resolve(HMODULE module, LPCSTR name, FARPROC original);
 bool bind(lua_State*, HMODULE);
-void apply(const lan::Frame& frame);
+void apply(const lan::Frame& frame, bool playable = true);
 void finishUpdate();
 void reset();
+void beginLaunch();
 // Clear native menu prompts after the menu has handed off to a LAN game.
 void resetMenuPrompts();
 void prepareControllers();

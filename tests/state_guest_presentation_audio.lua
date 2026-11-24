@@ -12,6 +12,7 @@ local checkPresentation
 local textEvents, textSerial = {}, 0
 local soundBaselines = {}
 local soundObserved = {}
+local hand, handBaseline, checkedHand = nil, nil, false
 local continuousMusic, continuityChecks = nil, 0
 local continuityObserved = {}
 local function soundCount(id)
@@ -113,6 +114,7 @@ function _IsaacLanFrame()
         ended = true
         assert(musicChecks > 30 and soundChecks > 2, "Room audio was not checked")
         assert(continuityChecks == 2, "Same-track room changes were not checked")
+        assert(checkedHand, "Late room entry did not check the native Mom's Hand warning")
         report(
             "COUNTS uses="
                 .. uses
@@ -201,8 +203,16 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             move(1, boss)
         elseif t == 810 then
             move(1, other)
+        elseif t == 824 then
+            player(0, function(p)
+                hand = Isaac.Spawn(EntityType.ENTITY_MOMS_HAND, 0, 0, p.Position, Vector.Zero, nil)
+            end)
         elseif t == 840 then
             move(1, origin)
+        elseif t == 866 then
+            player(0, function()
+                hand:Remove()
+            end)
         elseif t == 880 then
             move(1, other)
         elseif t == 920 then
@@ -289,6 +299,20 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
     end, present, beginFloor)
 end
 function checkPresentation(t)
+    if t >= 812 and t < 824 then
+        handBaseline = soundCount(SoundEffect.SOUND_MOM_VOX_EVILLAUGH)
+    elseif t >= 831 and t < 840 then
+        assert(
+            soundCount(SoundEffect.SOUND_MOM_VOX_EVILLAUGH) == handBaseline + (host and 1 or 0),
+            "Mom's Hand warning reached a player in another room"
+        )
+    elseif t >= 855 and t < 920 then
+        assert(
+            soundCount(SoundEffect.SOUND_MOM_VOX_EVILLAUGH) == handBaseline + 1,
+            "Mom's Hand warning was missed or replayed after entering its room"
+        )
+        checkedHand = true
+    end
     if t >= 820 and t < 840 then
         continuousMusic = string.unpack(">I4", native.audio_state(), 21)
     end
