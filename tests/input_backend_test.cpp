@@ -373,6 +373,9 @@ void launchInput() {
     values[0][item] = 1;
     edges[0] = (1u << item) | (1u << input::action::menuConfirm);
     input::beginLaunch();
+    mouse::Vector aim;
+    require(input::mouseAim(players[0].data(), &aim) == mouse::Result::inactive,
+            "Native loading passed through physical mouse fire");
     require(read(keyboardDevice, item, backend::entry::inputValue) == 0 &&
                 read(keyboardDevice, item, backend::entry::inputPressed) == 0 &&
                 read(keyboardDevice, item, backend::entry::inputTriggered) == 0 &&

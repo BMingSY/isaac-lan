@@ -151,6 +151,8 @@ engine::native_mouse::ShootingEntity shootingEntity() {
     return reinterpret_cast<engine::native_mouse::ShootingEntity>(image + binding.shootingEntity);
 }
 engine::native_mouse::Result mouseAim(void* player, engine::native_mouse::Vector* result) {
+    if (waitingForGameplay)
+        return engine::native_mouse::Result::inactive;
     if (!enabled)
         return engine::native_mouse::Result::passthrough;
     const auto controller =

@@ -343,8 +343,10 @@ void roomWarnings() {
     --epoch;
     ++tick;
     require(forGuest(70).empty(), "Expired warning was replayed");
+    audience = 3;
     playSound(laugh, 1, false);
-    require(!forGuest(70).empty(), "Fresh warning was lost");
+    require(!forGuest(70).empty() && forGuest(71).empty(),
+            "A fresh warning followed an original listener out of its room");
     audio::forgetRoomSounds(0, 70);
     require(forGuest(70).empty(), "Unloaded room retained a warning");
 }
