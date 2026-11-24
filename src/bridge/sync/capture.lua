@@ -255,16 +255,16 @@ return function(fields)
                 local realtime, stable, detail =
                     deps.layers.split(value, captureEncoded, projectedRooms, detailBudget)
                 if deps.combatVisuals then
-                    local eligible = particles and deps.sharedContent() and particles or nil
                     realtime.room[fields.room.entities] = deps.combatVisuals.project(
                         realtime.room[fields.room.entities],
                         actors,
-                        eligible,
+                        particles,
                         slot,
                         epoch,
                         view,
                         tick,
-                        detailBudget
+                        detailBudget,
+                        particles and deps.requiredEffects(slot) or 0
                     )
                 end
                 local bytes = deps.combatFrame.encode(realtime, worldSchema, encode, captureEncoded)

@@ -18,6 +18,7 @@ local lan = include("isaac_lan").attach(mod, "author.my-mod")
 | 属性面板、地图、说明等本机 UI | `lan:OnLocalRender(fn)`，回调中读取 `view.players` |
 | 判断回调角色是否属于本机 | `lan:IsLocalPlayer(player)` |
 | 从 UI 发起修改世界的操作 | `lan:Action(name, definition)`，再 `action:Request(...)` |
+| 依赖房间里某种特效的每一个实例 | `lan:RequireEffectSync(variant, subtype)`，省略子类型可保留该变体全部实例，见[特效声明](https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-api-reference.md#房间特效) |
 | 清理跨房／换层缓存 | `lan:On(event, fn)`；完整事件见[接口参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-api-reference.md) |
 | 适配没有主动接入的第三方 Mod | [自动适配器](https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-adapter-development.md) |
 

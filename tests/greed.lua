@@ -185,7 +185,15 @@ local function environment(difficulty)
         _IsaacLanStatus = function()
             return { pause = 1, slot = 1 }
         end,
-        _IsaacLanModules = {},
+        _IsaacLanModules = {
+            ["api/public"] = {
+                effects = {
+                    forPeer = function()
+                        return 0
+                    end,
+                },
+            },
+        },
         ItemType = { ITEM_ACTIVE = 2 },
         NullItemID = { ID_LOST_CURSE = 1 },
         Vector = function(x, y)

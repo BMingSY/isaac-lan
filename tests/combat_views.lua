@@ -22,10 +22,13 @@ for _, count in ipairs({ 0, 63, 64, 100 }) do
     assert(not pcall(frame.decode, bytes:sub(1, -2), schema, codec.decode))
 end
 
+local variants = { BLOOD_PARTICLE = 5, BLOOD_EXPLOSION = 2 }
+local classes = dofile(root .. "/src/bridge/sync/effect_classes.lua")
 local blood = dofile(root .. "/src/bridge/sync/combat_visuals.lua")(fields)(
     { ENTITY_EFFECT = 1000 },
-    { BLOOD_PARTICLE = 5, BLOOD_EXPLOSION = 2 },
-    0
+    variants,
+    0,
+    classes
 )
 local function particle(id)
     return {
@@ -68,7 +71,17 @@ end
 local location = { index = 84, dimension = 0 }
 local actor = { [A.entity] = { [E.id] = -1, [E.held] = 80 } }
 local function project(list, tick, budget, peer, epoch)
-    return blood.project(list, { actor }, candidates, peer or 1, epoch or 1, location, tick, budget)
+    return blood.project(
+        list,
+        { actor },
+        candidates,
+        peer or 1,
+        epoch or 1,
+        location,
+        tick,
+        budget,
+        0
+    )
 end
 local tear, beam, shot, creep =
     { [E.id] = 101, [E.target] = 79 },
@@ -114,13 +127,41 @@ tear[E.compatibility] = nil
 actor[A.entity][E.tether] = {}
 assert(project(rows, 7, 0) == rows)
 actor[A.entity][E.tether] = nil
-assert(blood.project(rows, { actor }, nil, 1, 1, location, 8, 0) == rows)
+assert(blood.project(rows, { actor }, nil, 1, 1, location, 8, 0, 0) == rows)
 blood.reset()
 assert(ids(project({ rows[hidden] }, 9, 0))[hidden])
 blood.reset()
 local smallCandidates = { [hidden] = rows[hidden] }
-blood.project({ rows[hidden] }, { actor }, smallCandidates, 1, 1, location, 1, 0)
+blood.project({ rows[hidden] }, { actor }, smallCandidates, 1, 1, location, 1, 0, 0)
 assert(ids(project(rows, 2, 0))[hidden], "An already visible particle vanished on entering density")
+-- Several independently required effects must not consume the budget for the
+-- remaining class. Keep graph dependencies even when they were omitted earlier.
+blood.reset()
+local styles, byId = {}, {}
+for id = 1, 100 do
+    local r = particle(id)
+    if id <= 40 then
+        r[E.subtype] = 0
+    end
+    styles[id], byId[id] = r, r
+end
+local required = classes.mask(variants, variants.BLOOD_PARTICLE, 0)
+local function draw(slot, tick, mask)
+    return ids(blood.project(styles, {}, byId, slot, 1, location, tick, 0, mask))
+end
+local default = draw(1, 1, 0)
+assert(default[1] and not default[40] and not default[100])
+styles[40][E.child] = 100
+local exact = draw(1, 2, required)
+for id = 1, 40 do
+    assert(exact[id], "A declared subtype was missing")
+end
+assert(exact[100], "A newly required effect lost its child")
+local fresh = draw(2, 1, required)
+assert(fresh[41] and fresh[42] and fresh[43] and fresh[100] and not fresh[44])
+local ordinary = draw(3, 1, 0)
+assert(ordinary[4] and not ordinary[5] and not ordinary[40] and not ordinary[100])
+assert(ids(blood.project(styles, {}, byId, 3, 1, location, 2, 0, classes.all))[100])
 print(
     "Dense and small room round trips, optional blood eligibility, graph closure and peer lifecycle passed"
 )

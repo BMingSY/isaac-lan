@@ -21,6 +21,7 @@
 | `WithLocalView(fn)` | 在本机房间与本机角色名单中执行读操作，保留全部返回值；未就绪时 `nil, "view_not_ready"` |
 | `OnLocalRender(fn)` | 每个可用渲染帧调用 `fn(view)`，返回可重复调用的取消函数 |
 | `On(event, fn)` | 订阅 LAN 生命周期，返回取消函数；无 LAN 时不产生事件 |
+| `RequireEffectSync(variant, subtype?)` | 完整同步匹配的房间特效，返回可重复调用的释放函数，见下文 |
 | `Action(name, definition?)` | 定义或取得动作对象，见下文 |
 | `Close()` | 移除所属渲染回调、订阅、动作与注册；可重复调用 |
 
@@ -48,6 +49,18 @@
 | `SessionReady` | 第一份或重建后的第一份视图就绪 |
 
 事件在游戏主线程、完整状态应用和原生作用域恢复后、UI 绘制前执行，按表中顺序触发需要的事件。除 `StateReset` 外在本机只读视图中调用。事件参数为提交上下文副本；取角色用 `lan:View()`。不会补发订阅前的事件；`SessionReady` 可在同局多次发生。订阅报错只停用该订阅。`StateReset` 时不能用旧对象访问世界。
+
+## 房间特效
+
+需要逐个读取某种房间特效的 Mod 可在绑定时声明 `lan:RequireEffectSync(variant, subtype?)`。两个参数均接受非负整数，省略子类型表示该变体的所有子类型。普通说明、界面和道具 Mod 可直接沿用默认同步。
+
+```lua
+local release = lan:RequireEffectSync(EffectVariant.BLOOD_PARTICLE, 99)
+-- 在不再观察这类血花时调用
+release()
+```
+
+房主声明为所有客机保留匹配的特效。仅客机声明时，房主收到请求后为该客机后续视图保留仍存活及新生成的匹配特效。其他特效沿用各自的同步规则。声明适用于当前和之后的房间、楼层及会话。多个句柄可以独立声明同一特效，最后一个声明释放后，新出现的特效恢复默认规则。`lan:Close()` 会释放该句柄的全部声明。单机和已经完整同步的特效都可以使用同一写法。兼容较早的 API 2 构建时，可先检查 `lan.RequireEffectSync` 是否存在。
 
 ## 动作与完成结果
 

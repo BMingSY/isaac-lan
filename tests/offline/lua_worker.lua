@@ -37,6 +37,15 @@ local function stateEnvironment()
             ["core/contacts"] = dofile(root .. "/src/bridge/core/contacts.lua"),
             ["sync/combat_events"] = dofile(root .. "/src/bridge/sync/combat_events.lua"),
             ["sync/combat_state"] = dofile(root .. "/src/bridge/sync/combat_state.lua"),
+            ["api/public"] = {
+                effects = {
+                    forPeer = function()
+                        return 0
+                    end,
+                },
+            },
+            ["sync/effect_classes"] = dofile(root .. "/src/bridge/sync/effect_classes.lua"),
+            ["sync/combat_visuals"] = dofile(root .. "/src/bridge/sync/combat_visuals.lua"),
             ["sync/combat_frame"] = dofile(root .. "/src/bridge/sync/combat_frame.lua"),
             ["sync/layers"] = dofile(root .. "/src/bridge/sync/layers.lua"),
             ["sync/fields"] = dofile(root .. "/src/bridge/sync/fields.lua"),

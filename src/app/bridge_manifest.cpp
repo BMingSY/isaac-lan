@@ -4,34 +4,6 @@
 #include <vector>
 
 namespace isaac::app {
-namespace {
-// The workshop distribution registers an empty mod and carries installer files.
-// Treat any other entry point or game asset as potentially observable content.
-bool distributionOnly(const std::filesystem::path& root,
-                      const std::vector<std::filesystem::path>& files) {
-    bool registration = false;
-    for (const auto& file : files) {
-        const auto top = file.begin()->wstring();
-        if (file == L"main.lua") {
-            constexpr std::string_view entry = "RegisterMod(\"Isaac LAN Workshop Package\", 1)";
-            if (std::filesystem::file_size(root / file) > entry.size() + 2)
-                return false;
-            std::ifstream script(root / file, std::ios::binary);
-            std::string line;
-            if (!std::getline(script, line))
-                return false;
-            if (line.ends_with('\r'))
-                line.pop_back();
-            if (line != entry || script.peek() != std::char_traits<char>::eof())
-                return false;
-            registration = true;
-        } else if (file != L"metadata.xml" && file != L"preview.png" && file != L"安装说明.txt" &&
-                   top != L"isaac-lan-update" && !top.starts_with(L"Isaac-LAN-v"))
-            return false;
-    }
-    return registration;
-}
-} // namespace
 BridgeManifest buildManifest(const std::filesystem::path& directory, std::string_view version,
                              void (*logger)(const std::string&),
                              const std::filesystem::path& extensionPath) {
@@ -52,7 +24,6 @@ BridgeManifest buildManifest(const std::filesystem::path& directory, std::string
         mods.text("Isaac LAN/mods-v2");
         std::vector<std::string> packages;
         std::size_t fileCount = 0;
-        bool stock = true;
         if (fs::is_directory(directory / L"mods"))
             for (const auto& mod : fs::directory_iterator(directory / L"mods")) {
                 if (!mod.is_directory() || fs::exists(mod.path() / L"disable.it"))
@@ -70,10 +41,8 @@ BridgeManifest buildManifest(const std::filesystem::path& directory, std::string
                     entry.file(mod.path() / file);
                     package.text(entry.finish());
                 }
-                if (!files.empty()) {
+                if (!files.empty())
                     packages.push_back(package.finish());
-                    stock = stock && distributionOnly(mod.path(), files);
-                }
                 fileCount += files.size();
             }
         // The package includes its metadata and internal paths. Steam and local
@@ -83,7 +52,6 @@ BridgeManifest buildManifest(const std::filesystem::path& directory, std::string
             mods.text(package);
         logger("mod_manifest files=" + std::to_string(fileCount));
         result.mods = mods.finish();
-        result.stockContent = stock;
     } catch (const std::exception& e) {
         logger("mod_manifest=UNKNOWN " + std::string(e.what()));
     }
