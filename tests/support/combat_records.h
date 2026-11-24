@@ -3,14 +3,20 @@
 #include <string>
 
 namespace isaac::tests::records {
-inline std::vector<std::uint8_t> frame(std::vector<int> ids, unsigned tick) {
+inline std::vector<std::uint8_t> frame(const std::vector<int>& ids, unsigned tick,
+                                       bool floatSeed = false) {
     isaac::state_codec::Writer rows;
     rows.array(ids.size());
     for (const int id : ids) {
         rows.array(8);
-        for (const std::int64_t field : std::array<std::int64_t, 5>{
-                 id, id % 2, id == 4 ? tick : 0, 0, id % 3 ? id : (std::int64_t{1} << 40) + id})
+        for (const std::int64_t field :
+             std::array<std::int64_t, 4>{id, id % 2, id == 4 ? tick : 0, 0})
             rows.number(field);
+        const std::int64_t seed = id % 3 ? id : (std::int64_t{1} << 40) + id;
+        if (floatSeed)
+            rows.number(static_cast<double>(seed));
+        else
+            rows.number(seed);
         rows.array(2);
         rows.number(static_cast<double>(id) + tick / 16.);
         rows.number(id % 3 == 0 ? -0.0 : 0.0);

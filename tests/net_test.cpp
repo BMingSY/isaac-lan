@@ -1576,6 +1576,12 @@ void compressionLimits() {
     auto nested = delta;
     nested[StateCompression::headerSize] = StateCompression::recordsPrefix;
     rejects([&] { compression.expandWorld(nested, base); }, "Recursive record envelope accepted");
+    const auto otherLayout = isaac::tests::records::frame(ids, 23, true);
+    require(compression.compressWorld(otherLayout, base) ==
+                    compression.compress(otherLayout, base) &&
+                compression.compressWorld(current, otherLayout) ==
+                    compression.compress(current, otherLayout),
+            "Unknown creation-field layout interrupted the opaque world transfer");
     auto tiny = isaac::tests::records::frame({7}, 1);
     require(compression.compressWorld(tiny) == compression.compress(tiny),
             "Small combat frames gained a record header");

@@ -84,7 +84,14 @@ std::vector<std::uint8_t> StateCompression::compressWorld(std::span<const std::u
     if (ordinary.size() <= 1024 || !core::record_delta::framed(bytes) ||
         (!baseline.empty() && !core::record_delta::framed(baseline)))
         return ordinary;
-    const auto patch = core::record_delta::encode(bytes, baseline);
+    std::vector<std::uint8_t> patch;
+    try {
+        patch = core::record_delta::encode(bytes, baseline);
+    } catch (const std::runtime_error&) {
+        // Opaque rows with a different key layout can still use the ordinary
+        // encoding. A receiver that was sent a record patch validates it strictly.
+        return ordinary;
+    }
     if (patch.empty() || patch.size() > impl->limit)
         return ordinary;
     auto packed = compress(patch, baseline);
