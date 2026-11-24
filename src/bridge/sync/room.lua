@@ -1,7 +1,17 @@
 return function(fields)
     local Room, Grid, Door = fields.room, fields.grid, fields.door
     -- Complete, immutable room views shared by peers in the same room/tick.
-    return function(native, entity, sprite, crawlspace, types, localEffect, bossRush, megaSatan)
+    return function(
+        native,
+        entity,
+        sprite,
+        crawlspace,
+        types,
+        localEffect,
+        bossRush,
+        megaSatan,
+        combatVisuals
+    )
         local captureTick, captureEpoch, rooms, currentGrids, previousGrids
         local function captureDoor(door, previous)
             if not door then
@@ -55,7 +65,7 @@ return function(fields)
             return { index, kind, variant, state, collision, data, pose, seed, door }
         end
         local function collect(slot, previous)
-            local value
+            local value, particles
             assert(native.rooms_with_player(slot, function()
                 local room = Game():GetRoom()
                 local entities, grids = {}, {}
@@ -65,7 +75,12 @@ return function(fields)
                         and e.Type ~= types.ENTITY_PLAYER
                         and not (localEffect and localEffect(e))
                     then
-                        entities[#entities + 1] = entity(e)
+                        local row = entity(e)
+                        entities[#entities + 1] = row
+                        if combatVisuals and combatVisuals.eligible(e, row) then
+                            particles = particles or {}
+                            particles[row[fields.entity.id]] = row
+                        end
                     end
                 end
                 -- Both snapshots enumerate occupied grid indices in ascending order.
@@ -104,7 +119,7 @@ return function(fields)
                     [Room.floorAnimation] = megaSatan.capture(backdrop),
                 }
             end))
-            return value
+            return { room = value, particles = particles }
         end
         return function(slot, tick, epoch, location)
             if tick ~= captureTick or epoch ~= captureEpoch then
@@ -118,10 +133,10 @@ return function(fields)
             local key = location.dimension .. ":" .. location.index
             if not rooms[key] then
                 rooms[key] = collect(slot, previousGrids[key])
-                currentGrids[key] = rooms[key][Room.grids]
+                currentGrids[key] = rooms[key].room[Room.grids]
                 previousGrids[key] = nil
             end
-            return rooms[key]
+            return rooms[key].room, rooms[key].particles
         end
     end
 end

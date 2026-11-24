@@ -1,6 +1,7 @@
 #include "net/compression.h"
 #include "net/protocol.h"
 #include "core/deflate.h"
+#include "core/record_delta.h"
 #include "core/zstd.h"
 #include <windows.h>
 #include <cstring>
@@ -74,6 +75,40 @@ std::vector<std::uint8_t> StateCompression::compress(std::span<const std::uint8_
         result[1 + i] = static_cast<std::uint8_t>(bytes.size() >> (24 - i * 8));
     std::memcpy(result.data() + headerSize, payload.data(), payload.size());
     return result;
+}
+std::vector<std::uint8_t> StateCompression::compressWorld(std::span<const std::uint8_t> bytes,
+                                                          std::span<const std::uint8_t> baseline) {
+    auto ordinary = compress(bytes, baseline);
+    // Stationary rooms can encode to a single shard even with hundreds of records.
+    // An unmarked dependency bundle or baseline stays on the opaque byte path.
+    if (ordinary.size() <= 1024 || !core::record_delta::framed(bytes) ||
+        (!baseline.empty() && !core::record_delta::framed(baseline)))
+        return ordinary;
+    const auto patch = core::record_delta::encode(bytes, baseline);
+    if (patch.empty() || patch.size() > impl->limit)
+        return ordinary;
+    auto packed = compress(patch, baseline);
+    if (packed.size() + headerSize >= ordinary.size())
+        return ordinary;
+    packed.insert(packed.begin(), ordinary.begin(), ordinary.begin() + headerSize);
+    packed.front() = baseline.empty() ? Mode::records : Mode::recordsPrefix;
+    return packed;
+}
+std::vector<std::uint8_t> StateCompression::expandWorld(std::span<const std::uint8_t> bytes,
+                                                        std::span<const std::uint8_t> baseline) {
+    if (bytes.empty() || (bytes.front() != Mode::records && bytes.front() != Mode::recordsPrefix))
+        return expand(bytes, baseline);
+    Reader reader(bytes);
+    const auto mode = reader.u8();
+    const auto size = reader.u32();
+    if (bytes.size() <= 2 * headerSize || bytes.size() > impl->limit + headerSize || !size ||
+        size > impl->limit || (mode == Mode::recordsPrefix) != !baseline.empty())
+        throw std::runtime_error("Invalid compressed record header");
+    const auto inner = bytes[headerSize];
+    if (inner != Mode::raw && inner != (baseline.empty() ? Mode::zstd : Mode::zstdPrefix))
+        throw std::runtime_error("Invalid record compression mode");
+    const auto patch = expand(bytes.subspan(headerSize), baseline);
+    return core::record_delta::expand(patch, baseline, size);
 }
 std::vector<std::uint8_t> StateCompression::expand(std::span<const std::uint8_t> bytes,
                                                    std::span<const std::uint8_t> baseline) {

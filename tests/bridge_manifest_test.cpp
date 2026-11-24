@@ -35,8 +35,23 @@ int main() {
         require(first.fingerprint ==
                     "778ee4385db41cdd9ff09237485c4cdc8f4470d4cd9e18931056c4eac33fbc61",
                 "Build fingerprint framing changed");
+        require(first.stockContent, "Stock installation has no optional blood projection");
+        auto workshop = directory.path / "mods/distribution";
+        write(workshop / "main.lua", "RegisterMod(\"Isaac LAN Workshop Package\", 1)\r\n");
+        write(workshop / "isaac-lan-update/profile.dll", "distribution");
+        require(isaac::app::buildManifest(directory.path, "fixture.version", log).stockContent,
+                "First-party installer disabled the stock projection");
+        write(workshop / "resources/effects.xml", "override");
+        require(!isaac::app::buildManifest(directory.path, "fixture.version", log).stockContent,
+                "Workshop directory masked a game asset");
+        std::filesystem::remove_all(workshop / "resources");
+        write(workshop / "main.lua", "RegisterMod(\"Isaac LAN Workshop Package\", 1)\na=1");
+        require(!isaac::app::buildManifest(directory.path, "fixture.version", log).stockContent,
+                "Workshop directory masked another script");
+        std::filesystem::remove_all(workshop);
         write(directory.path / "mods/a/main.lua", "mod");
         auto mod = isaac::app::buildManifest(directory.path, "fixture.version", log);
+        require(!mod.stockContent, "Active gameplay or unknown mod enabled stock projection");
         require(mod.fingerprint == first.fingerprint && mod.mods != first.mods,
                 "Advisory mods changed required build identity");
         const auto renamed = directory.path / L"mods/\u672c\u5730";
@@ -57,7 +72,8 @@ int main() {
         write(directory.path / "mods/copy/disable.it", "");
         write(renamed / "disable.it", "");
         auto disabled = isaac::app::buildManifest(directory.path, "fixture.version", log);
-        require(disabled.mods == first.mods, "Disabled mod entered the manifest");
+        require(disabled.stockContent && disabled.mods == first.mods,
+                "Disabled mod entered the manifest");
         require(isaac::app::buildManifest(directory.path, "other.version", log).fingerprint !=
                     first.fingerprint,
                 "Different game builds share an identity");

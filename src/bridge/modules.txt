@@ -125,6 +125,8 @@ runtime/animation_skip
 sync/capture
 sync/combat_events
 sync/combat_state
+sync/combat_frame
+sync/combat_visuals
 sync/replica
 compat/routes/challenge_goal
 compat/challenges/luck_game

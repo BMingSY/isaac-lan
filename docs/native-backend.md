@@ -197,7 +197,7 @@ Boss 演出事件使用独立序号和楼层／维度／房间身份。权威端
 
 `laser_path(sprite, bytes[, dx, dy])` 仅允许客机写入。可选偏移必须同时提供，只平移世界坐标，不修改形状、缩放或采样数量；调用方按已接受视图的路径重新计算平移，公开 `EndPoint` 属性由桥接层同步设置。
 
-纯数据接口 `laser_project(bytes, playerBeam)` 返回传输字节和是否可细化，`laser_expand(bytes)` 将其恢复为 `laser_path` 的输入。采用紧凑表示时两者还返回路径头的精确终点坐标。公开 `EndPoint` 与其逐坐标完全相等时可以引用它，独立终点随实时视图完整传输。两者只处理受限的路径值。逐点误差、归属以及细节接收契约见[世界状态同步](https://github.com/BMingSY/isaac-lan/blob/main/docs/synchronization.md)。
+纯数据接口 `laser_project(bytes, playerBeam)` 返回传输字节和是否可细化，`laser_expand(bytes)` 将其恢复为 `laser_path` 的输入。采用紧凑表示时两者依次返回路径头的精确终点 X、Y 和起点 X、Y。公开 `EndPoint` 和实体坐标与对应点逐位相等时可引用它，独立坐标随实时视图完整传输。两者只处理受限的路径值。逐点误差、归属以及细节接收契约见[世界状态同步](https://github.com/BMingSY/isaac-lan/blob/main/docs/synchronization.md)。
 
 忏悔＋的采样状态位于实体 `+0x45d`，允许 `0`、`1` 与原生未初始化值 `255`；起点／终点位于 `+0x468` 至 `+0x474`，形状值为 `+0x478`、缩放为 `+0x4e0`，采样数量为 `+0x47c`，两个游戏自有向量位于 `+0x480`／`+0x48c`。采样数量及每个路径向量各限制 2048 个点，所有浮点数及平移结果必须有限；完整解析、边界和偏移校验完成后才写入。两组原生向量的长度、容量和分配头也须有效；扩容先为两组准备存储，全部成功后才提交向量和标量，失败释放临时存储并保留旧状态。分配／释放入口分别为 `0x628740/0x70f939`，使用 cdecl、参数为字节数／指针和字节数。容量达到 4096 字节时额外申请 `0x23` 字节，返回 32 字节对齐位置并在前四字节保存原分配指针；释放还原原指针及完整字节数，保持原生向量析构约定。清空路径保留可复用容量，所有权和最终析构仍由游戏管理；[原版绑定](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-repentance.md#激光路径)提供独立布局与分配器，可移植校验见 [laser_state.h](https://github.com/BMingSY/isaac-lan/blob/main/src/core/laser_state.h)。
 

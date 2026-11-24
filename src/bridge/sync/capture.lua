@@ -15,6 +15,9 @@ return function(fields)
         local currentMap, currentGrids = {}, {}
         local roomState = deps.roomFactory()
         local function reset()
+            if deps.combatVisuals then
+                deps.combatVisuals.reset()
+            end
             captureTick, captureEpoch = nil, nil
             captureActors, captureVisuals, captureEncoded = {}, {}, {}
             previousActors, previousEncoded, previousMap, currentMap = {}, {}, {}, {}
@@ -227,7 +230,7 @@ return function(fields)
                 captureEncoded[shared.locations] = false
                 captureEncoded[shared.map] = false
             end
-            local room = roomState(slot, tick, epoch, view)
+            local room, particles = roomState(slot, tick, epoch, view)
             local grids = room[fields.room.grids]
             if grids then
                 currentGrids[grids] = true
@@ -251,9 +254,21 @@ return function(fields)
             if layered then
                 local realtime, stable, detail =
                     deps.layers.split(value, captureEncoded, projectedRooms, detailBudget)
-                return encode(worldSchema.pack(realtime), captureEncoded),
-                    encode(stable, captureEncoded),
-                    detail
+                if deps.combatVisuals then
+                    local eligible = particles and deps.sharedContent() and particles or nil
+                    realtime.room[fields.room.entities] = deps.combatVisuals.project(
+                        realtime.room[fields.room.entities],
+                        actors,
+                        eligible,
+                        slot,
+                        epoch,
+                        view,
+                        tick,
+                        detailBudget
+                    )
+                end
+                local bytes = deps.combatFrame.encode(realtime, worldSchema, encode, captureEncoded)
+                return bytes, encode(stable, captureEncoded), detail
             end
             return encode(worldSchema.pack(value), captureEncoded)
         end

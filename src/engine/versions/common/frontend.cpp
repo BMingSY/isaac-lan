@@ -66,6 +66,7 @@ std::optional<main_rows::Position> mainPaper;
 enum class MainMenuPointer { none, hover, confirm };
 MainMenuPointer mainPointer = MainMenuPointer::none;
 std::string error, fingerprint, modFingerprint;
+bool stockContent = false;
 int count = 0, draining = 0;
 bool prepared = false;
 bool lobbyRequested = false;
@@ -480,6 +481,7 @@ void manifest() {
                                     build::version(), logger, engine::modulePath(&fingerprint));
     fingerprint = std::move(value.fingerprint);
     modFingerprint = std::move(value.mods);
+    stockContent = value.stockContent;
 }
 bool invoke(int nargs, int results) {
     if (lua.pcall(state, nargs, results, 0, 0, nullptr) == 0)
@@ -866,6 +868,8 @@ void __attribute__((fastcall)) init(void* engine, void*, bool debug) {
             lua.pushClosure(state, testUpdateNotice, 0);
             lua.setField(state, -2, "test_update_notice");
         }
+        lua.pushBoolean(state, stockContent);
+        lua.setField(state, -2, "stock_content");
         lua.setGlobal(state, "_IsaacLan");
         lua.pushString(state, fingerprint.c_str());
         lua.setGlobal(state, "_IsaacLanFingerprint");

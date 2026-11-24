@@ -194,6 +194,7 @@ local function environment()
         "sync/codec",
         "sync/combat_state",
         "sync/layers",
+        "sync/combat_frame",
         "presentation/timeline",
         "presentation/attacks",
         "presentation/attack_prediction",

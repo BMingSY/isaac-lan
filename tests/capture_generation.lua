@@ -294,6 +294,7 @@ print("PASS common capture reuse, per-peer projections, wire equivalence and inv
 local fields = dofile(root .. "/src/bridge/sync/fields.lua")
 local layers = dofile(root .. "/src/bridge/sync/layers.lua")(fields)
 deps.layers = layers
+deps.combatFrame = dofile(root .. "/src/bridge/sync/combat_frame.lua")(fields)
 deps.inventory = function(player)
     local value = {
         player.ControllerIndex,

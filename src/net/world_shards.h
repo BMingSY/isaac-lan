@@ -16,6 +16,11 @@ class WorldShards {
     } quality;
 
   private:
+    // A partial group balances its data across the same number of packets.
+    // Its parity only needs the longest data shard in this group.
+    static std::size_t groupWidth(std::size_t size, std::size_t first, std::size_t count) {
+        return std::min(shardSize, (size - first * shardSize + count - 1) / count);
+    }
     struct Field {
         std::array<std::uint8_t, 512> exp{};
         std::array<unsigned, 256> log{};
@@ -91,6 +96,7 @@ class WorldShards {
         const auto shards = (bytes.size() + shardSize - 1) / shardSize;
         for (std::size_t first = 0; first < shards; first += dataShards) {
             const auto count = std::min(dataShards, shards - first);
+            const auto width = groupWidth(bytes.size(), first, count);
             const bool secondParity = count > 1 && redundancy(bytes.size(), limit) > 1;
             std::array<std::array<std::uint8_t, shardSize>, parityShards> parity{};
             const auto output = [&](unsigned index, std::span<const std::uint8_t> payload) {
@@ -103,8 +109,8 @@ class WorldShards {
                 emit(std::span(packet.bytes).subspan(1));
             };
             for (unsigned i = 0; i < count; ++i) {
-                const auto offset = (first + i) * shardSize;
-                const auto data = bytes.subspan(offset, std::min(shardSize, bytes.size() - offset));
+                const auto offset = first * shardSize + i * width;
+                const auto data = bytes.subspan(offset, std::min(width, bytes.size() - offset));
                 for (std::size_t byte = 0; byte < data.size(); ++byte) {
                     parity[0][byte] ^= data[byte];
                     if (secondParity)
@@ -112,9 +118,9 @@ class WorldShards {
                 }
                 output(i, data);
             }
-            output(dataShards, parity[0]);
+            output(dataShards, std::span(parity[0]).first(width));
             if (secondParity)
-                output(dataShards + 1, parity[1]);
+                output(dataShards + 1, std::span(parity[1]).first(width));
         }
     }
     std::optional<std::vector<std::uint8_t>> receive(std::span<const std::uint8_t> packet) {
@@ -122,7 +128,6 @@ class WorldShards {
         const auto id = reader.u32(), size = reader.u32();
         const auto groupIndex = reader.u16();
         const auto index = reader.u8();
-        constexpr std::size_t headerSize = 11;
         if (!size || size > maxSize)
             throw std::runtime_error("Invalid sharded world length");
         const auto shards = (size + shardSize - 1) / shardSize;
@@ -133,8 +138,9 @@ class WorldShards {
         if (index >= dataShards + parityShards || (index >= count && index < dataShards) ||
             (count == 1 && index == dataShards + 1))
             throw std::runtime_error("Invalid world shard index");
-        const auto offset = (first + index) * shardSize;
-        const auto expected = index < count ? std::min(shardSize, size - offset) : shardSize;
+        const auto width = groupWidth(size, first, count);
+        const auto offset = first * shardSize + index * width;
+        const auto expected = index < count ? std::min(width, size - offset) : width;
         if (packet.size() != headerSize + expected)
             throw std::runtime_error("Invalid world shard payload");
         if (completed && id <= *completed)
@@ -177,24 +183,24 @@ class WorldShards {
         if (lost) {
             view.repaired = true;
             const bool haveXor = group.present & (1u << dataShards);
-            for (std::size_t byte = 0; byte < shardSize; ++byte) {
+            for (std::size_t byte = 0; byte < width; ++byte) {
                 auto p = group.parity[0][byte], q = group.parity[1][byte];
                 for (unsigned i = 0; i < count; ++i)
                     if (group.present & (1u << i)) {
-                        const auto data = view.bytes[(first + i) * shardSize + byte];
+                        const auto data = view.bytes[first * shardSize + i * width + byte];
                         p ^= data;
                         q ^= field().multiply(data, 1u << i);
                     }
                 const auto a = missing[0];
                 if (lost == 1)
-                    view.bytes[(first + a) * shardSize + byte] =
+                    view.bytes[first * shardSize + a * width + byte] =
                         haveXor ? p : field().divide(q, 1u << a);
                 else {
                     const auto b = missing[1];
                     const auto value =
                         field().divide(q ^ field().multiply(p, 1u << b), (1u << a) ^ (1u << b));
-                    view.bytes[(first + a) * shardSize + byte] = value;
-                    view.bytes[(first + b) * shardSize + byte] = p ^ value;
+                    view.bytes[first * shardSize + a * width + byte] = value;
+                    view.bytes[first * shardSize + b * width + byte] = p ^ value;
                 }
             }
         }
