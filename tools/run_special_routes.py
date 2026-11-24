@@ -185,6 +185,7 @@ def main():
         for name in (
             "endings",
             "floor-sources",
+            "room-ambience",  # The seed needs the unlocked room pool for wet and dry Dross rooms.
             "hourglass-routes",
             "campaign",
             "victory-lap",
