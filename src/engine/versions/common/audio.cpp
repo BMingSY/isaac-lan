@@ -101,6 +101,42 @@ void __attribute__((fastcall)) musicFade(void* manager, void*, int id, float rat
 }
 using Play = void(__attribute__((thiscall)) *)(void*, int, float, int, bool, float, float);
 Play originalPlay = nullptr;
+using UpdateLoop = void(__attribute__((thiscall)) *)(void*, int, float, float);
+UpdateLoop originalUpdateLoop = nullptr;
+using RoomAmbience = void(__attribute__((thiscall)) *)(void*);
+RoomAmbience originalRoomAmbience = nullptr;
+enum class Ambience { unscoped, local, background };
+Ambience ambience = Ambience::unscoped;
+int localLoop = -1;
+void __attribute__((fastcall)) roomAmbience(void* room, void*) {
+    struct Restore {
+        Ambience previous = ambience;
+        ~Restore() {
+            ambience = previous;
+        }
+    } restore;
+    const auto audience = rooms::soundAudience();
+    ambience = Ambience::unscoped;
+    if (audience)
+        ambience =
+            audible(audience, runtime::localViewSlot()) ? Ambience::local : Ambience::background;
+    // Run all room bookkeeping even when its mixer requests are inaudible.
+    originalRoomAmbience(room);
+}
+void __attribute__((fastcall)) updateLoop(void* manager, void*, int id, float volume, float pitch) {
+    if (ambience == Ambience::background)
+        return;
+    struct Restore {
+        int previous = localLoop;
+        ~Restore() {
+            localLoop = previous;
+        }
+    } restore;
+    // The room drives its continuous channels on both peers. Explicit Play
+    // requests and loop controllers outside the room mixer keep their audience.
+    localLoop = ambience == Ambience::local ? id : -1;
+    originalUpdateLoop(manager, id, volume, pitch);
+}
 void __attribute__((fastcall)) play(void* manager, void*, int id, float volume, int delay,
                                     bool loop, float pitch, float pan) {
     const auto audience = rooms::soundAudience();
@@ -108,7 +144,7 @@ void __attribute__((fastcall)) play(void* manager, void*, int id, float volume, 
         ++filteredSounds;
         return;
     }
-    if (audience && !runtime::replica()) {
+    if (audience && !runtime::replica() && !(loop && id == localLoop)) {
         events.push_back(
             {++serial, runtime::tick(), audience, id, volume, delay, loop, pitch, pan});
         while (events.size() > 512)
@@ -245,7 +281,7 @@ bool install(std::uintptr_t base) {
     if (!base || installed)
         return false;
     image = base;
-    std::array<void*, 3> targets{};
+    std::array<void*, 5> targets{};
     unsigned created = 0;
     auto hook = [&](unsigned rva, auto detour, auto& original) {
         auto* target = reinterpret_cast<void*>(base + rva);
@@ -256,6 +292,8 @@ bool install(std::uintptr_t base) {
         return true;
     };
     bool success = hook(bindings.entry.sound, play, originalPlay) &&
+                   hook(bindings.entry.updateLoop, updateLoop, originalUpdateLoop) &&
+                   hook(bindings.entry.roomAmbience, roomAmbience, originalRoomAmbience) &&
                    hook(bindings.entry.musicPlay, musicPlay, originalMusicPlay) &&
                    hook(bindings.entry.musicFade, musicFade, originalMusicFade);
     if (success) {
@@ -271,6 +309,8 @@ bool install(std::uintptr_t base) {
         while (created)
             MH_RemoveHook(targets[--created]);
         originalPlay = nullptr;
+        originalUpdateLoop = nullptr;
+        originalRoomAmbience = nullptr;
         originalMusicPlay = originalMusicFade = nullptr;
         image = 0;
     }

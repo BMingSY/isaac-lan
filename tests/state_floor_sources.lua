@@ -29,6 +29,36 @@ local function actor(slot, callback)
         callback(Isaac.GetPlayer(assert(native.rooms_heads()[tostring(slot)])))
     end))
 end
+-- Observe arrival before the next physics update can move a misplaced player.
+local entered = _IsaacLanRoomEntered
+local ladderChecked = false
+function _IsaacLanRoomEntered(door)
+    if
+        host
+        and step == "crawlspace-enter"
+        and Game():GetLevel():GetCurrentRoomIndex() == GridRooms.ROOM_DUNGEON_IDX
+    then
+        local room, player = Game():GetRoom(), Isaac.GetPlayer(0)
+        local ladder
+        for i = 0, room:GetGridSize() - 1 do
+            local grid = room:GetGridEntity(i)
+            if
+                grid
+                and grid:GetType() == GridEntityType.GRID_DECORATION
+                and grid:GetVariant() == 10
+                and (not ladder or grid.Position.Y < ladder.Y)
+            then
+                ladder = grid.Position
+            end
+        end
+        assert(
+            door == DoorSlot.NO_DOOR_SLOT and ladder and math.abs(player.Position.X - ladder.X) < 20,
+            "Crawlspace entry missed its ladder: door=" .. door .. " x=" .. player.Position.X
+        )
+        ladderChecked = true
+    end
+    return entered(door)
+end
 local function mark(name, tick)
     step, stepAt = name, tick
     report("STEP case=" .. caseIndex .. " " .. name)
@@ -136,16 +166,21 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                     assert(not room:GetGridEntity(index), "Staircase grid is occupied")
                     assert(room:SpawnGridEntity(index, GridEntityType.GRID_STAIRS, 0, 123, 0))
                     crawlspaceEntrance = room:GetGridPosition(index)
+                    -- Another player may just have left this room through its bottom door.
+                    Game():GetLevel().LeaveDoor = DoorSlot.DOWN0
                     player.Position, player.Velocity =
                         crawlspaceEntrance + Vector(60, 0), Vector.Zero
                 end)
                 mark("crawlspace-enter", tick)
             elseif step == "crawlspace-enter" and tick - stepAt > 30 then
                 if native.rooms_positions()["1"].index == GridRooms.ROOM_DUNGEON_IDX then
+                    assert(ladderChecked, "Native staircase arrival was not observed")
                     crawlspaceSeen = true
                     actor(1, function(player)
                         assert(Game():GetRoom():GetType() == RoomType.ROOM_DUNGEON)
-                        player.Position, player.Velocity = Vector(120, 200), Vector.Zero
+                        -- Climb from the landing column selected by native entry.
+                        player.Position, player.Velocity =
+                            Vector(player.Position.X, 200), Vector.Zero
                     end)
                     report("CHECKED host crawlspace entry")
                     mark("crawlspace-return", tick)
@@ -443,5 +478,8 @@ end
 return {
     done = function()
         return finished
+    end,
+    cleanup = function()
+        _IsaacLanRoomEntered = entered
     end,
 }

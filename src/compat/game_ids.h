@@ -104,7 +104,11 @@ namespace gameStateFlag {
 inline constexpr unsigned heavenPath = 19;
 inline constexpr unsigned backwardsPath = 48;
 } // namespace gameStateFlag
+namespace gridRoom {
+inline constexpr int dungeon = -4;
+} // namespace gridRoom
 namespace roomTransition {
+inline constexpr int pixelation = 2;
 inline constexpr int mirror = 18;
 } // namespace roomTransition
 } // namespace isaac::compat::ids

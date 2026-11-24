@@ -25,6 +25,7 @@
 #include "compat/bosses/rotgut.h"
 #include "compat/enemies/room_transitions.h"
 #include "compat/routes/mines.h"
+#include "compat/routes/crawlspace.h"
 #include "compat/routes/mirror.h"
 #include "compat/routes/curses.h"
 #include "compat/routes/home.h"
@@ -1420,7 +1421,12 @@ void transitionRequest(void* g, int index, int direction, int animation, void* p
         engine::items::initializeBlueRoom(g, at<int>(game(), layout.game.roomIndex), index,
                                           direction))
         index = compat::items::blueRoomIndex;
-    const int leave = at<int>(game(), layout.game.leaveDoor);
+    // A staircase has no wall aperture. LeaveDoor can still describe the
+    // last player who walked out of the shared source room.
+    const int leave =
+        compat::routes::crawlspaceStairs(at<int>(game(), layout.game.roomIndex), index, animation)
+            ? -1
+            : at<int>(game(), layout.game.leaveDoor);
     const auto mirrorEntry = compat::routes::mirrorEntrance(animation, leave);
     int enter =
         mirrorEntry.value_or(leave >= 0 && leave < 8 ? (leave % 4 + 2) % 4 + (leave / 4) * 4 : -1);

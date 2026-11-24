@@ -28,6 +28,7 @@ constexpr unsigned musicOffset = 0x2a104, volumeOffset = 0x2a624;
 constexpr unsigned currentOffset = 0x30c, queuedOffset = 0x310, imageSize = privateGameImageBytes;
 using Address = std::uintptr_t;
 using Music = void(__attribute__((thiscall)) *)(void*, int, float);
+using UpdateLoop = void(__attribute__((thiscall)) *)(void*, int, float, float);
 using Sound = void(__attribute__((thiscall)) *)(void*, int, float, int, bool, float, float);
 unsigned char* image;
 std::array<unsigned char, 0x18400> game{};
@@ -51,6 +52,19 @@ struct MusicCall {
 };
 std::vector<SoundCall> soundCalls;
 std::vector<MusicCall> musicCalls;
+struct LoopCall {
+    int id;
+    float volume, pitch;
+};
+std::vector<LoopCall> loopCalls;
+std::map<int, bool> loopPlaying;
+LoopCall roomRequest{};
+unsigned roomUpdates = 0;
+void roomLoop(int id, float volume, float pitch = 1.0f) {
+    roomRequest = {id, volume, pitch};
+    using Update = void(__attribute__((thiscall))*)(void*);
+    reinterpret_cast<Update>(image + backend::entry::roomUpdateAmbience)(room.data());
+}
 template <class T> T& field(void* object, unsigned offset) {
     return *reinterpret_cast<T*>(static_cast<unsigned char*>(object) + offset);
 }
@@ -80,6 +94,24 @@ void __attribute__((thiscall)) nativeSound(void* receiver, int id, float volume,
                                            bool loop, float pitch, float pan) {
     require(receiver == sfx.data(), "Sound receiver changed");
     soundCalls.push_back({id, volume, delay, loop, pitch, pan});
+}
+void updateLoop(int id, float volume, float pitch = 1.0f) {
+    reinterpret_cast<UpdateLoop>(image + backend::entry::audioUpdateLoop)(sfx.data(), id, volume,
+                                                                          pitch);
+}
+void __attribute__((thiscall)) nativeLoop(void* receiver, int id, float volume, float pitch) {
+    require(receiver == sfx.data(), "Loop update receiver changed");
+    loopCalls.push_back({id, volume, pitch});
+    if (volume > 0 && !loopPlaying[id]) {
+        reinterpret_cast<Sound>(image + backend::entry::audioPlay)(receiver, id, volume, 0, true,
+                                                                   pitch, 0.0f);
+    }
+    loopPlaying[id] = volume > 0;
+}
+void __attribute__((thiscall)) nativeRoomAmbience(void* receiver) {
+    require(receiver == room.data(), "Room ambience receiver changed");
+    ++roomUpdates;
+    updateLoop(roomRequest.id, roomRequest.volume, roomRequest.pitch);
 }
 void __attribute__((thiscall)) nativeMusic(void* receiver, int id, float parameter) {
     require(receiver == musicManager(), "Music receiver changed");
@@ -117,6 +149,8 @@ void setup() {
         VirtualAlloc(nullptr, imageSize, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
     require(image && MH_Initialize() == MH_OK, "Allocate isolated audio fixture");
     patch(backend::entry::audioPlay, nativeSound);
+    patch(backend::entry::audioUpdateLoop, nativeLoop);
+    patch(backend::entry::roomUpdateAmbience, nativeRoomAmbience);
     patch(backend::entry::musicPlay, nativeMusic);
     patch(backend::entry::musicCrossfade, nativeFade);
     patch(backend::entry::roomUpdateMusic, nativeSelector);
@@ -132,7 +166,8 @@ void setup() {
     require(MH_CreateHook(foreign, reinterpret_cast<void*>(nativeFade), nullptr) == MH_OK,
             "Create foreign audio conflict");
     require(!audio::install(reinterpret_cast<Address>(image)), "Partial audio install succeeded");
-    for (unsigned rva : {backend::entry::audioPlay, backend::entry::musicPlay}) {
+    for (unsigned rva : {backend::entry::audioPlay, backend::entry::audioUpdateLoop,
+                         backend::entry::roomUpdateAmbience, backend::entry::musicPlay}) {
         require(MH_CreateHook(image + rva, reinterpret_cast<void*>(nativeSound), nullptr) == MH_OK,
                 "Failed audio install retained a hook");
         require(MH_RemoveHook(image + rva) == MH_OK, "Remove rollback probe");
@@ -167,6 +202,9 @@ void reset() {
     failSelector = false;
     soundCalls.clear();
     musicCalls.clear();
+    loopCalls.clear();
+    loopPlaying.clear();
+    roomUpdates = 0;
     lastError.clear();
     current() = 41;
     queued() = 43;
@@ -253,6 +291,51 @@ void soundRouting() {
             "Sound eviction lost serial ordering");
     audio::reset();
     require(soundEvents(0).empty(), "Session reset retained sound events");
+}
+void roomLoops() {
+    constexpr int fire = 269, water = 473, swarm = 4;
+    for (int sound : {fire, water, swarm, 1234}) {
+        for (bool guest : {false, true}) {
+            reset();
+            replica = guest;
+            localSlot = guest ? 1 : 0;
+            const unsigned local = 1u << localSlot, remote = 1u << (1 - localSlot);
+            audience = remote;
+            roomLoop(sound, 0.7f);
+            require(roomUpdates == 1 && loopCalls.empty() && soundCalls.empty(),
+                    "Remote room ambience started a local channel");
+            audience = local;
+            roomLoop(sound, 0.2f, 0.85f);
+            require(loopPlaying[sound] && soundCalls.size() == 1 && soundCalls.back().loop &&
+                        soundCalls.back().pitch == 0.85f,
+                    "Local ambience did not start its native loop");
+            audience = remote;
+            roomLoop(sound, 0.0f);
+            require(loopPlaying[sound] && loopCalls.size() == 1,
+                    "Quiet remote room stopped the local loop");
+            audience = local | remote;
+            roomLoop(sound, 0.6f, 1.1f);
+            require(loopCalls.size() == 2 && loopCalls.back().volume == 0.6f &&
+                        loopCalls.back().pitch == 1.1f && soundCalls.size() == 1,
+                    "Shared room restarted the loop or lost native adjustments");
+            audience = local;
+            roomLoop(sound, 0.0f);
+            require(!loopPlaying[sound] && soundEvents(0).empty() && soundEvents(1).empty(),
+                    "Local ambience did not stop or its native start was sent as a second sound");
+        }
+    }
+    reset();
+    audience = 0;
+    roomLoop(water, 0.5f);
+    require(loopPlaying[water] && soundCalls.size() == 1 && soundEvents(0).empty(),
+            "Unscoped native water did not play");
+    audience = 2;
+    updateLoop(fire, 0.4f);
+    require(loopCalls.back().id == fire && loopCalls.back().volume == 0.4f &&
+                soundEvents(1).size() == 29 && soundCalls.back().volume == 0,
+            "A loop outside the room mixer lost its audience");
+    playSound(water);
+    require(soundEvents(1).size() == 2 * 29, "Explicit playback of the water ID was intercepted");
 }
 void roomMusic() {
     reset();
@@ -426,6 +509,7 @@ int main() {
     try {
         setup();
         soundRouting();
+        roomLoops();
         roomMusic();
         selectorCleanup();
         replicaMusic();

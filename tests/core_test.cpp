@@ -18,6 +18,7 @@
 #include "compat/bosses/rotgut.h"
 #include "compat/enemies/room_transitions.h"
 #include "compat/routes/mines.h"
+#include "compat/routes/crawlspace.h"
 #include "compat/routes/mirror.h"
 #include "compat/routes/curses.h"
 #include "compat/characters/traits.h"
@@ -446,6 +447,13 @@ void roomTransitionContext() {
     using namespace isaac::rooms;
     using namespace isaac::compat::bosses;
     using namespace isaac::compat::routes;
+    using namespace isaac::compat::ids;
+    require(crawlspaceStairs(84, gridRoom::dungeon, roomTransition::pixelation) &&
+                crawlspaceStairs(gridRoom::dungeon, 84, roomTransition::pixelation) &&
+                !crawlspaceStairs(-6, gridRoom::dungeon, 0) &&
+                !crawlspaceStairs(gridRoom::dungeon, -6, 0) &&
+                !crawlspaceStairs(84, 85, roomTransition::pixelation),
+            "Staircase arrival must preserve the native ladder without suppressing wall doors");
     require(validRoomRequest(-100, -1) && validRoomRequest(-101, 0),
             "Native mirror/mineshaft aliases were rejected before descriptor lookup");
     require(!validRoomRequest(-21, 0) && !validRoomRequest(-102, 0) && !validRoomRequest(169, 0) &&
