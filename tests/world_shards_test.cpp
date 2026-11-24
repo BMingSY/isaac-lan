@@ -6,7 +6,8 @@
 using namespace isaac::lan;
 static void erasures() {
     std::mt19937 random(103);
-    for (const auto size : {1u, 1023u, 1200u, 2048u, 3072u, 3073u, 8192u, 88001u, 2097152u}) {
+    for (const auto size :
+         {1u, 1023u, 1200u, 2048u, 3072u, 3073u, 8192u, 8193u, 9217u, 88001u, 2097152u}) {
         std::vector<std::uint8_t> input(size);
         for (auto& byte : input)
             byte = random();
@@ -40,8 +41,12 @@ static void erasures() {
     }
 }
 static void overhead() {
-    for (const auto& [size, count] :
-         {std::pair{1200u, 3u}, {2048u, 3u}, {3072u, 4u}, {3073u, 6u}, {8192u, 10u}}) {
+    struct Case {
+        unsigned size, count, parityBytes;
+    };
+    for (const auto [size, count, parityBytes] :
+         {Case{1200, 3, 600}, Case{2048, 3, 1024}, Case{3072, 4, 1024}, Case{3073, 6, 1538},
+          Case{8192, 10, 2048}, Case{8193, 12, 2049}}) {
         std::vector<std::uint8_t> bytes(size, 42);
         std::size_t packets = 0, wire = 0;
         WorldShards::send(1, bytes, [&](auto packet) {
@@ -50,8 +55,9 @@ static void overhead() {
         });
         require(packets == count && packets == WorldShards::packetCount(size),
                 "Small-view parity or sequence-window packet budget differs");
-        if (size <= 3072)
-            require(wire == size + 1024 + count * 11, "Small view sent redundant second parity");
+        // Only the longest data shard in each group contributes parity bytes.
+        require(wire == size + parityBytes + count * WorldShards::headerSize,
+                "Partial group padded its parity");
     }
 }
 static void cleanup() {

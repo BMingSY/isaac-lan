@@ -336,6 +336,13 @@ if(BUILD_TESTING)
         add_test(NAME core.feedback-${test_case} COMMAND isaac_lan_feedback_test ${test_case})
         set_tests_properties(core.feedback-${test_case} PROPERTIES TIMEOUT 30 LABELS "offline;core")
     endforeach()
+    add_executable(isaac_lan_records_test tests/record_delta_test.cpp src/core/record_delta.cpp)
+    target_include_directories(isaac_lan_records_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_records_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    add_test(NAME core.combat-records COMMAND isaac_lan_records_test)
+    set_tests_properties(core.combat-records PROPERTIES TIMEOUT 30 LABELS "offline;core")
     add_executable(isaac_lan_delta_test tests/snapshot_delta_test.cpp)
     target_include_directories(isaac_lan_delta_test PRIVATE src)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -394,6 +401,7 @@ if(BUILD_TESTING)
         isaac_add_lua_test(presentation.vote-progress vote_progress.lua)
         isaac_add_lua_test(bridge.capture_generation capture_generation.lua)
         isaac_add_lua_test(bridge.state-layers state_layers.lua)
+        isaac_add_lua_test(bridge.combat-views combat_views.lua)
         isaac_add_lua_test(presentation.timeline presentation_timeline.lua)
         isaac_add_lua_test(bridge.replica_pipeline replica_pipeline.lua)
         isaac_add_lua_test(bridge.challenges challenges.lua)
@@ -434,6 +442,7 @@ if(BUILD_TESTING)
         isaac_add_lua_test(bridge.layers layer_contracts.lua)
         isaac_add_lua_test(bridge.api bridge_api.lua)
         isaac_add_lua_test(bridge.sdk bridge_sdk.lua)
+        isaac_add_lua_test(bridge.effect-sync effect_sync.lua)
         isaac_add_lua_test(bridge.compat-observation compat_observation.lua)
         isaac_add_lua_test(bridge.goodtrip goodtrip_rules.lua)
         isaac_add_lua_test(bridge.prediction prediction.lua)
@@ -637,8 +646,13 @@ target_include_directories(isaac_lan_enet PUBLIC vendor/enet/include)
 target_link_libraries(isaac_lan_enet PUBLIC ws2_32 winmm)
 add_library(
     isaac_lan_net STATIC
-    src/net/session.cpp src/net/network_io.cpp src/net/udp_io.cpp src/net/byte_worker.cpp
-    src/net/compression.cpp src/net/host_resolution.cpp)
+    src/core/record_delta.cpp
+    src/net/session.cpp
+    src/net/network_io.cpp
+    src/net/udp_io.cpp
+    src/net/byte_worker.cpp
+    src/net/compression.cpp
+    src/net/host_resolution.cpp)
 target_include_directories(isaac_lan_net PUBLIC src)
 target_compile_definitions(isaac_lan_net PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_link_libraries(isaac_lan_net PUBLIC ws2_32 bcrypt isaac_lan_deflate isaac_lan_zstd

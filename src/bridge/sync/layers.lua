@@ -47,7 +47,55 @@ return function(fields, project, expand)
     -- Actors, NPC poses, hazards and every entity link always travel together.
     -- Only an explicitly player-spawned beam may use a bounded drawing approximation.
     local function sameCoordinate(a, b)
-        return a == b and (a ~= 0 or 1 / a == 1 / b)
+        return a == b and math.type(a) == math.type(b) and (a ~= 0 or 1 / a == 1 / b)
+    end
+    local function poseScalar(value, source, restoring)
+        if restoring then
+            if value == true then
+                assert(type(source) == "number", "Missing laser pose field")
+                return source
+            end
+        elseif type(source) == "number" and sameCoordinate(value, source) then
+            return true
+        end
+        return value
+    end
+    local function posePoint(entity, key, x, y, restoring)
+        local point = entity[key]
+        if restoring then
+            if point == true then
+                assert(x and y, "Missing laser path point")
+                entity[key] = { x, y }
+            end
+        elseif x and point and sameCoordinate(point[1], x) and sameCoordinate(point[2], y) then
+            entity[key] = true
+        end
+    end
+    -- Immutable leaves may be shared by the capture cache or the view decoder.
+    local function laserPose(entity, x, y, ox, oy, restoring)
+        posePoint(entity, Entity.laserEndPoint, x, y, restoring)
+        posePoint(entity, Entity.position, ox, oy, restoring)
+        local a, laser = entity[Entity.typed], fields.laser
+        if type(a) == "table" then
+            local degrees = poseScalar(a[laser.degrees], a[laser.angle], restoring)
+            local last = poseScalar(a[laser.lastDegrees], a[laser.angle], restoring)
+            if degrees ~= a[laser.degrees] or last ~= a[laser.lastDegrees] then
+                a = copy(a)
+                a[laser.degrees], a[laser.lastDegrees] = degrees, last
+                entity[Entity.typed] = a
+            end
+        end
+        local sprite, common = entity[Entity.sprite], entity[Entity.common]
+        if type(sprite) == "table" and type(common) == "table" then
+            local key = fields.sprite.rotation
+            local rotation =
+                poseScalar(sprite[key], common[fields.entityCommon.spriteRotation], restoring)
+            if rotation ~= sprite[key] then
+                sprite = copy(sprite)
+                sprite[key] = rotation
+                entity[Entity.sprite] = sprite
+            end
+        end
     end
     local function projectRoom(view, realtime, cache)
         if not project then
@@ -71,18 +119,10 @@ return function(fields, project, expand)
                 end
                 local spawner = entity[Entity.spawner]
                 local owner = spawner ~= 0 and spawner or entity[Entity.parent]
-                local bytes, refine, x, y = project(path, players[owner] == true)
+                local bytes, refine, x, y, ox, oy = project(path, players[owner] == true)
                 local value = copy(entity)
                 value[Entity.laserPath] = bytes
-                local endpoint = entity[Entity.laserEndPoint]
-                if
-                    x
-                    and endpoint
-                    and sameCoordinate(endpoint[1], x)
-                    and sameCoordinate(endpoint[2], y)
-                then
-                    value[Entity.laserEndPoint] = true
-                end
+                laserPose(value, x, y, ox, oy, false)
                 projected[index] = value
                 if refine then
                     details = details or {}
@@ -193,11 +233,8 @@ return function(fields, project, expand)
             for _, entity in ipairs(view.room[Room.entities]) do
                 if entity[Entity.laserPath] then
                     local wire = entity[Entity.laserPath]
-                    local raw, refinable, x, y = expand(wire)
-                    if entity[Entity.laserEndPoint] == true then
-                        assert(x and y, "Missing laser endpoint")
-                        entity[Entity.laserEndPoint] = { x, y }
-                    end
+                    local raw, refinable, x, y, ox, oy = expand(wire)
+                    laserPose(entity, x, y, ox, oy, true)
                     entity[Entity.laserPath] = raw
                     if refinable then
                         view.laserRefinements = view.laserRefinements or {}

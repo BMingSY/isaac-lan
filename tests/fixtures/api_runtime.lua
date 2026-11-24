@@ -29,6 +29,7 @@ return function(root)
         peers[slot] = p
         local env = setmetatable({}, { __index = _G })
         env._G = env
+        env.EffectVariant = dofile(root .. "/tests/fixtures/game_enums.lua").EffectVariant
         p.env = env
         local native = {}
         env._IsaacLan = native
@@ -61,12 +62,12 @@ return function(root)
                 ready = p.ready,
                 authority = slot == 0 and 1 or 0,
                 slot = slot,
-                players = 2,
-                connected = 3,
+                players = p.players or 2,
+                connected = p.connected or 3,
                 worldEpoch = p.epoch,
                 tick = p.tick,
                 nowMs = p.now,
-                runId = string.rep("a", 32),
+                runId = p.runId or string.rep("a", 32),
             }
         end
         function native.api_nonce()
@@ -128,6 +129,8 @@ return function(root)
             return true
         end
         for _, name in ipairs({
+            "sync/effect_classes",
+            "api/effect_sync",
             "api/codec",
             "api/lifecycle",
             "api/actions",

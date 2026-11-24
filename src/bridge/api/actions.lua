@@ -258,6 +258,9 @@ return function(bridge)
                 nextCapabilities[action[1]] = action[2]
             end
             capabilities = nextCapabilities
+            bridge.effects.confirm(message.effectSync or 0)
+        elseif message.kind == "effect_sync" then
+            bridge.effects.receive(info, sender, message)
         elseif message.kind == "result" and sender == 0 then
             local entry = pending[message.requestId]
             if
@@ -335,6 +338,18 @@ return function(bridge)
     end
     function actions.poll()
         local info = bridge.info()
+        local mask = bridge.effects.poll(info)
+        if mask then
+            native.api_send(
+                0,
+                codec.encode({
+                    kind = "effect_sync",
+                    runId = info.runId,
+                    worldEpoch = info.worldEpoch,
+                    mask = mask,
+                })
+            )
+        end
         if info.authority == 1 then
             local available = {}
             for actionKey, record in pairs(definitions) do
@@ -355,12 +370,15 @@ return function(bridge)
             then
                 capabilitySignature, actions.lastCapabilities = signature, info.nowMs
                 for slot = 1, info.players - 1 do
-                    send(slot, {
-                        kind = "capabilities",
-                        runId = info.runId,
-                        worldEpoch = info.worldEpoch,
-                        actions = available,
-                    })
+                    if (info.connected & (1 << slot)) ~= 0 then
+                        send(slot, {
+                            kind = "capabilities",
+                            runId = info.runId,
+                            worldEpoch = info.worldEpoch,
+                            actions = available,
+                            effectSync = bridge.effects.peerRequest(slot),
+                        })
+                    end
                 end
             end
         end

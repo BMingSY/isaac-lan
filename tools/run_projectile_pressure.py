@@ -38,22 +38,31 @@ def compare_combat(host_log, client_log):
     # Both protected game processes use the same Windows monotonic clock.
     arrivals = sorted((at, host[tick][0]) for tick, (at, _) in guest.items())
     times = [at for at, _ in arrivals]
-    limits = [
-        int(value) for value in re.findall(r"LAN_COMBAT_WINDOW moving-enemy-fire (\d+)", host_log)
-    ]
-    if len(limits) == 2:
+    windows = re.findall(r"LAN_COMBAT_WINDOW ([\w-]+) (\d+)", host_log)
+
+    def measurement(limits):
+        if len(limits) != 2:
+            return {}
         start, end = limits
-        if end > start and times[0] <= start:
-            current = [at for at in times if start <= at < end]
-            gaps = [b - a for a, b in zip([start] + current, current + [end])]
-            ages = sorted(
-                t - arrivals[bisect_right(times, t) - 1][1] for t in range(start, end, 10)
-            )
-            report.update(
-                applied_hz=round(len(current) * 1000 / (end - start), 2),
-                newest_state_age_p95_ms=ages[ceil(len(ages) * 0.95) - 1],
-                max_update_gap_ms=max(gaps),
-            )
+        if end <= start or times[0] > start:
+            return {}
+        current = [at for at in times if start <= at < end]
+        if not current:
+            return {}
+        gaps = [b - a for a, b in zip([start] + current, current + [end])]
+        ages = sorted(t - arrivals[bisect_right(times, t) - 1][1] for t in range(start, end, 10))
+        return dict(
+            applied_hz=round(len(current) * 1000 / (end - start), 2),
+            newest_state_age_p95_ms=ages[ceil(len(ages) * 0.95) - 1],
+            max_update_gap_ms=max(gaps),
+        )
+
+    for case in dict.fromkeys(name for name, _ in windows):
+        values = measurement([int(at) for name, at in windows if name == case])
+        if case == "moving-enemy-fire":
+            report.update(values)
+        else:
+            report.setdefault("cases", {})[case] = values
     return report
 
 
@@ -72,7 +81,13 @@ def main():
     parser.add_argument(
         "--verify", action="store_true", help="Also check links, room and floor cleanup"
     )
-    parser.add_argument(
+    cases = parser.add_mutually_exclusive_group()
+    cases.add_argument(
+        "--late-game",
+        action="store_true",
+        help="Compare actual fetus/Tech 0 fire, multishot and a mixed barrage on both peers",
+    )
+    cases.add_argument(
         "--combat",
         action="store_true",
         help="Compare a moving shooter and hostile shot at each applied tick under laser load",
@@ -100,6 +115,13 @@ def main():
         script = output / "fixture.lua"
         script.write_text(
             f"_IsaacLanProjectileFixture = {{ verify = {str(args.verify).lower()}, combat = {str(args.combat).lower()} }}\n"
+            + (
+                "_IsaacLanProjectileFixture.lateGame = (function()\n"
+                + (ROOT / "tests/support/late_game_combat.lua").read_text()
+                + "\nend)()\n"
+                if args.late_game
+                else ""
+            )
             + (ROOT / "tests/state_projectile_pressure.lua").read_text()
         )
         command = engine_command(
@@ -149,19 +171,22 @@ def main():
             path = output / "engine" / role / "log.txt"
             if path.is_file():
                 log = path.read_text(errors="replace")
-                if args.combat:
+                if args.combat or args.late_game:
                     observed[role] = log
                 report["measurements"][role] = [
                     json.loads(line.split("LAN_PROJECTILE_PRESSURE ", 1)[1])
                     for line in log.splitlines()
                     if "LAN_PROJECTILE_PRESSURE {" in line
                 ]
-        if args.combat:
+        if args.combat or args.late_game:
             combat = compare_combat(observed.get("host", ""), observed.get("client", ""))
             report["combat"] = combat
             report["passed"] = (
                 report["passed"] and bool(combat["guest_views"]) and not combat["different_ticks"]
             )
+            if args.late_game:
+                windows = combat.get("cases", {})
+                report["passed"] = report["passed"] and len(windows) == 3 and all(windows.values())
         idle(labs, exclusive=not args.verify)
     finally:
         finish_run(protected, report, output)

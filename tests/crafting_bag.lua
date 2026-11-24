@@ -189,11 +189,22 @@ local function environment()
         presentation_reset = noop,
         rewind_reset = noop,
     }
-    local modules = {}
+    local modules = {
+        ["api/public"] = {
+            effects = {
+                forPeer = function()
+                    return 0
+                end,
+            },
+        },
+    }
     for _, name in ipairs({
         "sync/codec",
+        "sync/effect_classes",
+        "sync/combat_visuals",
         "sync/combat_state",
         "sync/layers",
+        "sync/combat_frame",
         "presentation/timeline",
         "presentation/attacks",
         "presentation/attack_prediction",
