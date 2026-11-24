@@ -81,7 +81,8 @@ return {
         PLAYER_JACOB2_B = 39,
         PLAYER_THESOUL_B = 40,
     },
-    EffectVariant = { DOGMA_ORB = 172 },
+    EntityCollisionClass = { ENTCOLL_NONE = 0 },
+    EffectVariant = { BLOOD_PARTICLE = 5, BLOOD_EXPLOSION = 2, DOGMA_ORB = 172 },
     LevelStage = { STAGE5 = 10, STAGE8 = 13 },
     StageType = { STAGETYPE_ORIGINAL = 0, STAGETYPE_WOTL = 1 },
     RoomType = {

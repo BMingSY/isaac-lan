@@ -91,6 +91,8 @@ return {
         tether = 28,
         combat = 29,
     },
+    laser = { angle = 1, degrees = 2, lastDegrees = 3 },
+    entityCommon = { spriteRotation = 11 },
     room = {
         clear = 1,
         frame = 2,

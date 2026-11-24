@@ -9,6 +9,7 @@
 #include "net/peer.h"
 #include "net/wire_codec.h"
 #include "test_support.h"
+#include "support/combat_records.h"
 #include "udp_relay.h"
 #include <winsock2.h>
 #include <windows.h>
@@ -1555,6 +1556,35 @@ void compressionLimits() {
         require(compression.expand(compression.compress(plain, plain), plain) == plain,
                 "Prefix compression raw fallback or maximum size failed");
     }
+    std::vector<int> ids(600);
+    for (unsigned i = 0; i < ids.size(); ++i)
+        ids[i] = i + 1;
+    const auto base = isaac::tests::records::frame(ids, 1);
+    std::reverse(ids.begin(), ids.end());
+    const auto current = isaac::tests::records::frame(ids, 23);
+    const auto delta = compression.compressWorld(current, base);
+    require(delta.size() <= compression.compress(current, base).size() &&
+                compression.expandWorld(delta, base) == current,
+            "World delta lost records or exceeded the ordinary encoding");
+    require(delta.front() == StateCompression::recordsPrefix,
+            "Dense reordered entities did not use the acknowledged identity baseline");
+    const auto full = compression.compressWorld(current);
+    require(compression.expandWorld(full) == current,
+            "Independent combat recovery changed the view");
+    rejects([&] { compression.expandWorld(delta); }, "A combat delta used an absent baseline");
+    rejects([&] { compression.expand(delta, base); }, "Record frame entered an ordinary channel");
+    auto nested = delta;
+    nested[StateCompression::headerSize] = StateCompression::recordsPrefix;
+    rejects([&] { compression.expandWorld(nested, base); }, "Recursive record envelope accepted");
+    const auto otherLayout = isaac::tests::records::frame(ids, 23, true);
+    require(compression.compressWorld(otherLayout, base) ==
+                    compression.compress(otherLayout, base) &&
+                compression.compressWorld(current, otherLayout) ==
+                    compression.compress(current, otherLayout),
+            "Unknown creation-field layout interrupted the opaque world transfer");
+    auto tiny = isaac::tests::records::frame({7}, 1);
+    require(compression.compressWorld(tiny) == compression.compress(tiny),
+            "Small combat frames gained a record header");
     Writer raw(Message::world);
     raw.bytes.clear();
     raw.u8(0);

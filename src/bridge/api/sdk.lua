@@ -54,6 +54,7 @@
 ---@field WithLocalView fun(self: IsaacLANHandle, fn: function): any
 ---@field On fun(self: IsaacLANHandle, event: string, fn: fun(context: table)): function LAN lifecycle subscription.
 ---@field OnLocalRender fun(self: IsaacLANHandle, fn: fun(view: IsaacLANView)): function Per-render callback in the local view.
+---@field RequireEffectSync fun(self: IsaacLANHandle, variant: integer, subtype?: integer): function Keep matching room effects in this view. Returns a release function.
 ---@field Action fun(self: IsaacLANHandle, name: string, definition?: IsaacLANActionDefinition): IsaacLANAction
 ---@field Close fun(self: IsaacLANHandle)
 local SDK = {}
@@ -182,6 +183,16 @@ function SDK.create(mod, id, backend)
         assert(type(fn) == "function", "invalid_subscription")
         -- Session lifecycle notifications exist only when LAN is installed.
         return own(backend and backend.on(event, fn) or function() end)
+    end
+    function handle:RequireEffectSync(variant, subtype)
+        attached()
+        assert(math.type(variant) == "integer" and variant >= 0, "invalid_effect_variant")
+        assert(
+            subtype == nil or math.type(subtype) == "integer" and subtype >= 0,
+            "invalid_effect_subtype"
+        )
+        local release = backend and backend.requireEffect(variant, subtype)
+        return release and own(release) or function() end
     end
     function handle:OnLocalRender(fn)
         attached()

@@ -101,13 +101,13 @@ local Entity, Room, Actor = fields.entity, fields.room, fields.actor
 local projectCalls = 0
 local function project(raw, player)
     projectCalls = projectCalls + 1
-    return (player and "smooth" or "exact:") .. raw, player, -0.0, 42.5
+    return (player and "smooth" or "exact:") .. raw, player, -0.0, 42.5, 24.0, 10.0
 end
 local function expand(wire)
     if wire:sub(1, 6) == "smooth" then
-        return "draw:" .. wire:sub(7), true, -0.0, 42.5
+        return "draw:" .. wire:sub(7), true, -0.0, 42.5, 24.0, 10.0
     end
-    return wire:sub(7), false, -0.0, 42.5
+    return wire:sub(7), false, -0.0, 42.5, 24.0, 10.0
 end
 local combat = dofile(root .. "/src/bridge/sync/layers.lua")(fields, project, expand)
 local view = schema.unpack(codec.decode(codec.encode(workloads[1].value)), 42)
@@ -141,6 +141,10 @@ local rows = {
     row(505, 26, 0, 0, "unknown"),
     row(506, 27, source, 0, "two"),
 }
+rows[3][Entity.position], rows[3][Entity.typed] = { 24.0, 10.0 }, { 90.0, 90.0, 89.0 }
+rows[3][Entity.common], rows[3][Entity.sprite] =
+    { [fields.entityCommon.spriteRotation] = 45.0 }, { [fields.sprite.rotation] = 45.0 }
+rows[4][Entity.typed] = { 90.0, 90, -0.0 }
 rows[3][Entity.laserEndPoint] = { -0.0, 42.5 }
 rows[4][Entity.laserEndPoint] = { 11, 42.5 }
 rows[5][Entity.laserEndPoint] = { 0.0, 42.5 }
@@ -158,7 +162,18 @@ assert((id == laserId and raw == "one") or (id == 506 and raw == "two"))
 assert(core.room[Room.entities][3][Entity.laserEndPoint] == true)
 assert(core.room[Room.entities][4][Entity.laserEndPoint][1] == 11)
 assert(1 / core.room[Room.entities][5][Entity.laserEndPoint][1] == math.huge)
+assert(core.room[Room.entities][3][Entity.position] == true)
+assert(
+    core.room[Room.entities][3][Entity.typed][2] == true
+        and core.room[Room.entities][3][Entity.typed][3] == 89.0
+)
+assert(core.room[Room.entities][3][Entity.sprite][fields.sprite.rotation] == true)
+assert(math.type(core.room[Room.entities][4][Entity.typed][2]) == "integer")
+assert(rows[3][Entity.typed][2] == 90.0 and rows[3][Entity.sprite][fields.sprite.rotation] == 45.0)
 local accepted = combat.join(core, stable)
+assert(accepted.room[Room.entities][3][Entity.position][1] == 24.0)
+assert(accepted.room[Room.entities][3][Entity.typed][2] == 90.0)
+assert(accepted.room[Room.entities][3][Entity.sprite][fields.sprite.rotation] == 45.0)
 assert(
     1 / accepted.room[Room.entities][3][Entity.laserEndPoint][1] == -math.huge
         and accepted.room[Room.entities][3][Entity.laserEndPoint][2] == 42.5

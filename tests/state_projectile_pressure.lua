@@ -14,7 +14,10 @@ local cases = {
     { name = "tears-500", tears = 500 },
     { name = "lasers-64", lasers = 64 },
 }
-if options.combat then
+local late = options.lateGame
+if late then
+    cases = late.cases
+elseif options.combat then
     cases = { cases[1], cases[2], { name = "moving-enemy-fire", lasers = 64, combat = true } }
 end
 local tick, renders, linked, chosen, finished = 0, 0, false, false, false
@@ -27,6 +30,13 @@ local shooter, hostileShot
 local combatViews, combatTicks, combatBirths, combatRetirements = 0, -1, 0, 0
 local lastShot
 local combatPositions = {}
+local function recordPosition(value)
+    combatPositions[#combatPositions + 1] = value
+    if #combatPositions >= 30 then
+        Isaac.DebugString("LAN_COMBAT_POSITIONS " .. table.concat(combatPositions, ";"))
+        combatPositions = {}
+    end
+end
 local function inspectCombat(t, at)
     assert(t > combatTicks, "A combat view moved backwards")
     combatTicks = t
@@ -56,17 +66,7 @@ local function inspectCombat(t, at)
         local id = config.host and data.__isaac_lan_entity or data.__isaac_lan_replica
         return string.format("%d,%.3f,%.3f", assert(id), entity.Position.X, entity.Position.Y)
     end
-    combatPositions[#combatPositions + 1] = t
-        .. ","
-        .. at
-        .. ","
-        .. mark(enemy)
-        .. ","
-        .. mark(shot)
-    if #combatPositions >= 30 then
-        Isaac.DebugString("LAN_COMBAT_POSITIONS " .. table.concat(combatPositions, ";"))
-        combatPositions = {}
-    end
+    recordPosition(t .. "," .. at .. "," .. mark(enemy) .. "," .. mark(shot))
     local id = shot
         and (
             config.host and shot:GetData().__isaac_lan_entity or shot:GetData().__isaac_lan_replica
@@ -162,8 +162,10 @@ native.diagnostics_sample = function(name, value)
 end
 local function report()
     assert(comboLasers > 0, "Reported loadout never fired a laser")
-    if combatViews > 0 then
+    if #combatPositions > 0 then
         Isaac.DebugString("LAN_COMBAT_POSITIONS " .. table.concat(combatPositions, ";"))
+    end
+    if combatViews > 0 then
         assert(combatBirths >= 2 and combatRetirements >= 2, "Combat lifecycle was not exercised")
         Isaac.DebugString("LAN_COMBAT_COHERENCE " .. json.encode({
             views = combatViews,
@@ -175,7 +177,10 @@ local function report()
         local metrics = assert(samples[index], "Missing pressure phase: " .. case.name)
         assert(metrics.render and metrics.render.count >= 100, "Insufficient steady frames")
         local views = metrics[config.host and "capture" or "apply"]
-        assert(views and views.count >= (case.combat and 1 or 100), "Insufficient completed views")
+        assert(
+            views and views.count >= ((case.combat or case.loadout) and 1 or 100),
+            "Insufficient completed views"
+        )
         assert(
             metrics.tears
                 and metrics.tears.count >= 3
@@ -183,6 +188,17 @@ local function report()
                 and metrics.lasers.count >= 3,
             "Insufficient projectile population observations"
         )
+        if case.loadout then
+            local minimum = case.multi and 40 or 8
+            assert(
+                metrics.tears.max >= minimum and metrics.lasers.max >= minimum,
+                "Natural fetus/arc population missing"
+            )
+            assert(
+                not case.hostile or metrics.hostile.max >= case.hostile,
+                "Mixed hostile population missing"
+            )
+        end
         for _, stat in pairs(metrics) do
             stat.mean = stat.sum / stat.count
             stat.sum = nil
@@ -229,7 +245,9 @@ function _IsaacLanFrame()
     tick = status.verified
     local current, _, at = phase()
     native.test_gamepad(
-        not config.host and current and current.combo and at % 300 < 270 and 0x1000 or 0
+        config.host and current and current.loadout and at % 12 < 10 and 0x2000
+            or not config.host and current and current.combo and at % 300 < 270 and 0x1000
+            or 0
     )
     local now = Isaac.GetTime()
     if lastRender then
@@ -243,15 +261,18 @@ function _IsaacLanFrame()
         local case, _, elapsed = phase()
         if elapsed >= warmup and tick >= populationTick + 30 then
             populationTick = tick
-            local tears, lasers = 0, 0
+            local tears, lasers, hostile = 0, 0, 0
             for _, e in ipairs(Isaac.GetRoomEntities()) do
                 if e.Type == EntityType.ENTITY_TEAR then
                     tears = tears + 1
                 end
                 if e.Type == EntityType.ENTITY_LASER then
                     lasers = lasers + 1
+                elseif e.Type == EntityType.ENTITY_PROJECTILE then
+                    hostile = hostile + 1
                 end
             end
+            sample("hostile", hostile)
             sample("tears", tears)
             sample("lasers", lasers)
             assert(not case.tears or tears == case.tears, "Tear population differs")
@@ -320,6 +341,9 @@ local function setup(case)
                 p.Position, p.Velocity = Vector(100, 220 + i * 60), Vector.Zero
                 p:SetMinDamageCooldown(100000)
             end
+        end
+        if late then
+            late.setup(case)
         end
         if case.combo then
             for _, item in ipairs(items) do
@@ -483,11 +507,15 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             setup(case)
         end
         verifyLifecycle(t)
-        if case and case.combat then
+        if case and (case.combat or case.loadout) then
             if elapsed == warmup or elapsed == duration - 10 then
                 Isaac.DebugString("LAN_COMBAT_WINDOW " .. case.name .. " " .. Isaac.GetTime())
             end
-            moveCombat(t)
+            if case.loadout then
+                late.advance(case, t)
+            else
+                moveCombat(t)
+            end
         end
         if options.verify and #tracked > 0 then
             assert(native.rooms_with_player(1, function()
@@ -503,6 +531,8 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         local case = phase(t)
         if case and case.combat then
             inspectCombat(t, began)
+        elseif case and case.loadout then
+            recordPosition(late.observe(t, began))
         end
         sample("capture", Isaac.GetTime() - began)
         sample("raw_bytes", #bytes)
@@ -518,6 +548,8 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             local case = phase()
             if case and case.combat then
                 inspectCombat(t, appliedAt)
+            elseif case and case.loadout then
+                recordPosition(late.observe(t, appliedAt))
             end
             verifyLinks(bytes, t, stable)
         end

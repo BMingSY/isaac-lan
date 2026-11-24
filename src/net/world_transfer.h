@@ -305,7 +305,7 @@ class WorldTransfer {
                 began - fullAt >= lostStateAge && (!baseline || began - baselineAt >= lostStateAge);
             if (baseline && !keyframe) {
                 const auto prefixBegan = Clock::now();
-                auto delta = codec.compress(*raw, *baseline->bytes);
+                auto delta = codec.compressWorld(*raw, *baseline->bytes);
                 prefixMs =
                     std::chrono::duration<double, std::milli>(Clock::now() - prefixBegan).count();
                 full = std::move(delta);
@@ -320,7 +320,7 @@ class WorldTransfer {
                 !sendingDelta || !sinceComparison || sinceComparison >= comparisonInterval ||
                 full.size() >= raw->size() * poorPrefixNumerator / poorPrefixDenominator;
             if (compare) {
-                auto independent = codec.compress(*raw);
+                auto independent = codec.compressWorld(*raw);
                 fullSize = independent.size();
                 if (!sendingDelta || independent.size() <= full.size()) {
                     full = std::move(independent);
@@ -421,9 +421,9 @@ class WorldTransfer {
                 assembling.reset();
                 return {};
             }
-            assembling->bytes = codec.expand(bytes, *found->bytes);
+            assembling->bytes = codec.expandWorld(bytes, *found->bytes);
         } else
-            assembling->bytes = codec.expand(bytes);
+            assembling->bytes = codec.expandWorld(bytes);
         expandMs = std::chrono::duration<double, std::milli>(Clock::now() - began).count();
         decoded.push_back(
             {tick, std::make_shared<const std::vector<std::uint8_t>>(assembling->bytes)});

@@ -43,6 +43,7 @@ function bridge.withView(fn)
     return table.unpack(result, 1, result.n)
 end
 bridge.lifecycle = modules["api/lifecycle"](bridge)
+bridge.effects = modules["api/effect_sync"](modules["sync/effect_classes"], EffectVariant)
 bridge.actions = modules["api/actions"](bridge)
 local sdk = assert(modules["api/sdk"])
 local function identity(player)
@@ -111,6 +112,7 @@ function api:Attach(mod, id)
             return value and value.id
         end,
         withView = bridge.withView,
+        requireEffect = bridge.effects.register,
         on = function(event, fn)
             return bridge.lifecycle.on(id, event, fn)
         end,

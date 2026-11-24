@@ -113,9 +113,16 @@ function _IsaacLanRoomEntered(door)
     )
 end
 local worldSchema = assert(modules["sync/world_schema"])
+local combatFrame = component("sync/combat_frame")
+local combatVisuals = component("sync/combat_visuals")(
+    EntityType,
+    EffectVariant,
+    EntityCollisionClass.ENTCOLL_NONE,
+    modules["sync/effect_classes"]
+)
 local layers = modules["sync/layers"](fields, native.laser_project, native.laser_expand)
 function state.decode(bytes, stable)
-    local value = decode(bytes)
+    local value = combatFrame.decode(bytes, worldSchema, decode)
     if stable and #stable > 0 then
         value = worldSchema.pack(layers.join(worldSchema.unpack(value, value[2]), decode(stable)))
     end
@@ -277,6 +284,9 @@ local captureState = component("sync/capture")({
     encode = encode,
     schema = worldSchema,
     layers = layers,
+    combatFrame = combatFrame,
+    combatVisuals = combatVisuals,
+    requiredEffects = modules["api/public"].effects.forPeer,
     clock = function()
         return Isaac.GetTime()
     end,
@@ -315,7 +325,8 @@ local captureState = component("sync/capture")({
             EntityType,
             entityCodec.localEffect,
             bossRush,
-            megaSatan
+            megaSatan,
+            combatVisuals
         )
     end,
 })
@@ -343,7 +354,9 @@ local replica = component("sync/replica")({
     end,
     native = native,
     encode = encode,
-    decode = decodeView,
+    decode = function(bytes)
+        return combatFrame.decode(bytes, worldSchema, decodeView)
+    end,
     schema = worldSchema,
     layers = layers,
     floor = floor,

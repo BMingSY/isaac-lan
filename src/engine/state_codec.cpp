@@ -265,7 +265,7 @@ template <bool packing> int laserSamples(lua_State* L) {
     std::array<char, maxBytes> storage;
     std::size_t size = 0;
     bool refined = false, encoded = false;
-    presentation::laser_projection::Point endpoint{};
+    presentation::laser_projection::Point endpoint{}, origin{};
     char error[256]{};
     try {
         const auto raw = bytes(L, 1);
@@ -285,6 +285,12 @@ template <bool packing> int laserSamples(lua_State* L) {
             presentation::laser_projection::expand(input, out, endpoint);
         encoded = !packing || out.bytes.front() == presentation::laser_projection::projectedTag ||
                   out.bytes.front() == presentation::laser_projection::exactTag;
+        if (encoded) {
+            // Both representations are derived from the already validated native path.
+            const auto original = packing ? input : std::span<const std::uint8_t>(out.bytes);
+            lan::Reader coordinates(original.subspan(1));
+            origin = {coordinates.u32(), coordinates.u32()};
+        }
         size = out.bytes.size();
         if (size > storage.size())
             throw std::runtime_error("Laser payload overflow");
@@ -302,7 +308,9 @@ template <bool packing> int laserSamples(lua_State* L) {
         return 2;
     for (const auto word : endpoint)
         api.pushNumber(L, std::bit_cast<float>(word));
-    return 4;
+    for (const auto word : origin)
+        api.pushNumber(L, std::bit_cast<float>(word));
+    return 6;
 }
 
 template <bool view> int decode(lua_State* L) {
