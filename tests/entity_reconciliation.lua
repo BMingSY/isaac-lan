@@ -17,9 +17,11 @@ local values = { entity(1, 2, -1), entity(2, 2, -1) }
 fixture.apply("0:1", values)
 local writes = fixture.linkWrites()
 assert(writes == 4)
+fixture.ref(1).data = 17
 for _ = 1, 10 do
     fixture.apply("0:1", values)
 end
+assert(fixture.ref(1).data == 17, "Reconciliation replaced scalar entity data")
 assert(fixture.linkWrites() == writes, "Repeated view rebound unchanged native references")
 -- A native callback may change a link without changing the incoming snapshot.
 fixture.ref(1).Parent = fixture.ref(2)

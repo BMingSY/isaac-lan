@@ -25,6 +25,7 @@ bool installed;
 struct Event {
     std::uint32_t serial, tick;
     unsigned audience;
+    std::optional<RoomKey> room;
     int id;
     float volume;
     int delay;
@@ -193,7 +194,7 @@ void __attribute__((fastcall)) play(void* manager, void*, int id, float volume, 
     }
     if (audience && !runtime::replica() && !(loop && id == localLoop)) {
         events.push_back(
-            {++serial, runtime::tick(), audience, id, volume, delay, loop, pitch, pan});
+            {++serial, runtime::tick(), audience, roomKey(), id, volume, delay, loop, pitch, pan});
         while (events.size() > 512)
             events.pop_front();
         // Background rooms retain gameplay and send their sounds to occupants.
@@ -299,13 +300,23 @@ int musicState(lua_State* L) {
     }
 }
 int capture(lua_State* L) {
-    const bool includeLevels = lua.getTop(L) >= 3;
+    const auto arguments = lua.getTop(L);
+    const auto key = arguments >= 3
+                         ? std::optional{audioRoomKey(runtime::worldEpoch(),
+                                                      static_cast<int>(lua.checkInteger(L, 2)),
+                                                      static_cast<int>(lua.checkInteger(L, 3)))}
+                         : std::nullopt;
+    const auto roomWarning = arguments >= 4 ? lua.checkInteger(L, 4) : -1;
     const auto slot = lua.checkInteger(L, 1);
     const auto tick = runtime::tick();
     lan::Writer bytes(lan::Message::world);
+    constexpr unsigned historyTicks = 30;
     if (slot >= 0 && slot < 4)
         for (const auto& event : events) {
-            if (!(event.audience & (1u << slot)) || tick - event.tick > 30)
+            const bool audible = key && !event.loop && event.id == roomWarning
+                                     ? event.room == *key
+                                     : (event.audience & (1u << slot)) != 0;
+            if (!audible || tick - event.tick > historyTicks)
                 continue;
             bytes.u32(event.serial);
             bytes.u32(event.tick);
@@ -318,12 +329,10 @@ int capture(lua_State* L) {
         }
     lua.pushLString(L, reinterpret_cast<const char*>(bytes.bytes.data() + 1),
                     bytes.bytes.size() - 1);
-    if (!includeLevels)
+    if (!key)
         return 1;
-    const auto key = audioRoomKey(runtime::worldEpoch(), static_cast<int>(lua.checkInteger(L, 2)),
-                                  static_cast<int>(lua.checkInteger(L, 3)));
     lan::Writer levels(lan::Message::world);
-    const auto mix = mixes.find(key);
+    const auto mix = mixes.find(*key);
     if (slot >= 0 && slot < 4 && mix != mixes.end() && (mix->second.audience & (1u << slot))) {
         for (const auto& value : mix->second.levels) {
             levels.u32(value.id);
@@ -396,8 +405,12 @@ bool bind(lua_State* L, HMODULE module) {
     lua.setField(L, -2, "audio_state");
     return true;
 }
-void forgetRoomAmbience(int dimension, int index) {
+void forgetRoomSounds(int dimension, int index) {
     mixes.erase(audioRoomKey(mixEpoch, dimension, index));
+    const auto room = audioRoomKey(runtime::worldEpoch(), dimension, index);
+    for (auto& event : events)
+        if (event.room == room)
+            event.room.reset();
 }
 void reset() {
     events.clear();

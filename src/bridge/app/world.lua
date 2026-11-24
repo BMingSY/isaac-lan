@@ -265,7 +265,7 @@ local motionPresentation = component("presentation/motion")(native, actorsPresen
 })
 local audioPresentation = assert(modules["presentation/audio"])(native, function()
     return SFXManager()
-end)
+end, SoundEffect.SOUND_MOM_VOX_EVILLAUGH)
 local captureState = component("sync/capture")({
     challenge = function()
         return challenges and challenges.snapshot() or false

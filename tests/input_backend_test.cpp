@@ -366,6 +366,44 @@ void physicalCapture() {
     ++field<unsigned>(manager.data(), frameOffset);
     require(capture().values[1] == 65535, "Released physical input did not recover after UI close");
 }
+void launchInput() {
+    values = {};
+    edges = {};
+    constexpr int item = input::action::item;
+    values[0][item] = 1;
+    edges[0] = (1u << item) | (1u << input::action::menuConfirm);
+    input::beginLaunch();
+    require(read(keyboardDevice, item, backend::entry::inputValue) == 0 &&
+                read(keyboardDevice, item, backend::entry::inputPressed) == 0 &&
+                read(keyboardDevice, item, backend::entry::inputTriggered) == 0 &&
+                input::menuTriggered(input::action::menuConfirm),
+            "Native loading must suppress active items and preserve menu input");
+    lan::Frame frame;
+    frame.players = frame.connected = 1;
+    input::apply(frame, false);
+    ++field<unsigned>(manager.data(), frameOffset);
+    require(capture().triggered == 0, "A replica placeholder opened gameplay input");
+    input::apply(frame);
+    ++field<unsigned>(manager.data(), frameOffset);
+    const auto held = capture();
+    require(held.values[item] == 0 && !(held.triggered & (1u << item)),
+            "An item held across the first gameplay frame was replayed");
+    values = {};
+    edges = {};
+    ++field<unsigned>(manager.data(), frameOffset);
+    capture();
+    values[0][item] = 1;
+    edges[0] = 1u << item;
+    ++field<unsigned>(manager.data(), frameOffset);
+    const auto pressed = capture();
+    require(pressed.values[item] == lan::maxInputValue && pressed.triggered == (1u << item) &&
+                capture().triggered == 0,
+            "A fresh item press after release must be captured once");
+    input::beginLaunch();
+    input::reset();
+    require(read(keyboardDevice, item, backend::entry::inputPressed) == 1,
+            "Cancelling a launch suppressed solo input");
+}
 void versionActionsAndCleanup() {
     values = {};
     edges = {};
@@ -425,6 +463,7 @@ int main() {
     mouseRouting();
     routing();
     physicalCapture();
+    launchInput();
     versionActionsAndCleanup();
     disabledControllerHotplug();
     require(MH_Uninitialize() == MH_OK && VirtualFree(image, 0, MEM_RELEASE),

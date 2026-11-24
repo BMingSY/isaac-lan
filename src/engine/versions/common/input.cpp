@@ -34,6 +34,7 @@ constexpr WORD restartChord = XINPUT_GAMEPAD_LEFT_THUMB | XINPUT_GAMEPAD_RIGHT_T
                               XINPUT_GAMEPAD_LEFT_SHOULDER | XINPUT_GAMEPAD_RIGHT_SHOULDER;
 bool labInput = false;
 bool enabled = false;
+bool waitingForGameplay = false;
 bool menuConfirm = false;
 int animationConfirm = -1;
 bool localPauseInput = false;
@@ -194,6 +195,13 @@ lan::PointerInput captureMouse() {
 bool __attribute__((fastcall)) query(void* manager, void*, int controller, void* callback,
                                      const int* action, void* result, int* source) {
     const auto kind = reinterpret_cast<std::uintptr_t>(callback) - image;
+    if (waitingForGameplay && action && *action >= input::action::moveLeft &&
+        *action <= input::action::drop &&
+        (kind == binding.value || kind == binding.pressed || kind == binding.triggered)) {
+        if (kind == binding.value && result)
+            *static_cast<float*>(result) = 0;
+        return false;
+    }
     if (animationConfirm >= 0 && kind == binding.triggered && action &&
         *action == input::action::menuConfirm)
         return animationConfirm != 0;
@@ -386,8 +394,8 @@ void samplePhysicalInput() {
     sampledFrame = frame;
     runtime::pollLocalConsole();
     runtime::refreshAutomation(frame);
-    const bool capturing =
-        frontend::capturesInput() || restartHeld() || presentation::animation::active();
+    const bool capturing = waitingForGameplay || frontend::capturesInput() || restartHeld() ||
+                           presentation::animation::active();
     if (capturing) {
         automation.clear();
         physicalInput = {};
@@ -534,7 +542,12 @@ FARPROC resolve(HMODULE module, LPCSTR name, FARPROC original) {
         return wrap(provider.capabilities, wrapper.capabilities, name);
     return wrap(provider.vibration, wrapper.vibration, name);
 }
-void apply(const lan::Frame& frame) {
+void apply(const lan::Frame& frame, bool playable) {
+    if (waitingForGameplay && playable) {
+        // Remember controls still held at handoff. ModalInput releases each on physical key-up.
+        samplePhysicalInput();
+        waitingForGameplay = false;
+    }
     accepted = frame;
     enabled = originalQuery != nullptr;
     if (!(frame.connected & (1u << pauseOwner)))
@@ -553,6 +566,7 @@ void apply(const lan::Frame& frame) {
 void reset() {
     automation.clear();
     enabled = false;
+    waitingForGameplay = false;
     accepted = {};
     pauseOwner = 0;
     physicalInput = {};
@@ -560,6 +574,10 @@ void reset() {
     previousChatButtons = {};
     localChatController = 0;
     sampledFrame.reset();
+}
+void beginLaunch() {
+    reset();
+    waitingForGameplay = true;
 }
 void clearAutomation() {
     automation.clear();

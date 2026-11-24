@@ -23,6 +23,10 @@ function definition.probe(target)
     end
     return "ready"
 end
+local function replicaMarker(entity)
+    local data = entity:GetData()
+    return type(data) == "table" and rawget(data, "__isaac_lan_replica")
+end
 local function renderRoom(replicas, fn, ...)
     -- The replica room's native radius index can lag behind its committed
     -- entity list; on the authority it can include other occupied rooms.
@@ -58,7 +62,7 @@ local function renderRoom(replicas, fn, ...)
             if
                 replicas
                 and entity:Exists()
-                and entity:GetData().__isaac_lan_replica
+                and replicaMarker(entity)
                 and not seen[GetPtrHash(entity)]
                 and (entity.Type == 1 or entity.Type == 3 or entity.Type == 5 or entity:IsEnemy())
                 and entity.Position:DistanceSquared(position) <= radius * radius
@@ -99,7 +103,7 @@ function definition.install(target, api)
                 and not lan:IsAuthority()
                 and self:EntitySanityCheck(entity)
                 and not self:IsGridEntity(entity)
-                and entity:GetData().__isaac_lan_replica
+                and replicaMarker(entity)
             then
                 return true
             end

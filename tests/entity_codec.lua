@@ -571,9 +571,7 @@ packedComponent.apply(beam, packedState)
 assert(table.concat(applied, ",") == "outer,packed", "Packed plan was not restored")
 packedState[26] = false
 assert(not pcall(packedComponent.apply, beam, packedState), "Missing packed fields accepted")
--- Inject the nil GetData result reported by the host log. This exercises the
--- optional diagnostic write, not the native lifecycle that produced the nil.
--- Synchronization must preserve the ID and links supplied by the native registry.
+-- Entity data can be nil or scalar. IDs and links still come from the native registry.
 local ids, nextNativeID = {}, 100
 packedNative.combat_identity = function(sprite)
     if not ids[sprite] then
@@ -589,9 +587,11 @@ warning.Parent, warning.SpawnerEntity = sourceWithoutData, sourceWithoutData
 local withoutData = packedComponent.capture(warning, false)
 assert(withoutData[1] == ids[warning.sprite] and withoutData[11] == ids[sourceWithoutData.sprite])
 assert(withoutData[11] == withoutData[12], "Missing Lua data changed a shared source identity")
-for _ = 1, 3 do
+for _, scalar in ipairs({ 0, 17, true, "mod data" }) do
+    warning.data, sourceWithoutData.data = scalar, scalar
     local repeated = codec.decode(codec.encode(packedComponent.capture(warning, false)))
     assert(repeated[1] == withoutData[1] and repeated[11] == withoutData[11])
+    assert(warning.data == scalar and sourceWithoutData.data == scalar)
 end
 warning.data = {}
 packedComponent.capture(warning, false)
@@ -611,6 +611,15 @@ assert(
 )
 packedNative.combat_identity = nativeIdentity
 warning.Parent, warning.SpawnerEntity = nil, nil
+packedNative.combat_identity = nil
+local fallback = entity(enums.EntityType.ENTITY_TEAR, 0)
+fallback.data = 17
+local fallbackId = packedComponent.capture(fallback, false)[1]
+assert(fallbackId > 0 and packedComponent.capture(fallback, false)[1] == fallbackId)
+fallback.data = {}
+assert(packedComponent.capture(fallback, false)[1] == fallbackId)
+assert(fallback.data.__isaac_lan_entity == fallbackId)
+packedNative.combat_identity = nativeIdentity
 packedComponent.reset()
 assert(packedComponent.capture(warning, false)[1] == withoutData[1])
 

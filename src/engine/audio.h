@@ -7,7 +7,7 @@ namespace isaac::audio {
 bool install(std::uintptr_t image);
 bool bind(lua_State*, HMODULE);
 void reset();
-void forgetRoomAmbience(int dimension, int index);
+void forgetRoomSounds(int dimension, int index);
 void present();
 class RoomScope {
     std::uintptr_t manager = 0;

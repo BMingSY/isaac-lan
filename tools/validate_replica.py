@@ -155,6 +155,8 @@ def main():
                 ]
                 if case == "projection":
                     cmd += ["--installed", "--check-local-stats", "--watch-floor-hud"]
+                if case == "resume":
+                    cmd += ["--virtual-input"]
                 if case == "mod-ui":
                     cmd += ["--mod", str(a.goodtrip)]
                 if case == "motion":

@@ -1,9 +1,11 @@
 -- Audience selection is performed by the engine before these events arrive.
-return function(native, sfxManager)
+return function(native, sfxManager, roomWarning)
     local unpack = string.unpack
     local levelFormat = ">I4ff"
     local levelSize, nativeLoopDelay = string.packsize(levelFormat), 2
     local hostLoops, replicaLoops, lastSound = {}, {}, 0
+    local heardWarnings = {}
+    local oneShotTicks, historyTicks = 10, 30
     local function soundEvents(bytes)
         local result, cursor = {}, 1
         while cursor <= #bytes do
@@ -15,7 +17,7 @@ return function(native, sfxManager)
         return result
     end
     local function captureSound(slot, view)
-        local bytes, levels = native.sound_events(slot, view.dimension, view.index)
+        local bytes, levels = native.sound_events(slot, view.dimension, view.index, roomWarning)
         local loops = hostLoops[slot] or {}
         hostLoops[slot] = loops
         for _, event in ipairs(soundEvents(bytes)) do
@@ -44,12 +46,25 @@ return function(native, sfxManager)
     end
     local function applySound(value, tick)
         local sfx = sfxManager()
+        for serial, issued in pairs(heardWarnings) do
+            if tick - issued > historyTicks then
+                heardWarnings[serial] = nil
+            end
+        end
         for _, event in ipairs(soundEvents(value[1])) do
-            if event[1] > lastSound then
-                if event[6] == 0 and tick - event[2] <= 10 then
-                    sfx:Play(event[3], event[4], event[5], false, event[7], event[8])
+            local play = false
+            if event[3] == roomWarning and event[6] == 0 then
+                -- A newly entered room can expose a warning older than other rooms' events.
+                play = not heardWarnings[event[1]] and tick - event[2] <= historyTicks
+                if play then
+                    heardWarnings[event[1]] = event[2]
                 end
+            elseif event[1] > lastSound then
+                play = event[6] == 0 and tick - event[2] <= oneShotTicks
                 lastSound = event[1]
+            end
+            if play then
+                sfx:Play(event[3], event[4], event[5], false, event[7], event[8])
             end
         end
         local playing = {}
@@ -82,6 +97,7 @@ return function(native, sfxManager)
                 sfxManager():Stop(id)
             end
             hostLoops, replicaLoops, lastSound = {}, {}, 0
+            heardWarnings = {}
         end,
     }
 end

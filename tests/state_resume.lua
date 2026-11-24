@@ -1,15 +1,11 @@
-local testInput = assert(_IsaacLanTestInput)
 local native = assert(_IsaacLan)
 local owner = { Name = "Isolated native save/continue regression" }
-local file = assert(io.open("./lan-test-role.txt", "r"))
-local host = file:read("*l") == "host"
-file:close()
+local host, port = _IsaacLanTest.host, _IsaacLanTest.port
 local round, renders, starts = 1, 0, 0
-local pf = assert(io.open("./lan-test-menu-port.txt", "r"))
-local port = pf:read("*l")
-pf:close()
 local linked, chosen, finished = false, false, false
 local saved, other, origin
+local rKey = CollectibleType.COLLECTIBLE_R_KEY
+local loadingFrames, uses, pressedInGame = 0, 0, false
 local function report(s)
     Isaac.DebugString("LAN_NETWORK " .. s)
 end
@@ -17,6 +13,20 @@ Isaac.AddCallback(owner, ModCallbacks.MC_POST_GAME_STARTED, function(_, continue
     starts = starts + 1
     assert(continued == (round == 2), "Native continuation flag was incorrect")
     report("GAME_STARTED round=" .. round .. " continued=" .. tostring(continued))
+end)
+Isaac.AddCallback(owner, ModCallbacks.MC_USE_ITEM, function()
+    uses = uses + 1
+    assert(pressedInGame, "Continue used the held R Key during native loading")
+end, rKey)
+Isaac.AddCallback(owner, ModCallbacks.MC_POST_UPDATE, function()
+    if host and round == 2 and starts == 2 and loadingFrames < 7 then
+        loadingFrames = loadingFrames + 1
+        if loadingFrames == 2 then
+            native.test_gamepad(0, 255)
+        elseif loadingFrames == 7 then
+            native.test_gamepad(0, 0)
+        end
+    end
 end)
 Isaac.AddCallback(owner, ModCallbacks.MC_PRE_GAME_EXIT, function(_, save)
     if round == 1 then
@@ -59,8 +69,17 @@ function _IsaacLanFrame()
             _IsaacLanCommand("start", "YV039KQF:0:0:0:0:0")
         end
     end
+    if host and starts == 2 and status.prepared and status.verified >= 60 then
+        local press = status.verified >= 65 and status.verified < 70
+        pressedInGame = pressedInGame or press
+        native.test_gamepad(0, press and 255 or 0)
+    end
     if round == 2 and status.verified >= 600 and not finished then
         assert(starts == 2, "Continuation never started")
+        assert(
+            uses == (host and 1 or 0) and Isaac.GetPlayer(0):GetActiveItem() == 0,
+            "The fresh active press did not consume exactly one R Key on the authority"
+        )
         finished = true
         report("VERIFIED " .. status.verified)
         report("PASS authoritative saved session")
@@ -73,13 +92,9 @@ native.net_gate = function(capture, apply, collect, restore, present, beginFloor
     for i = 0, 1 do
         Isaac.GetPlayer(i):SetMinDamageCooldown(10000)
     end
-    local tick = -1
     return gate(
-        function()
-            return testInput.neutral
-        end,
+        capture,
         function(t, n, b)
-            tick = t
             apply(t, n, b)
             if round == 1 and t == 0 then
                 local level = Game():GetLevel()
@@ -93,6 +108,7 @@ native.net_gate = function(capture, apply, collect, restore, present, beginFloor
                 end
                 assert(other)
                 Isaac.GetPlayer(0):AddCollectible(CollectibleType.COLLECTIBLE_BROTHER_BOBBY)
+                Isaac.GetPlayer(0):AddCollectible(rKey, 12, false)
                 Isaac.GetPlayer(1):AddCollectible(CollectibleType.COLLECTIBLE_MOMS_KNIFE)
                 Isaac.GetPlayer(0):AddCoins(7)
                 Isaac.GetPlayer(1):AddCoins(11)
@@ -109,6 +125,10 @@ native.net_gate = function(capture, apply, collect, restore, present, beginFloor
                     assert(not native.net_command(3), "Guest could end the host's session")
                 end
             elseif round == 2 and t == 0 then
+                assert(
+                    loadingFrames == 7 and uses == 0 and Isaac.GetPlayer(0):GetActiveItem() == rKey,
+                    "The host lost its saved R Key before the first accepted frame"
+                )
                 for i = 0, 1 do
                     local p = Isaac.GetPlayer(i)
                     assert(

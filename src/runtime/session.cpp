@@ -362,7 +362,7 @@ void executeStart(const backend::Call& original) {
     const bool resume = launch.resume && session && session->phase() == lan::Phase::running;
     if (resume) {
         rooms::beforeStart();
-        input::reset();
+        input::beginLaunch();
         // Hotplug IDs can change after returning to the menu. Native Continue
         // drops players whose saved controller is absent, before Lua can bind
         // them. Restore LAN device IDs before that roster is reconstructed.
@@ -389,8 +389,11 @@ void executeStart(const backend::Call& original) {
 }
 void startGame(const backend::Call& original) {
     rooms::beforeStart();
-    input::reset();
     const bool networkStart = session && session->phase() == lan::Phase::running;
+    if (networkStart)
+        input::beginLaunch();
+    else
+        input::reset();
     if (networkStart && !beginNetworkRun()) {
         session->abort("Cannot preserve the existing solo save");
         return;
@@ -651,7 +654,7 @@ void updateReplica(const backend::Call& original) {
     lan::Frame presentation;
     presentation.players = session->players();
     presentation.connected = session->connectedMask();
-    input::apply(presentation);
+    input::apply(presentation, view.authoritative.has_value());
     {
         pause_menu::FocusPauseScope focusPause(executableImage);
         original();
