@@ -53,6 +53,9 @@ void poll() {
 void scan() {
     reinterpret_cast<Poll>(image + backend::entry::inputEnumerateDevices)();
 }
+void rescanLanDevices() {
+    devices::rescan(base());
+}
 void update() {
     reinterpret_cast<Update>(image + updateEntry)(manager());
 }
@@ -205,13 +208,13 @@ void disconnectTransactions() {
                 "Fixture did not reproduce the unguarded double release");
     }
     // Hooks remain installed through leave/rejoin and the native disconnect drain.
-    for (unsigned round = 0; round < 2; ++round) {
+    for (const auto scanDevices : {scan, rescanLanDevices}) {
         devices::restoreIds(base());
         for (const bool scanFirst : {true, false}) {
             DisconnectFixture f;
             disconnectFixture = &f;
-            const auto first = scanFirst ? scan : poll;
-            const auto second = scanFirst ? poll : scan;
+            const auto first = scanFirst ? scanDevices : poll;
+            const auto second = scanFirst ? poll : scanDevices;
             std::thread foreground(first);
             const bool started = WaitForSingleObject(f.entered, 5000) == WAIT_OBJECT_0;
             std::thread background(second);

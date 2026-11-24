@@ -72,6 +72,7 @@ std::array<Address, 64> vtable{};
 std::array<std::array<float, 33>, 5> values{};
 std::array<std::uint32_t, 5> edges{};
 unsigned physicalCalls;
+std::vector<unsigned> detectedPads;
 struct Request {
     int action, controller;
 };
@@ -85,6 +86,15 @@ Address base() {
 }
 void* receiver() {
     return image + backend::globals::inputManager;
+}
+void __cdecl scanGamepads() {
+    unsigned count = 0;
+    for (DWORD pad = 0; pad < XUSER_MAX_COUNT; ++pad) {
+        XINPUT_CAPABILITIES caps{};
+        if (input::capabilities<0>(pad, 0, &caps) == ERROR_SUCCESS)
+            ++count;
+    }
+    detectedPads.push_back(count);
 }
 float readPhysical(void* object, int action, int controller, int* source, bool edge) {
     require(object == receiver() && action >= 0 && action < 33 &&
@@ -165,7 +175,10 @@ void setup() {
     image = static_cast<unsigned char*>(
         VirtualAlloc(nullptr, imageSize, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
     require(image && MH_Initialize() == MH_OK, "Prepare native input image");
+    patch(backend::entry::inputEnumerateDevices, scanGamepads);
+    patch(backend::entry::inputPollDevices, +[] {});
 #ifdef ISAAC_LAN_TEST_REPENTANCE
+    patch(backend::entry::inputUpdate, +[] {});
     patch(backend::entry::inputPressed, pressed);
     patch(backend::entry::inputTriggered, triggered);
     patch(backend::entry::inputValue, value);
@@ -393,6 +406,19 @@ void versionActionsAndCleanup() {
             "Installed query boundary could not be reused for another session");
     input::leaveLan();
 }
+void disabledControllerHotplug() {
+    // The game only observes XInput when explicitly asked to scan.
+    input::originalMouseAim = physicalMouse;
+    input::lua.pushBoolean = [](lua_State*, int ok) { require(ok, "Enable LAN input"); };
+    for (unsigned session = 0; session < 2; ++session) {
+        input::enable(nullptr);
+        input::enable(nullptr);
+        input::leaveLan();
+        input::leaveLan();
+    }
+    require(detectedPads == std::vector<unsigned>({XUSER_MAX_COUNT, 0, XUSER_MAX_COUNT, 0}),
+            "With hotplug disabled, each join must discover the pads and each leave remove them");
+}
 } // namespace
 int main() {
     setup();
@@ -400,6 +426,7 @@ int main() {
     routing();
     physicalCapture();
     versionActionsAndCleanup();
+    disabledControllerHotplug();
     require(MH_Uninitialize() == MH_OK && VirtualFree(image, 0, MEM_RELEASE),
             "Release input fixture");
 }

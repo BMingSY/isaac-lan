@@ -87,6 +87,11 @@ bool install(std::uintptr_t image, void (*log)(const std::string&)) {
     logger = log;
     return true;
 }
+void rescan(std::uintptr_t image) {
+    const std::lock_guard lock(mutex);
+    if (installedImage && image == installedImage)
+        originalEnumerate();
+}
 void assignLanIds(std::uintptr_t image) {
     const std::lock_guard lock(mutex);
     if (!installedImage || image != installedImage || !savedIds.empty())
