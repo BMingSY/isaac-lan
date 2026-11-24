@@ -1,6 +1,8 @@
 #include "engine/lua_api.h"
 #include "engine/audio.h"
 #include "core/audio_ownership.h"
+#include "compat/game_ids.h"
+#include <algorithm>
 #include "engine/rooms.h"
 #include "runtime/session.h"
 #include "net/protocol.h"
@@ -10,6 +12,7 @@
 #include <cstring>
 #include <map>
 #include <optional>
+#include <vector>
 #include <cmath>
 #include <climits>
 
@@ -105,36 +108,80 @@ using UpdateLoop = void(__attribute__((thiscall)) *)(void*, int, float, float);
 UpdateLoop originalUpdateLoop = nullptr;
 using RoomAmbience = void(__attribute__((thiscall)) *)(void*);
 RoomAmbience originalRoomAmbience = nullptr;
-enum class Ambience { unscoped, local, background };
-Ambience ambience = Ambience::unscoped;
-int localLoop = -1;
+struct LoopLevel {
+    int id;
+    float volume, pitch;
+};
+struct RoomMix {
+    unsigned audience = 0;
+    std::vector<LoopLevel> levels;
+};
+std::map<Key, RoomMix> mixes;
+unsigned mixEpoch = 0;
+struct AmbientContext {
+    bool scoped = false, local = false;
+    RoomMix* recording = nullptr;
+};
+AmbientContext ambience;
+std::optional<int> localLoop;
 void __attribute__((fastcall)) roomAmbience(void* room, void*) {
     struct Restore {
-        Ambience previous = ambience;
+        AmbientContext previous = ambience;
         ~Restore() {
             ambience = previous;
         }
     } restore;
-    const auto audience = rooms::soundAudience();
-    ambience = Ambience::unscoped;
-    if (audience)
-        ambience =
-            audible(audience, runtime::localViewSlot()) ? Ambience::local : Ambience::background;
-    // Run all room bookkeeping even when its mixer requests are inaudible.
+    ambience = {};
+    if (const auto view = rooms::soundRoom(room)) {
+        ambience.scoped = true;
+        ambience.local = view->audience && audible(view->audience, runtime::localViewSlot());
+        if (view->audience && !runtime::replica()) {
+            const auto epoch = runtime::worldEpoch();
+            if (epoch != mixEpoch) {
+                mixes.clear();
+                mixEpoch = epoch;
+            }
+            auto& mix = mixes[audioRoomKey(epoch, view->dimension, view->index)];
+            mix.audience = view->audience;
+            mix.levels.clear();
+            ambience.recording = &mix;
+        }
+    }
+    // Let every room evaluate its sources, including NPCs simulated only on the authority.
     originalRoomAmbience(room);
 }
 void __attribute__((fastcall)) updateLoop(void* manager, void*, int id, float volume, float pitch) {
-    if (ambience == Ambience::background)
+    if (!ambience.scoped) {
+        originalUpdateLoop(manager, id, volume, pitch);
+        return;
+    }
+    // Both peers can derive the water bed from the local room. Other room loops
+    // can depend on authority-only state such as a burning fireplace's native AI.
+    const bool localWater = id == compat::ids::sound::waterFlowLoop;
+    if (!localWater && ambience.recording) {
+        auto& levels = ambience.recording->levels;
+        const auto found = std::find_if(levels.begin(), levels.end(),
+                                        [id](const auto& value) { return value.id == id; });
+        constexpr float stopVolume = 0.01f; // Native SFXManager::UpdateLoop threshold.
+        if (volume > stopVolume) {
+            const LoopLevel value{id, volume, pitch};
+            if (found == levels.end())
+                levels.push_back(value);
+            else
+                *found = value;
+        } else if (found != levels.end()) {
+            levels.erase(found);
+        }
+    }
+    if (!ambience.local || (runtime::replica() && !localWater))
         return;
     struct Restore {
-        int previous = localLoop;
+        std::optional<int> previous = localLoop;
         ~Restore() {
             localLoop = previous;
         }
     } restore;
-    // The room drives its continuous channels on both peers. Explicit Play
-    // requests and loop controllers outside the room mixer keep their audience.
-    localLoop = ambience == Ambience::local ? id : -1;
+    localLoop = id;
     originalUpdateLoop(manager, id, volume, pitch);
 }
 void __attribute__((fastcall)) play(void* manager, void*, int id, float volume, int delay,
@@ -252,6 +299,7 @@ int musicState(lua_State* L) {
     }
 }
 int capture(lua_State* L) {
+    const bool includeLevels = lua.getTop(L) >= 3;
     const auto slot = lua.checkInteger(L, 1);
     const auto tick = runtime::tick();
     lan::Writer bytes(lan::Message::world);
@@ -270,7 +318,22 @@ int capture(lua_State* L) {
         }
     lua.pushLString(L, reinterpret_cast<const char*>(bytes.bytes.data() + 1),
                     bytes.bytes.size() - 1);
-    return 1;
+    if (!includeLevels)
+        return 1;
+    const auto key = audioRoomKey(runtime::worldEpoch(), static_cast<int>(lua.checkInteger(L, 2)),
+                                  static_cast<int>(lua.checkInteger(L, 3)));
+    lan::Writer levels(lan::Message::world);
+    const auto mix = mixes.find(key);
+    if (slot >= 0 && slot < 4 && mix != mixes.end() && (mix->second.audience & (1u << slot))) {
+        for (const auto& value : mix->second.levels) {
+            levels.u32(value.id);
+            levels.u32(std::bit_cast<unsigned>(value.volume));
+            levels.u32(std::bit_cast<unsigned>(value.pitch));
+        }
+    }
+    lua.pushLString(L, reinterpret_cast<const char*>(levels.bytes.data() + 1),
+                    levels.bytes.size() - 1);
+    return 2;
 }
 int resetLua(lua_State*) {
     reset();
@@ -333,8 +396,12 @@ bool bind(lua_State* L, HMODULE module) {
     lua.setField(L, -2, "audio_state");
     return true;
 }
+void forgetRoomAmbience(int dimension, int index) {
+    mixes.erase(audioRoomKey(mixEpoch, dimension, index));
+}
 void reset() {
     events.clear();
+    mixes.clear();
     serial = 0;
     music.clear();
     played.reset();

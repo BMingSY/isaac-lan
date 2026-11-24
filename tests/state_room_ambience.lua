@@ -41,6 +41,13 @@ local function observeFire(tick, level)
     end
     local atFire = level:GetCurrentRoomIndex() == level:GetStartingRoomIndex()
     assert(atFire == step[host and 1 or 2], "Fire fixture did not reach arrangement " .. index)
+    if host and index == 5 then
+        local source = assert(flame and flame.Ref, "Missing extinguished fireplace")
+        assert(
+            source.HitPoints <= 1,
+            "Fire did not reach its native ash state: hp=" .. source.HitPoints
+        )
+    end
     local playing = SFXManager():IsPlaying(fire)
     assert(playing == (atFire and step[3]), "Wrong fire channel in arrangement " .. index)
     local starts = string.unpack(">I4", native.audio_state(fire), 21)
@@ -227,12 +234,25 @@ local function driveFire(t, level)
                             nil
                         )
                     )
-                elseif index == 5 and slot == 0 then
-                    assert(flame and flame.Ref, "The fire disappeared before it was extinguished")
-                    flame.Ref:TakeDamage(100, DamageFlag.DAMAGE_IGNORE_ARMOR, EntityRef(p), 0)
                 end
             end))
         end
+    elseif index == 5 and age >= 5 and age < 44 and age % 3 == 0 then
+        assert(native.rooms_with_player(0, function()
+            local source = assert(flame and flame.Ref, "Missing lit fireplace")
+            if source.HitPoints > 1 then
+                local p = Isaac.GetPlayer(assert(native.rooms_heads()["0"]))
+                local tear = p:FireTear(
+                    p.Position,
+                    (source.Position - p.Position):Resized(14),
+                    false,
+                    true,
+                    false,
+                    p
+                )
+                tear.CollisionDamage = 100
+            end
+        end))
     end
 end
 

@@ -37,6 +37,9 @@ namespace effect {
 inline constexpr unsigned waterSplash = 99;
 inline constexpr unsigned pickupGhost = 191;
 } // namespace effect
+namespace sound {
+inline constexpr int waterFlowLoop = 473;
+} // namespace sound
 namespace player {
 inline constexpr int isaac = 0;
 inline constexpr int forgotten = 16;

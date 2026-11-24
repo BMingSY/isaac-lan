@@ -1562,6 +1562,7 @@ void canonical() {
         }
 }
 void destroy(Room& room) {
+    audio::forgetRoomAmbience(room.key.dimension, room.key.index);
     if (sharedOwner == &room)
         selectSharedState(nullptr);
     engine<RoomCall>(bindings.entry.ambushDestroyWaveQueue)(&room.ambush.pendingWaves);
@@ -2948,15 +2949,24 @@ void protectArrivals(unsigned mask) {
 unsigned connected() {
     return connectedMask;
 }
+std::optional<SoundRoom> soundRoom(const void* pointer) {
+    if (!enabled)
+        return std::nullopt;
+    SoundRoom view;
+    for (auto player : participants) {
+        if (const auto room = findRoom(player);
+            room && room->pointer == reinterpret_cast<Address>(pointer)) {
+            view.dimension = room->key.dimension;
+            view.index = room->key.index;
+            view.audience |= 1u << slotOf(player);
+        }
+    }
+    return view;
+}
 unsigned soundAudience() {
     if (!enabled)
         return 0;
-    const auto current = at<Address>(game(), layout.game.room);
-    unsigned mask = 0;
-    for (auto player : participants)
-        if (const auto room = findRoom(player); room && room->pointer == current)
-            mask |= 1u << slotOf(player);
-    return mask;
+    return soundRoom(reinterpret_cast<void*>(at<Address>(game(), layout.game.room)))->audience;
 }
 std::uintptr_t presentationPlayer(void* explicitPlayer) {
     return enabled ? currentActor(explicitPlayer) : 0;

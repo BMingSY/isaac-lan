@@ -8,7 +8,7 @@
 #include <limits>
 
 struct lua_State {
-    int top = 0;
+    int top = 0, dimension = 0, index = 0;
     long long integer = 0;
     std::string input, output;
     bool success = false;
@@ -34,7 +34,7 @@ unsigned char* image;
 std::array<unsigned char, 0x18400> game{};
 std::array<unsigned char, 0x2a800> manager{};
 std::array<unsigned char, 8> room{}, sfx{};
-bool replica = false, failSelector = false;
+bool replica = false, failSelector = false, virtualRooms = true;
 unsigned tick = 100, epoch = 1, audience = 1, selectorCalls = 0;
 int localSlot = 0;
 std::string lastError;
@@ -180,7 +180,13 @@ void setup() {
     require(!audio::install(reinterpret_cast<Address>(image)),
             "Duplicate audio installation succeeded");
     audio::lua.getTop = [](lua_State* L) { return L->top; };
-    audio::lua.checkInteger = [](lua_State* L, int) { return L->integer; };
+    audio::lua.checkInteger = [](lua_State* L, int argument) -> long long {
+        if (argument == 2)
+            return L->dimension;
+        if (argument == 3)
+            return L->index;
+        return L->integer;
+    };
     audio::lua.checkString = [](lua_State* L, int, std::size_t* size) {
         *size = L->input.size();
         return L->input.c_str();
@@ -194,6 +200,7 @@ void setup() {
 void reset() {
     audio::reset();
     replica = false;
+    virtualRooms = true;
     tick = 100;
     epoch = 1;
     audience = 1;
@@ -215,6 +222,22 @@ std::string soundEvents(int slot) {
     L.integer = slot;
     require(audio::capture(&L) == 1, "Capture sounds result count");
     return L.output;
+}
+std::string roomLevels(int slot, int index, int dimension = 0) {
+    lua_State L;
+    L.integer = slot;
+    L.index = index;
+    L.dimension = dimension;
+    L.top = 3;
+    require(audio::capture(&L) == 2, "Room capture omitted its active levels");
+    return L.output;
+}
+std::string levelBytes(int id, float volume, float pitch) {
+    lan::Writer w(lan::Message::world);
+    w.u32(id);
+    w.u32(std::bit_cast<unsigned>(volume));
+    w.u32(std::bit_cast<unsigned>(pitch));
+    return {reinterpret_cast<const char*>(w.bytes.data() + 1), w.bytes.size() - 1};
 }
 struct Request {
     unsigned mode, id;
@@ -293,49 +316,81 @@ void soundRouting() {
     require(soundEvents(0).empty(), "Session reset retained sound events");
 }
 void roomLoops() {
-    constexpr int fire = 269, water = 473, swarm = 4;
-    for (int sound : {fire, water, swarm, 1234}) {
-        for (bool guest : {false, true}) {
-            reset();
-            replica = guest;
-            localSlot = guest ? 1 : 0;
-            const unsigned local = 1u << localSlot, remote = 1u << (1 - localSlot);
-            audience = remote;
-            roomLoop(sound, 0.7f);
-            require(roomUpdates == 1 && loopCalls.empty() && soundCalls.empty(),
-                    "Remote room ambience started a local channel");
-            audience = local;
-            roomLoop(sound, 0.2f, 0.85f);
-            require(loopPlaying[sound] && soundCalls.size() == 1 && soundCalls.back().loop &&
-                        soundCalls.back().pitch == 0.85f,
-                    "Local ambience did not start its native loop");
-            audience = remote;
-            roomLoop(sound, 0.0f);
-            require(loopPlaying[sound] && loopCalls.size() == 1,
-                    "Quiet remote room stopped the local loop");
-            audience = local | remote;
-            roomLoop(sound, 0.6f, 1.1f);
-            require(loopCalls.size() == 2 && loopCalls.back().volume == 0.6f &&
-                        loopCalls.back().pitch == 1.1f && soundCalls.size() == 1,
-                    "Shared room restarted the loop or lost native adjustments");
-            audience = local;
-            roomLoop(sound, 0.0f);
-            require(!loopPlaying[sound] && soundEvents(0).empty() && soundEvents(1).empty(),
-                    "Local ambience did not stop or its native start was sent as a second sound");
-        }
+    constexpr int fire = 269, water = isaac::compat::ids::sound::waterFlowLoop, swarm = 4;
+    for (bool guest : {false, true}) {
+        reset();
+        replica = guest;
+        localSlot = guest ? 1 : 0;
+        const unsigned local = 1u << localSlot, remote = 1u << (1 - localSlot);
+        audience = remote;
+        roomLoop(water, 0.7f);
+        require(roomUpdates == 1 && loopCalls.empty(), "Remote water changed the local channel");
+        audience = local;
+        roomLoop(water, 0.2f, 0.85f);
+        require(loopPlaying[water] && soundCalls.size() == 1 && soundCalls.back().pitch == 0.85f,
+                "Local water did not start");
+        audience = remote;
+        roomLoop(water, 0.0f);
+        require(loopPlaying[water] && loopCalls.size() == 1, "Dry remote room stopped local water");
+        audience = local | remote;
+        roomLoop(water, 0.6f, 1.1f);
+        require(loopCalls.size() == 2 && loopCalls.back().volume == 0.6f &&
+                    loopCalls.back().pitch == 1.1f && soundCalls.size() == 1,
+                "Shared water restarted or lost native adjustments");
+        require(roomLevels(localSlot, 70).empty() && soundEvents(localSlot).empty(),
+                "Locally derived water generated network audio");
+        roomLoop(water, 0.0f);
+        require(!loopPlaying[water], "Dry local room kept its water channel");
+    }
+    for (int sound : {fire, swarm, 1234}) {
+        reset();
+        audience = 2;
+        setRoom(71);
+        roomLoop(sound, 0.4f, 0.9f);
+        const auto remote = levelBytes(sound, 0.4f, 0.9f);
+        require(roomLevels(1, 71) == remote && roomLevels(0, 71).empty() &&
+                    roomLevels(1, 71, 1).empty() && soundEvents(1).empty() && loopCalls.empty(),
+                "Background loop lost its own levels, escaped its room or generated a Play");
+        audience = 1;
+        setRoom(70);
+        roomLoop(sound, 0.8f, 1.2f);
+        require(roomLevels(0, 70) == levelBytes(sound, 0.8f, 1.2f) && roomLevels(1, 71) == remote &&
+                    loopPlaying[sound] && soundEvents(0).empty(),
+                "Two rooms sharing a sound ID did not keep independent levels");
+        audience = 2;
+        setRoom(71);
+        roomLoop(sound, 0.01f);
+        require(roomLevels(1, 71).empty() && loopPlaying[sound], "Background stop cut local audio");
+        audience = 0;
+        roomLoop(sound, 0.0f);
+        require(loopPlaying[sound], "An empty virtual room stopped the physical channel");
+        audio::forgetRoomAmbience(0, 70);
+        require(roomLevels(0, 70).empty(), "Unloaded room retained its mixer levels");
+        audience = 1;
+        roomLoop(sound, 0.6f);
+        ++epoch;
+        require(roomLevels(0, 71).empty(), "An earlier floor supplied active loops");
+        reset();
+        replica = true;
+        roomLoop(sound, 0.8f);
+        roomLoop(sound, 0.0f);
+        require(loopCalls.empty() && roomLevels(0, 70).empty(),
+                "Replica simulation interfered with authoritative loop state");
     }
     reset();
+    virtualRooms = false;
     audience = 0;
-    roomLoop(water, 0.5f);
-    require(loopPlaying[water] && soundCalls.size() == 1 && soundEvents(0).empty(),
-            "Unscoped native water did not play");
+    roomLoop(fire, 0.5f);
+    require(loopPlaying[fire] && soundCalls.size() == 1 && soundEvents(0).empty(),
+            "Unscoped native fire did not play");
+    virtualRooms = true;
     audience = 2;
-    updateLoop(fire, 0.4f);
-    require(loopCalls.back().id == fire && loopCalls.back().volume == 0.4f &&
-                soundEvents(1).size() == 29 && soundCalls.back().volume == 0,
+    updateLoop(water, 0.4f);
+    require(loopCalls.back().id == water && soundEvents(1).size() == 29 &&
+                soundCalls.back().volume == 0,
             "A loop outside the room mixer lost its audience");
-    playSound(water);
-    require(soundEvents(1).size() == 2 * 29, "Explicit playback of the water ID was intercepted");
+    playSound(fire);
+    require(soundEvents(1).size() == 2 * 29, "Explicit playback was intercepted");
 }
 void roomMusic() {
     reset();
@@ -501,6 +556,13 @@ void abort(const std::string& reason) {
 }
 } // namespace isaac::runtime
 namespace isaac::rooms {
+std::optional<SoundRoom> soundRoom(const void* pointer) {
+    require(pointer == ::room.data(), "Wrong native room used for ambience");
+    if (!virtualRooms)
+        return std::nullopt;
+    return SoundRoom{field<int>(game.data(), dimensionOffset), field<int>(game.data(), indexOffset),
+                     audience};
+}
 unsigned soundAudience() {
     return audience;
 }

@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include <optional>
 
 struct lua_State;
 namespace isaac::lan {
@@ -29,6 +30,11 @@ std::vector<SavedLocation> captureLocations();
 bool restoreLocations(const std::vector<SavedLocation>&);
 void setConnected(unsigned mask);
 unsigned connected();
+struct SoundRoom {
+    int dimension = 0, index = 0;
+    unsigned audience = 0;
+};
+std::optional<SoundRoom> soundRoom(const void* room);
 unsigned soundAudience();
 bool withPlayer(unsigned slot, const std::function<void()>& call);
 bool withRoomPlayers(unsigned slot, const std::function<void()>& call);
