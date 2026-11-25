@@ -7,6 +7,7 @@
 ---@field tick integer Authoritative tick in LAN; game frame in solo.
 ---@field runId? string
 ---@field worldEpoch? integer
+---@field challengeId? integer Selected LAN challenge, or zero for an ordinary run.
 ---@field revision? integer Local commit sequence, not a render-frame counter.
 ---@field room? table LAN room identity: runId, worldEpoch, index, dimension.
 ---@field playerSignature? string Opaque identity-change marker.
@@ -54,6 +55,7 @@
 ---@field WithLocalView fun(self: IsaacLANHandle, fn: function): any
 ---@field On fun(self: IsaacLANHandle, event: string, fn: fun(context: table)): function LAN lifecycle subscription.
 ---@field OnLocalRender fun(self: IsaacLANHandle, fn: fun(view: IsaacLANView)): function Per-render callback in the local view.
+---@field RegisterChallenge fun(self: IsaacLANHandle, definition: table): {Finish: fun(): boolean, Close: fun()}
 ---@field RequireEffectSync fun(self: IsaacLANHandle, variant: integer, subtype?: integer): function Keep matching room effects in this view. Returns a release function.
 ---@field Action fun(self: IsaacLANHandle, name: string, definition?: IsaacLANActionDefinition): IsaacLANAction
 ---@field Close fun(self: IsaacLANHandle)
@@ -183,6 +185,12 @@ function SDK.create(mod, id, backend)
         assert(type(fn) == "function", "invalid_subscription")
         -- Session lifecycle notifications exist only when LAN is installed.
         return own(backend and backend.on(event, fn) or function() end)
+    end
+    function handle:RegisterChallenge(definition)
+        attached()
+        assert(backend and backend.registerChallenge, "lan_required")
+        local release, finish = backend.registerChallenge(definition)
+        return { Close = own(release), Finish = finish }
     end
     function handle:RequireEffectSync(variant, subtype)
         attached()

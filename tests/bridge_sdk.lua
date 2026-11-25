@@ -321,3 +321,63 @@ end
 print(
     "PASS API 2 SDK: render cadence, scope/error cleanup, owned bodies, results, versions, late replies, solo fallback"
 )
+
+-- External entries are registered before the lobby and can be applied on a
+-- guest independently of having stepped or captured a previous snapshot.
+do
+    local peer = runtime.peer(0)
+    local native = peer.env._IsaacLan
+    local specs, selected = {}, 0
+    function native.api_register_challenge(id, version, name, who, difficulty, players, contract)
+        specs[id] = { version, name, who, difficulty, players, contract }
+        return true
+    end
+    function native.api_remove_challenge(id)
+        specs[id] = nil
+    end
+    function native.net_finish_challenge(id)
+        return id == selected
+    end
+    local handle = peer.api:Attach(modFixture(), "raid.fixture")
+    local ticks, state, resets = 0, false, 0
+    local def = {
+        id = 43004,
+        version = 1,
+        name = "Raid",
+        players = 4,
+        character = 0,
+        step = function(ctx)
+            ticks = ticks + 1
+            assert(ctx.players[1] == runtime.actors[1] and ctx.players[2] == nil)
+        end,
+        capture = function()
+            return state
+        end,
+        apply = function(value)
+            state = value
+        end,
+        reset = function()
+            resets = resets + 1
+        end,
+    }
+    local challenge = handle:RegisterChallenge(def)
+    assert(not challenge:Finish() and specs[43004][5] == 4)
+    assert(not pcall(handle.RegisterChallenge, handle, def))
+    local entry = peer.bridge.challenges.entries[43004]
+    local info = { tick = 21, runId = "a", worldEpoch = 1, connected = 1 }
+    entry.step(info)
+    entry.step(info)
+    assert(ticks == 1)
+    assert(entry.snapshot() == "F")
+    state = { damage = 6, party = { 1, 2, 3, 4 } }
+    local bytes = entry.snapshot()
+    state = false
+    entry.apply(bytes)
+    entry.apply(bytes)
+    assert(state.damage == 6 and state.party[4] == 4)
+    selected = def.id
+    assert(challenge:Finish())
+    handle:Close()
+    challenge:Close()
+    assert(specs[43004] == nil and not challenge:Finish() and resets == 1)
+end

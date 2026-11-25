@@ -58,6 +58,7 @@ local english = {
     ["贪婪"] = "Greed",
     ["贪婪加强"] = "Greedier",
     ["种子：随机"] = "Seed: Random",
+    ["需要 %d 名玩家"] = "Requires %d players",
     ["开始游戏"] = "Start Game",
     ["载入上次规则"] = "Load Saved Rules",
     ["继续上次联机"] = "Continue Saved Run",

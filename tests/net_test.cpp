@@ -1668,9 +1668,13 @@ void lobby() {
 }
 void runRules() {
     const RunRules rules{1001, 2, 23, 0, true, 1};
+    const RunRules external{isaac::externalRuleBase, 1, 0, 0, true, 0, 17};
+    auto hostAccess = testAccess(), guestAccess = testAccess();
+    hostAccess.rules.push_back({external.id, external.version, external.contract});
+    guestAccess.rules.push_back({external.id, external.version, external.contract + 1});
     TestSession host, guest;
-    require(host.host(0, "test", {}, testAccess()), "Host failed");
-    require(guest.join("127.0.0.1", host.port(), "test", {}, {}, testAccess()), "Join failed");
+    require(host.host(0, "test", {}, hostAccess), "Host failed");
+    require(guest.join("127.0.0.1", host.port(), "test", {}, {}, guestAccess), "Join failed");
     auto poll = [&] {
         host.poll();
         guest.poll();
@@ -1679,6 +1683,8 @@ void runRules() {
         poll();
         return host.players() == 2 && guest.phase() == Phase::lobby;
     });
+    require(!host.configureRules(external) && !guest.rulesAvailable(external),
+            "Different external namespaces qualified for the same challenge");
     require(!guest.configureRules(rules), "Guest changed run rules");
     require(host.configureRules(rules), "Host configuration failed");
     until([&] {
@@ -2108,7 +2114,11 @@ void deferredChoice() {
         maximum.characters.push_back(i);
     maximum.unlockedCharacters = maximum.characters;
     for (unsigned i = 1; i <= 64; ++i)
-        maximum.rules.push_back({static_cast<std::uint16_t>(i), 1});
+        maximum.rules.push_back(
+            i > 64 - isaac::maxExternalRules
+                ? RuleKey{static_cast<std::uint16_t>(isaac::externalRuleBase + i), 1,
+                          0x123456789abcdefULL}
+                : RuleKey{static_cast<std::uint16_t>(i), 1});
     Writer roster(Message::lobby);
     for (unsigned i = 0; i < maxPlayers; ++i)
         roster.access(maximum);
@@ -2229,7 +2239,11 @@ void lobbyAccess() {
         maximum.characters.push_back(i);
     maximum.unlockedCharacters = maximum.characters;
     for (unsigned i = 1; i <= 64; ++i)
-        maximum.rules.push_back({static_cast<std::uint16_t>(i), 1});
+        maximum.rules.push_back(
+            i > 64 - isaac::maxExternalRules
+                ? RuleKey{static_cast<std::uint16_t>(isaac::externalRuleBase + i), 1,
+                          0x123456789abcdefULL}
+                : RuleKey{static_cast<std::uint16_t>(i), 1});
     Writer encoded(Message::lobby);
     for (unsigned i = 0; i < maxPlayers; ++i)
         encoded.access(maximum);

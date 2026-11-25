@@ -339,23 +339,29 @@ return function(Phase, Command, endpoint, characters, text)
                     deps.native.menu_text_begin(ui.seed, "seed")
                 end, true, nil, "seed")
                 ruleEntry()
-                local allReady = count >= 2
+                local required = challenge and challenge.requiredPlayers or 0
+                local enough = required == 0 or required == count
+                local allReady = count >= 2 and enough
                 for i = 0, count - 1 do
                     allReady = allReady
                         and status["ready" .. i] == 1
                         and status["eligible" .. i] == true
                 end
-                row(text("开始游戏"), function()
-                    local settings = (ui.seed == "" and "RANDOM" or ui.seed)
-                        .. ":"
-                        .. (challenge and challenge.difficulty or ui.difficulty)
-                    for i = 0, 3 do
-                        settings = settings .. ":" .. (status["choice" .. i] or 0)
-                    end
-                    if command("start", settings) then
-                        deps.hide()
-                    end
-                end, allReady)
+                row(
+                    enough and text("开始游戏") or text("需要 %d 名玩家", required),
+                    function()
+                        local settings = (ui.seed == "" and "RANDOM" or ui.seed)
+                            .. ":"
+                            .. (challenge and challenge.difficulty or ui.difficulty)
+                        for i = 0, 3 do
+                            settings = settings .. ":" .. (status["choice" .. i] or 0)
+                        end
+                        if command("start", settings) then
+                            deps.hide()
+                        end
+                    end,
+                    allReady
+                )
                 if not challenge and (status.savedPlayers or 0) >= 2 then
                     if (status.savedOptions or 0) ~= (status.roomOptions or 0) then
                         row(text("载入上次规则"), function()

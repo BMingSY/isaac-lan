@@ -42,6 +42,7 @@ function bridge.withView(fn)
     end
     return table.unpack(result, 1, result.n)
 end
+bridge.challenges = modules["api/challenges"](native, modules["api/codec"])
 bridge.lifecycle = modules["api/lifecycle"](bridge)
 bridge.effects = modules["api/effect_sync"](modules["sync/effect_classes"], EffectVariant)
 bridge.actions = modules["api/actions"](bridge)
@@ -112,6 +113,9 @@ function api:Attach(mod, id)
             return value and value.id
         end,
         withView = bridge.withView,
+        registerChallenge = function(def)
+            return bridge.challenges.register(id, def)
+        end,
         requireEffect = bridge.effects.register,
         on = function(event, fn)
             return bridge.lifecycle.on(id, event, fn)
@@ -208,6 +212,7 @@ function bridge.commit()
         runId = info.runId,
         worldEpoch = info.worldEpoch,
         tick = info.tick,
+        challengeId = info.challenge or 0,
         revision = previous and previous.revision + 1 or 1,
         room = room,
         playerSignature = table.concat(signature, ","),

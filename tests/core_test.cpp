@@ -29,7 +29,7 @@
 #include "compat/items/room_transitions.h"
 #include "runtime/room_clock.h"
 #include "compat/items/crafting_bag.h"
-#include "compat/challenges/catalog.h"
+#include "compat/challenges/external.h"
 #include "compat/items/team_effects.h"
 #include "compat/characters/keeper.h"
 #include "compat/characters/team_effects.h"
@@ -1667,6 +1667,32 @@ void archiveCapacity() {
 }
 
 void challengeRules() {
+    isaac::compat::challenges::ExternalCatalog catalog;
+    constexpr auto external = isaac::externalRuleBase + 19;
+    constexpr std::uint64_t contract = 0x1122334455667788ull;
+    require(catalog.add(external, 3, "External", 0, 0, 4, contract) &&
+                !catalog.add(external, 4, "Conflict", 0, 0, 4, contract) &&
+                !catalog.add(1001, 3, "Builtin", 0, 0, 2, contract),
+            "External challenge registration did not isolate IDs");
+    const auto* registration = catalog.lookup(external);
+    require(registration && registration->requiredPlayers == 4 &&
+                registration->contract == contract && registration->roomOptionsLocked &&
+                registration->name == "External",
+            "External declaration changed");
+    auto checkpoint = sample(4);
+    checkpoint.settings.rules = {external, 3, 0, 0, true, 0, contract};
+    require(Archive::decode(checkpoint.encode()).settings.rules == checkpoint.settings.rules,
+            "Reconnect checkpoint lost external ownership");
+    isaac::lan::LobbyAccess local{{0}, {{external, 3, contract}}, {0}};
+    require(local.valid() && local.allowsRules(checkpoint.settings.rules),
+            "Registered challenge unavailable");
+    checkpoint.settings.rules.contract++;
+    require(!local.allowsRules(checkpoint.settings.rules),
+            "Accepted a different namespace for the same challenge");
+    catalog.erase(external);
+    require(!catalog.lookup(external) && catalog.lookup(1001),
+            "Unregister affected built-in rules");
+
     const auto* definition = isaac::compat::challenges::find(1001);
     require(definition && definition->character == 23 && definition->difficulty == 0 &&
                 definition->transient && definition->nextBag,

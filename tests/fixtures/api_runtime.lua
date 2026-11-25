@@ -130,6 +130,7 @@ return function(root)
         end
         for _, name in ipairs({
             "sync/effect_classes",
+            "api/challenges",
             "api/effect_sync",
             "api/codec",
             "api/lifecycle",

@@ -15,7 +15,7 @@
 
 namespace isaac::lan {
 using RunRules = isaac::RunRules;
-constexpr std::uint16_t protocolVersion = 58;
+constexpr std::uint16_t protocolVersion = 59;
 constexpr std::size_t maxPlayers = 4;
 constexpr std::size_t actionCount = 16;
 constexpr std::uint16_t maxInputValue = 65535;
@@ -205,6 +205,7 @@ struct Choice {
 };
 struct RuleKey {
     std::uint16_t id = 0, version = 0;
+    std::uint64_t contract = 0;
     bool operator==(const RuleKey&) const = default;
     bool operator<(const RuleKey& other) const {
         return id < other.id || (id == other.id && version < other.version);
@@ -227,8 +228,13 @@ struct LobbyAccess {
         if (!std::includes(unlockedCharacters.begin(), unlockedCharacters.end(), characters.begin(),
                            characters.end()))
             return false;
+        if (std::count_if(rules.begin(), rules.end(), [](const auto& key) {
+                return key.id >= externalRuleBase;
+            }) > static_cast<int>(maxExternalRules))
+            return false;
         for (std::size_t i = 0; i < rules.size(); ++i)
-            if (!rules[i].id || !rules[i].version || (i && !(rules[i - 1] < rules[i])))
+            if ((rules[i].id >= externalRuleBase) != (rules[i].contract != 0) || !rules[i].id ||
+                !rules[i].version || (i && !(rules[i - 1] < rules[i])))
                 return false;
         return true;
     }
@@ -250,9 +256,9 @@ struct LobbyAccess {
                              choice.candidates.end());
     }
     bool allowsRules(const RunRules& value, bool continuing = false) const {
-        return value.valid() &&
-               (!value.id ||
-                std::binary_search(rules.begin(), rules.end(), RuleKey{value.id, value.version})) &&
+        const RuleKey key{value.id, value.version, value.contract};
+        const auto it = std::lower_bound(rules.begin(), rules.end(), key);
+        return value.valid() && (!value.id || (it != rules.end() && *it == key)) &&
                (value.character == 65535 || allowsCharacter(value.character, continuing));
     }
 };
@@ -405,6 +411,8 @@ class Writer {
         for (auto rule : value.rules) {
             u16(rule.id);
             u16(rule.version);
+            if (rule.id >= externalRuleBase)
+                u64(rule.contract);
         }
     }
     void choice(const Choice& value, const LobbyAccess& access) {
@@ -539,7 +547,8 @@ class Reader {
             throw std::runtime_error("Too many lobby rules");
         for (unsigned i = 0; i < rules; ++i) {
             const auto id = u16();
-            value.rules.push_back({id, u16()});
+            const auto version = u16();
+            value.rules.push_back({id, version, id >= externalRuleBase ? u64() : 0});
         }
         if (!value.valid())
             throw std::runtime_error("Invalid lobby access");

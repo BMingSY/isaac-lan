@@ -4,7 +4,7 @@
 #include "runtime/session_state.h"
 #include "runtime/session_store.h"
 #include "runtime/input_schedule.h"
-#include "compat/challenges/catalog.h"
+#include "compat/challenges/external.h"
 #include "compat/challenges/aim_rotation.h"
 #include "engine/characters.h"
 #include "engine/item_presentation.h"
@@ -41,6 +41,7 @@ constexpr int registry = -1001000;
 using LuaFunction = int(__cdecl*)(lua_State*);
 isaac::lua::API lua{};
 std::unique_ptr<lan::Session> session;
+compat::challenges::ExternalCatalog challengeCatalog;
 std::vector<std::unique_ptr<lan::Session>> retiring;
 std::uintptr_t executableImage = 0;
 void (*logger)(const std::string&) = nullptr;
@@ -95,14 +96,20 @@ lan::RunRules rulesFor(const compat::challenges::Definition* definition) {
                                       definition->character,
                                       definition->difficulty,
                                       definition->transient,
-                                      definition->friendlyFire ? roomOptions::friendlyFire : 0}
+                                      definition->friendlyFire ? roomOptions::friendlyFire : 0,
+                                      definition->contract}
                       : lan::RunRules{};
 }
 bool supportedChallenge(const compat::challenges::Definition& definition) {
     return !definition.crimeMode || backend::supportsCrimeMode();
 }
+bool challengePartyReady(const lan::RunRules& rules, unsigned connected) {
+    const auto* def = challengeCatalog.lookup(rules.id);
+    return !def || !def->requiredPlayers ||
+           def->requiredPlayers == static_cast<unsigned>(std::popcount(connected));
+}
 bool validRules(const lan::RunRules& rules) {
-    const auto* definition = compat::challenges::find(rules.id);
+    const auto* definition = challengeCatalog.lookup(rules.id);
     auto expected = rulesFor(definition);
     const auto requiredOptions = expected.options;
     if (!definition || !definition->roomOptionsLocked)
@@ -113,24 +120,24 @@ bool validRules(const lan::RunRules& rules) {
 }
 bool remoteShooting() {
     const auto* definition =
-        session ? compat::challenges::find(session->settings().rules.id) : nullptr;
+        session ? challengeCatalog.lookup(session->settings().rules.id) : nullptr;
     return challengeActive() && definition && definition->nextPlayerShooting;
 }
 bool largeFloor() {
     const auto* definition =
-        session ? compat::challenges::find(session->settings().rules.id) : nullptr;
+        session ? challengeCatalog.lookup(session->settings().rules.id) : nullptr;
     return challengeActive() && definition && definition->largeFloor;
 }
 unsigned rewardChallenge() {
     const auto* definition =
-        challengeActive() ? compat::challenges::find(session->settings().rules.id) : nullptr;
+        challengeActive() ? challengeCatalog.lookup(session->settings().rules.id) : nullptr;
     if (!definition || !definition->rewardChallenge || !backend::gameReady())
         return 0;
     return definition->nativeRewardChallenge(backend::stage().level);
 }
 bool deleteThis() {
     const auto* definition =
-        challengeActive() ? compat::challenges::find(session->settings().rules.id) : nullptr;
+        challengeActive() ? challengeCatalog.lookup(session->settings().rules.id) : nullptr;
     return definition && definition->deleteThis;
 }
 bool beginNetworkRun() {
@@ -226,10 +233,11 @@ lan::LobbyAccess personalAccess() {
     }
     std::sort(access.characters.begin(), access.characters.end());
     std::sort(access.unlockedCharacters.begin(), access.unlockedCharacters.end());
-    for (const auto& definition : compat::challenges::definitions)
+    challengeCatalog.each([&](const auto& definition) {
         if (supportedChallenge(definition) &&
             compat::challenges::available(definition, progress.achievements))
-            access.rules.push_back({definition.id, definition.version});
+            access.rules.push_back({definition.id, definition.version, definition.contract});
+    });
     return access;
 }
 void writeProgress(const lan::Progress& value) {
@@ -1170,7 +1178,8 @@ int restartSession(lua_State* L) {
         settings.seed = seed;
         settings.snapshot.clear();
         settings.progress = readProgress();
-        ok = session->restart(settings);
+        ok = challengePartyReady(settings.rules, session->connectedMask()) &&
+             session->restart(settings);
         if (ok)
             pollRestart();
     }
@@ -1200,12 +1209,39 @@ int executeChatCommand(lua_State* L) {
     lua.pushLString(L, result.data(), result.size());
     return 1;
 }
+int registerChallenge(lua_State* L) {
+    const auto id = lua.checkInteger(L, 1), version = lua.checkInteger(L, 2);
+    std::size_t size = 0;
+    const char* name = lua.checkString(L, 3, &size);
+    const auto character = lua.checkInteger(L, 4), difficulty = lua.checkInteger(L, 5),
+               players = lua.checkInteger(L, 6);
+    std::size_t length = 0;
+    const char* identity = lua.checkString(L, 7, &length);
+    const auto contract =
+        lan::snapshotHash({reinterpret_cast<const std::uint8_t*>(identity), length});
+    lua.pushBoolean(L, !session && id >= externalRuleBase && id <= 65535 && version > 0 &&
+                           version <= 65535 && character >= 0 && character <= 65535 &&
+                           difficulty >= 0 && difficulty <= 3 && players >= 0 &&
+                           players <= lan::maxPlayers && size <= 96 && length <= 160 &&
+                           challengeCatalog.add(id, version, {name, size}, character, difficulty,
+                                                players, contract));
+    return 1;
+}
+int removeChallenge(lua_State* L) {
+    const auto id = lua.checkInteger(L, 1);
+    if (id >= externalRuleBase && id <= 65535 && challengeCatalog.lookup(id)) {
+        if (session && (session->phase() == lan::Phase::lobby || session->rules().id == id))
+            fail("Lobby challenge registration removed");
+        challengeCatalog.erase(id);
+    }
+    return 0;
+}
 int challengeList(lua_State* L) {
     const auto access = session ? session->localAccess() : personalAccess();
     lua.createTable(L, 0, compat::challenges::definitions.size());
-    for (const auto& def : compat::challenges::definitions) {
+    challengeCatalog.each([&](const auto& def) {
         if (!supportedChallenge(def))
-            continue;
+            return;
         lua.createTable(L, 0, 10);
         auto integer = [&](const char* key, long long value) {
             lua.pushInteger(L, value);
@@ -1216,6 +1252,7 @@ int challengeList(lua_State* L) {
         integer("character", def.character);
         integer("difficulty", def.difficulty);
         integer("nextBag", def.nextBag);
+        integer("requiredPlayers", def.requiredPlayers);
         lua.pushBoolean(L, def.roomOptionsLocked);
         lua.setField(L, -2, "roomOptionsLocked");
         lua.pushBoolean(L, access.allowsRules(rulesFor(&def)));
@@ -1228,7 +1265,7 @@ int challengeList(lua_State* L) {
         lua.pushString(L, def.route.data());
         lua.setField(L, -2, "route");
         lua.setField(L, -2, std::to_string(def.id).c_str());
-    }
+    });
     return 1;
 }
 int characterList(lua_State* L) {
@@ -1266,7 +1303,7 @@ int characterList(lua_State* L) {
 }
 int selectChallenge(lua_State* L) {
     const auto id = lua.checkInteger(L, 1);
-    const auto* definition = id >= 0 && id <= 65535 ? compat::challenges::find(id) : nullptr;
+    const auto* definition = id >= 0 && id <= 65535 ? challengeCatalog.lookup(id) : nullptr;
     auto rules = rulesFor(definition);
     if (session && (!definition || !definition->roomOptionsLocked))
         rules.options |= session->rules().options;
@@ -1311,7 +1348,7 @@ int roomOptionDefinitions(lua_State* L) {
 int configureRoomOptions(lua_State* L) {
     const auto value = lua.checkInteger(L, 1);
     const auto options = roomOptions::normalize(static_cast<std::uint64_t>(value));
-    const auto* definition = session ? compat::challenges::find(session->rules().id) : nullptr;
+    const auto* definition = session ? challengeCatalog.lookup(session->rules().id) : nullptr;
     bool accepted = false;
     if (session && (!definition || !definition->roomOptionsLocked) && value >= 0 &&
         roomOptions::valid(options)) {
@@ -1325,9 +1362,11 @@ int configureRoomOptions(lua_State* L) {
 }
 int finishChallenge(lua_State* L) {
     const auto* definition =
-        session ? compat::challenges::find(session->settings().rules.id) : nullptr;
-    const bool allowed = definition && view.gated && session->isHost() && !view.playingEnding &&
-                         session->phase() == lan::Phase::running;
+        session ? challengeCatalog.lookup(session->settings().rules.id) : nullptr;
+    const bool matches =
+        lua.getTop(L) == 0 || (definition && definition->id == lua.checkInteger(L, 1));
+    const bool allowed = matches && definition && view.gated && session->isHost() &&
+                         !view.playingEnding && session->phase() == lan::Phase::running;
     if (allowed)
         view.pendingChallengeFinish = definition->ending;
     lua.pushBoolean(L, allowed);
@@ -1346,7 +1385,8 @@ int start(lua_State* L) {
     }
     lan::Start settings;
     settings.rules = session->rules();
-    if (!validRules(settings.rules)) {
+    if (!validRules(settings.rules) ||
+        !challengePartyReady(settings.rules, session->connectedMask())) {
         lua.pushBoolean(L, false);
         return 1;
     }
@@ -1457,7 +1497,7 @@ int startEngine(lua_State* L) {
         }
     }
     launch.requested = true;
-    const auto* definition = compat::challenges::find(settings.rules.id);
+    const auto* definition = challengeCatalog.lookup(settings.rules.id);
     if (!backend::start(seed, settings.characters[0], settings.difficulty,
                         definition && definition->crimeMode)) {
         fail("Unsupported challenge seed effect");
@@ -1847,7 +1887,7 @@ bool challengeActive() {
 }
 bool showPlayerOutlines() {
     const auto* definition =
-        challengeActive() ? compat::challenges::find(session->settings().rules.id) : nullptr;
+        challengeActive() ? challengeCatalog.lookup(session->settings().rules.id) : nullptr;
     return !definition || !definition->hidePlayerOutlines;
 }
 bool allowChallengeEvent(const char* event) {
@@ -1937,14 +1977,14 @@ void playerRoomCleared(int owner, int dimension, int index) {
 }
 std::array<int, 2> challengeDestination() {
     const auto* definition =
-        challengeActive() ? compat::challenges::find(session->settings().rules.id) : nullptr;
+        challengeActive() ? challengeCatalog.lookup(session->settings().rules.id) : nullptr;
     return definition ? std::array{definition->goalStage, definition->goalStageType}
                       : std::array{-1, -1};
 }
 int craftingBagViewTarget() {
     if (!challengeActive())
         return -1;
-    const auto* definition = compat::challenges::find(session->settings().rules.id);
+    const auto* definition = challengeCatalog.lookup(session->settings().rules.id);
     if (!definition || !definition->nextBag)
         return -1;
     if (!view.gated || !rooms::viewReady() || (!session->isHost() && !view.authoritative))
@@ -2187,6 +2227,9 @@ bool bind(lua_State* L, HMODULE module) {
         lua.pushClosure(L, fn, 0);
         lua.setField(L, -2, name);
     };
+    challengeCatalog.clear();
+    function("api_register_challenge", registerChallenge);
+    function("api_remove_challenge", removeChallenge);
     function("api_info", integrationInfo);
     function("api_send", integrationSend);
     function("api_receive", integrationReceive);

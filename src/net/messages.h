@@ -83,6 +83,8 @@ inline void writeRules(Writer& w, const RunRules& rules) {
     w.u8(rules.difficulty);
     w.u8(rules.transient);
     w.u64(rules.options);
+    if (rules.id >= externalRuleBase)
+        w.u64(rules.contract);
 }
 inline RunRules readRules(Reader& r) {
     RunRules value;
@@ -93,6 +95,8 @@ inline RunRules readRules(Reader& r) {
     const auto transient = r.u8();
     value.transient = transient != 0;
     value.options = r.u64();
+    if (value.id >= externalRuleBase)
+        value.contract = r.u64();
     if (transient > 1 || !value.valid())
         throw std::runtime_error("Invalid run rules");
     return value;
