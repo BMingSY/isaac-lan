@@ -652,6 +652,18 @@ int main() {
                     second.at("layout") == 1 && second.at("x") == 110 && second.at("y") == 55,
                 "Repentance+ HUD binding changed native coordinates or controller identity");
 #endif
+        connected = 0x1f;
+        localSlot = 1;
+        lua_State personalHud;
+        require(presentation::playerHuds(&personalHud) == 1 && localOnly &&
+                    personalHud.tables[0].children.size() == 1 &&
+                    personalHud.tables[0].children.contains("1") && game == beforeHud,
+                "A cached teammate HUD leaked its ping in a five-seat view");
+        connected &= ~(1u << 2);
+        lua_State teamHud;
+        require(presentation::playerHuds(&teamHud) == 1 && !localOnly &&
+                    teamHud.tables[0].children.size() == 2,
+                "A sparse four-seat team lost its ping anchors");
         field<bool>(hud, hudVisibleOffset) = false;
         lua_State hiddenHud;
         require(presentation::playerHuds(&hiddenHud) == 1 && hiddenHud.tables[0].children.empty(),

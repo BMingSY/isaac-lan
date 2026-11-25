@@ -1,10 +1,18 @@
 #pragma once
+#include <bit>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <optional>
 
 namespace isaac::engine::native_player_hud {
+// The game allocates four main panels followed by four companion panels.
+// Their native strides and offsets are independent of the LAN roster size.
+inline constexpr unsigned primaryPanels = 4;
+inline constexpr unsigned totalPanels = primaryPanels * 2;
+inline bool localOnly(unsigned connectedMask) {
+    return static_cast<unsigned>(std::popcount(connectedMask)) > primaryPanels;
+}
 struct Layout {
     unsigned visible, stride, player, controller;
 };
@@ -23,8 +31,8 @@ template <class T> T read(std::uintptr_t address, unsigned offset) {
 template <class SelectLayout, class Position>
 std::optional<Anchor> anchor(std::uintptr_t hud, unsigned index, float width, float height,
                              const Layout& fields, SelectLayout layout, Position position) {
-    if (!hud || index >= 4 || !std::isfinite(width) || !std::isfinite(height) || width <= 0 ||
-        height <= 0 || !read<bool>(hud, fields.visible))
+    if (!hud || index >= primaryPanels || !std::isfinite(width) || !std::isfinite(height) ||
+        width <= 0 || height <= 0 || !read<bool>(hud, fields.visible))
         return {};
     const auto player = read<std::uintptr_t>(hud + index * fields.stride, fields.player);
     if (!player)

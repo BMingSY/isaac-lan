@@ -1,6 +1,7 @@
 #include "test_support.h"
 #include "native_call.h"
 #include "engine/versions/common/frontend_hud.cpp"
+#include "runtime/actor_roster.h"
 #include <cstring>
 #include <iostream>
 #include <vector>
@@ -25,6 +26,8 @@ using Address = std::uintptr_t;
 unsigned char* image = nullptr;
 void* expectedHud = nullptr;
 int localSlot = -1;
+unsigned connectedMask = 0xf;
+bool expectPersonalHud = false;
 unsigned depth = 0, localDepth = 0, statQueries = 0, statResets = 0, historyQueries = 0,
          historyRefreshes = 0, renders = 0, updates = 0, postUpdates = 0;
 std::array<unsigned, 8> resets{}, resources{};
@@ -73,14 +76,17 @@ void __attribute__((fastcall)) resetPlayerHud(void* part, void*) {
 }
 void __attribute__((fastcall)) updateNative(void* hud, void*) {
     require(hud == expectedHud && depth, "HUD update escaped the room view");
+    require(bool(localDepth) == expectPersonalHud, "HUD update used the wrong audience");
     ++updates;
 }
 void __attribute__((fastcall)) postNative(void* hud, void*) {
     require(hud == expectedHud && depth, "HUD post-update escaped the room view");
+    require(bool(localDepth) == expectPersonalHud, "HUD post-update used the wrong audience");
     ++postUpdates;
 }
 void __attribute__((fastcall)) renderNative(void* hud, void*) {
     require(hud == expectedHud && depth, "HUD render escaped the room view");
+    require(bool(localDepth) == expectPersonalHud, "HUD render used the wrong audience");
     ++renders;
     if (failRender)
         throw std::runtime_error("Fixture HUD rendering failure");
@@ -120,6 +126,9 @@ int localViewSlot() {
 }
 } // namespace isaac::runtime
 namespace isaac::rooms {
+unsigned connected() {
+    return connectedMask;
+}
 void withView(const std::function<void()>& render, bool localOnly) {
     struct Restore {
         unsigned depth = ::depth, local = localDepth;
@@ -129,8 +138,35 @@ void withView(const std::function<void()>& render, bool localOnly) {
         }
     } restore;
     ++depth;
-    if (localOnly)
+    if (localOnly) {
         ++localDepth;
+        const auto game = field<Address>(image, gameGlobal);
+        if (game) {
+            auto& begin = field<Address>(reinterpret_cast<void*>(game), playersOffset);
+            auto& end =
+                field<Address>(reinterpret_cast<void*>(game), playersOffset + sizeof(Address));
+            auto* first = reinterpret_cast<Address*>(begin);
+            auto* last = reinterpret_cast<Address*>(end);
+            std::vector<Address> selected(first, last);
+            actors::selectView(selected, true, [&](Address p) {
+                return p &&
+                       field<int>(reinterpret_cast<void*>(p), controllerOffset) == localSlot + 1;
+            });
+            struct RestoreRoster {
+                Address& begin;
+                Address& end;
+                Address savedBegin, savedEnd;
+                ~RestoreRoster() {
+                    begin = savedBegin;
+                    end = savedEnd;
+                }
+            } restoreRoster{begin, end, begin, end};
+            begin = address(selected.data());
+            end = begin + selected.size() * sizeof(Address);
+            render();
+            return;
+        }
+    }
     render();
 }
 } // namespace isaac::rooms
@@ -228,6 +264,44 @@ int main() {
         for (unsigned i = 0; i < 8; ++i)
             require(field<Address>(hud.data(), i * partSize) == 0,
                     "Disconnected actor remained in the team HUD");
+
+        std::array<std::array<unsigned char, 0x2100>, 6> largeParty{};
+        for (unsigned i = 0; i < largeParty.size(); ++i) {
+            auto* player = largeParty[i].data();
+            field<bool>(player, activeOffset) = true;
+            field<int>(player, controllerOffset) = static_cast<int>(std::min(i + 1, 5u));
+            field<int>(player, indexOffset) = i;
+            roster.push_back(address(player));
+        }
+        field<Address>(largeParty[4].data(), twinOffset) = address(largeParty[5].data());
+        field<Address>(largeParty[5].data(), twinOffset) = address(largeParty[4].data());
+        setRoster();
+        connectedMask = 0x1f;
+        expectPersonalHud = true;
+        for (localSlot = 0; localSlot < 5; ++localSlot) {
+            callHud(5);
+            callHud(6);
+            callHud(7);
+            for (unsigned i = 0; i < 8; ++i) {
+                const auto expectedPlayer = i == 0 ? address(largeParty[localSlot].data())
+                                            : i == 4 && localSlot == 4
+                                                ? address(largeParty[5].data())
+                                                : 0;
+                require(field<Address>(hud.data(), i * partSize) == expectedPlayer,
+                        "Personal HUD retained another seat or lost its controlled twin");
+            }
+            require(field<Address>(game.data(), playersOffset) == address(roster.data()),
+                    "Personal HUD changed the gameplay roster");
+        }
+        localSlot = 1;
+        connectedMask &= ~(1u << 2);
+        expectPersonalHud = false;
+        roster.erase(roster.begin() + 2);
+        setRoster();
+        callHud(7);
+        require(field<Address>(hud.data(), partSize) == address(largeParty[1].data()) &&
+                    field<Address>(hud.data(), 3 * partSize) == address(largeParty[4].data()),
+                "A sparse four-seat team did not regain its team HUD");
 
         std::array<unsigned char, 0x300> stats{};
         using Query = int(__attribute__((thiscall))*)(void*, void*);

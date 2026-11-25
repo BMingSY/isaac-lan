@@ -4,6 +4,13 @@
 #include <vector>
 
 namespace isaac::actors {
+template <class Actor, class IsLocal>
+void selectView(std::vector<Actor>& players, bool localOnly, IsLocal isLocal) {
+    if (localOnly)
+        std::erase_if(players, [&](const auto& actor) { return !isLocal(actor); });
+    else
+        std::stable_partition(players.begin(), players.end(), isLocal);
+}
 template <class Locations, class Actor>
 void forgetRemoved(Locations& locations, const std::vector<Actor>& listed) {
     // Location metadata does not own actors. Native temporary actors can be

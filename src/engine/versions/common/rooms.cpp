@@ -2733,7 +2733,7 @@ bool backgroundLoading() {
 }
 void withView(const std::function<void()>& draw, bool localPlayersOnly) {
     const int slot = runtime::localViewSlot();
-    if (slot < 0 || slot >= 4) {
+    if (slot < 0) {
         draw();
         return;
     }
@@ -2741,11 +2741,8 @@ void withView(const std::function<void()>& draw, bool localPlayersOnly) {
     const auto head = enabled && !transferring ? participant(slot) : 0;
     const auto room = head ? findRoom(head) : nullptr;
     auto players = values(scopes.teamRoster() ? *scopes.teamRoster() : roster());
-    if (localPlayersOnly)
-        std::erase_if(players,
-                      [&](Address p) { return at<int>(p, layout.player.controller) != slot + 1; });
-    std::stable_partition(players.begin(), players.end(), [&](Address p) {
-        return at<int>(p, layout.player.controller) == slot + 1;
+    actors::selectView(players, localPlayersOnly, [&](Address p) {
+        return p && at<int>(p, layout.player.controller) == slot + 1;
     });
     if (!room) {
         ViewRoster view(players);
