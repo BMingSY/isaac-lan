@@ -25,6 +25,7 @@ struct Bindings {
         unsigned engineRoomsChange;
         unsigned engineRoomsCooldown;
         std::optional<unsigned> engineRoomsDead;
+        std::optional<unsigned> crimeDeathIntro;
         unsigned engineRoomsDelete;
         unsigned engineRoomsDesc;
         unsigned engineRoomsDoorPosition;

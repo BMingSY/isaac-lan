@@ -803,6 +803,17 @@ int __attribute__((fastcall)) dead(void* manager, void*) {
     TeamScope team;
     return originalDead(manager);
 }
+RoomCall originalCrimeDeathIntro;
+void __attribute__((fastcall)) crimeDeathIntro(void* crime, void*) {
+    // The dying player still counts until the native co-op ghost conversion.
+    // Its actor-scoped update can hide a surviving teammate even in the same room.
+    if (enabled && runtime::challengeActive()) {
+        TeamScope team;
+        if (originalLiving(reinterpret_cast<void*>(game() + layout.game.playerManager)) > 1)
+            return;
+    }
+    originalCrimeDeathIntro(crime);
+}
 RoomCall originalAward;
 void __attribute__((fastcall)) award(void* room, void*) {
     if (runtime::replica())
@@ -3823,6 +3834,9 @@ bool install(Address base, void (*log)(const std::string&)) {
            (!bindings.entry.engineRoomsDead ||
             hook(*bindings.entry.engineRoomsDead, reinterpret_cast<void*>(dead),
                  reinterpret_cast<void**>(&originalDead))) &&
+           (!bindings.entry.crimeDeathIntro ||
+            hook(*bindings.entry.crimeDeathIntro, reinterpret_cast<void*>(crimeDeathIntro),
+                 reinterpret_cast<void**>(&originalCrimeDeathIntro))) &&
            hook(bindings.entry.playerManagerReviveCoop, reinterpret_cast<void*>(reviveAll),
                 reinterpret_cast<void**>(&originalReviveAll)) &&
            hook(bindings.entry.engineRoomsAward, reinterpret_cast<void*>(award),
