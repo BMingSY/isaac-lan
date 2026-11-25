@@ -208,11 +208,12 @@ function bridge.commit()
         index = position.index,
         dimension = position.dimension,
     }
+    local challenge = bridge.challenges.entries[info.challenge]
     local context = {
         runId = info.runId,
         worldEpoch = info.worldEpoch,
         tick = info.tick,
-        challengeId = info.challenge or 0,
+        challengeId = challenge and challenge.key or info.challenge or 0,
         revision = previous and previous.revision + 1 or 1,
         room = room,
         playerSignature = table.concat(signature, ","),

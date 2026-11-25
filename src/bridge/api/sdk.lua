@@ -7,7 +7,7 @@
 ---@field tick integer Authoritative tick in LAN; game frame in solo.
 ---@field runId? string
 ---@field worldEpoch? integer
----@field challengeId? integer Selected LAN challenge, or zero for an ordinary run.
+---@field challengeId? integer|string Built-in challenge number, qualified Mod challenge ID, or zero for an ordinary run.
 ---@field revision? integer Local commit sequence, not a render-frame counter.
 ---@field room? table LAN room identity: runId, worldEpoch, index, dimension.
 ---@field playerSignature? string Opaque identity-change marker.
@@ -41,6 +41,28 @@
 ---@field IsAvailable fun(self: IsaacLANAction): boolean
 ---@field Request fun(self: IsaacLANAction, payload?: any, options?: {player?: EntityPlayer, onResult?: fun(result: IsaacLANResult)}): IsaacLANRequest
 ---@field Close fun(self: IsaacLANAction)
+---@class IsaacLANChallengeContext
+---@field runId string
+---@field worldEpoch integer
+---@field tick integer
+---@field players table<integer, EntityPlayer> Connected main bodies by participant ID, valid during this step.
+---@class IsaacLANChallengeDefinition
+---@field id string|integer Stable key within the attached Mod's namespace.
+---@field name string Localized lobby name.
+---@field version? integer Defaults to 1.
+---@field players? integer Required party size (2–4).
+---@field character? integer Fixed player type; otherwise selected in the lobby.
+---@field difficulty? integer Defaults to normal.
+---@field roomOptionsLocked? boolean Defaults to false. True disables the lobby's optional room rules during this challenge.
+---@field step? fun(ctx: IsaacLANChallengeContext) Host simulation step.
+---@field capture? fun(): any Full state for replicas. Supply with apply.
+---@field apply? fun(value: any) Restore a full state on a guest. Supply with capture.
+---@field reset? fun() Release local state and effects.
+---@field canEnter? fun(request: table): boolean Host-side room entry decision.
+---@class IsaacLANChallenge
+---@field id string Qualified ID for comparison with view.challengeId.
+---@field Finish fun(self: IsaacLANChallenge): boolean
+---@field Close fun(self: IsaacLANChallenge)
 ---@class IsaacLANHandle
 ---@field IsAttached fun(self: IsaacLANHandle): boolean
 ---@field IsActive fun(self: IsaacLANHandle): boolean
@@ -55,7 +77,7 @@
 ---@field WithLocalView fun(self: IsaacLANHandle, fn: function): any
 ---@field On fun(self: IsaacLANHandle, event: string, fn: fun(context: table)): function LAN lifecycle subscription.
 ---@field OnLocalRender fun(self: IsaacLANHandle, fn: fun(view: IsaacLANView)): function Per-render callback in the local view.
----@field RegisterChallenge fun(self: IsaacLANHandle, definition: table): {Finish: fun(): boolean, Close: fun()}
+---@field RegisterChallenge fun(self: IsaacLANHandle, definition: IsaacLANChallengeDefinition): IsaacLANChallenge
 ---@field RequireEffectSync fun(self: IsaacLANHandle, variant: integer, subtype?: integer): function Keep matching room effects in this view. Returns a release function.
 ---@field Action fun(self: IsaacLANHandle, name: string, definition?: IsaacLANActionDefinition): IsaacLANAction
 ---@field Close fun(self: IsaacLANHandle)
@@ -189,8 +211,8 @@ function SDK.create(mod, id, backend)
     function handle:RegisterChallenge(definition)
         attached()
         assert(backend and backend.registerChallenge, "lan_required")
-        local release, finish = backend.registerChallenge(definition)
-        return { Close = own(release), Finish = finish }
+        local release, finish, key = backend.registerChallenge(definition)
+        return { id = key, Close = own(release), Finish = finish }
     end
     function handle:RequireEffectSync(variant, subtype)
         attached()

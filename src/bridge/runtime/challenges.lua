@@ -155,7 +155,9 @@ return function(deps)
     local function snapshot()
         local definition = authority()
         local value = definition and component(definition.id)
-        return value and value.snapshot and { definition.id, definition.version, value.snapshot() }
+        return value
+                and value.snapshot
+                and { value.key or definition.id, definition.version, value.snapshot() }
             or false
     end
     local function apply(value)
@@ -168,7 +170,7 @@ return function(deps)
         assert(
             type(value) == "table"
                 and #value == 3
-                and value[1] == definition.id
+                and value[1] == (active.key or definition.id)
                 and value[2] == definition.version,
             "Challenge view identity mismatch"
         )

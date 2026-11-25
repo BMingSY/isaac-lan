@@ -6,6 +6,10 @@ local challengeUnlockHints = {
 -- Menu decisions and actions are independent of fonts, sprites and mouse geometry.
 return function(Phase, Command, endpoint, characters, text)
     local CHALLENGE_MODE, MODE_COUNT = 4, 5
+    local function challengeName(definition)
+        local name = text(definition.name)
+        return definition.route == "external" and name or definition.id .. " " .. name
+    end
     local function idle(phase)
         return phase == Phase.idle or phase == Phase.failed or phase == Phase.closed
     end
@@ -267,7 +271,7 @@ return function(Phase, Command, endpoint, characters, text)
             for _, id in ipairs(ids) do
                 local definition = challenges[tostring(id)]
                 row(
-                    id .. " " .. text(definition.name),
+                    challengeName(definition),
                     function()
                         if command("challenge", tostring(id)) then
                             ui.difficulty = definition.difficulty
@@ -280,7 +284,9 @@ return function(Phase, Command, endpoint, characters, text)
                     definition.team_available and deps.accent or nil
                 )
                 if not definition.team_available then
-                    rows[#rows].unlockHint = challengeUnlockHints[id]
+                    rows[#rows].unlockHint = definition.route == "external"
+                            and "全员需启用兼容版本的挑战"
+                        or challengeUnlockHints[id]
                         or "队伍尚未解锁此挑战"
                 end
             end
@@ -318,7 +324,7 @@ return function(Phase, Command, endpoint, characters, text)
                     end
                 end
                 row(
-                    challenge and text("挑战：%d %s", challenge.id, text(challenge.name))
+                    challenge and text("挑战：%s", challengeName(challenge))
                         or text(
                             ({ "普通", "困难", "贪婪", "贪婪加强" })[ui.difficulty + 1]
                         ),
@@ -376,9 +382,10 @@ return function(Phase, Command, endpoint, characters, text)
                     end
                 end
             end
-            if not host and challenge then
+            if not host and (challenge or status.challenge == -1) then
                 row(
-                    text("挑战：%d %s", challenge.id, text(challenge.name)),
+                    challenge and text("挑战：%s", challengeName(challenge))
+                        or text("缺少房主所选挑战或版本不兼容"),
                     function() end,
                     false,
                     nil,

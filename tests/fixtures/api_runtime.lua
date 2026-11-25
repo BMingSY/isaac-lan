@@ -66,6 +66,7 @@ return function(root)
                 connected = p.connected or 3,
                 worldEpoch = p.epoch,
                 tick = p.tick,
+                challenge = p.challenge,
                 nowMs = p.now,
                 runId = p.runId or string.rep("a", 32),
             }

@@ -11,16 +11,18 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <vector>
 
 namespace isaac::lan {
 using RunRules = isaac::RunRules;
-constexpr std::uint16_t protocolVersion = 59;
+constexpr std::uint16_t protocolVersion = 60;
 constexpr std::size_t maxPlayers = 4;
 constexpr std::size_t actionCount = 16;
 constexpr std::uint16_t maxInputValue = 65535;
 constexpr unsigned allPlayersMask = (1u << maxPlayers) - 1;
 constexpr std::size_t maxMessageSize = 4096;
+constexpr std::size_t maxLobbyMessageSize = 8192;
 constexpr std::size_t maxSnapshotSize = 8 * 1024 * 1024;
 constexpr std::size_t maxWorldSize = 2 * 1024 * 1024;
 constexpr std::size_t maxWorldDetail = 64 * 1024;
@@ -58,6 +60,12 @@ enum class Message : std::uint8_t {
     choicePreview,
     syncLatency
 };
+inline bool validMessageSize(std::span<const std::uint8_t> bytes) {
+    return !bytes.empty() &&
+           bytes.size() <= (bytes.front() == static_cast<std::uint8_t>(Message::lobby)
+                                ? maxLobbyMessageSize
+                                : maxMessageSize);
+}
 constexpr std::size_t maxIntegrationSize = 2048;
 constexpr std::size_t maxCommunicationSize = 3072;
 constexpr std::size_t maxIntegrationQueue = 32;
@@ -208,7 +216,7 @@ struct RuleKey {
     std::uint64_t contract = 0;
     bool operator==(const RuleKey&) const = default;
     bool operator<(const RuleKey& other) const {
-        return id < other.id || (id == other.id && version < other.version);
+        return std::tie(id, version, contract) < std::tie(other.id, other.version, other.contract);
     }
 };
 // Bounded, immutable declarations from each participant's local profile. The
@@ -219,7 +227,8 @@ struct LobbyAccess {
     std::vector<std::uint16_t> unlockedCharacters;
     bool operator==(const LobbyAccess&) const = default;
     bool valid() const {
-        if (characters.size() > 256 || unlockedCharacters.size() > 256 || rules.size() > 64)
+        if (characters.size() > 256 || unlockedCharacters.size() > 256 ||
+            rules.size() > maxLobbyRules)
             return false;
         for (const auto* list : {&characters, &unlockedCharacters})
             for (std::size_t i = 0; i < list->size(); ++i)
@@ -228,12 +237,9 @@ struct LobbyAccess {
         if (!std::includes(unlockedCharacters.begin(), unlockedCharacters.end(), characters.begin(),
                            characters.end()))
             return false;
-        if (std::count_if(rules.begin(), rules.end(), [](const auto& key) {
-                return key.id >= externalRuleBase;
-            }) > static_cast<int>(maxExternalRules))
-            return false;
         for (std::size_t i = 0; i < rules.size(); ++i)
-            if ((rules[i].id >= externalRuleBase) != (rules[i].contract != 0) || !rules[i].id ||
+            if (rules[i].id > externalRuleBase ||
+                (rules[i].id == externalRuleBase) != (rules[i].contract != 0) || !rules[i].id ||
                 !rules[i].version || (i && !(rules[i - 1] < rules[i])))
                 return false;
         return true;
@@ -399,7 +405,7 @@ class Writer {
         for (auto id : value.unlockedCharacters)
             u16(id);
         // New-run availability is a subset of unlocked IDs. A bit per ID
-        // keeps the maximum four-seat lobby within maxMessageSize.
+        // keeps the four-seat character catalogue compact.
         for (std::size_t i = 0; i < value.unlockedCharacters.size(); i += 8) {
             std::uint8_t available = 0;
             for (unsigned bit = 0; bit < 8 && i + bit < value.unlockedCharacters.size(); ++bit)
@@ -543,7 +549,7 @@ class Reader {
                     value.characters.push_back(value.unlockedCharacters[i + bit]);
         }
         const auto rules = u8();
-        if (rules > 64)
+        if (rules > maxLobbyRules)
             throw std::runtime_error("Too many lobby rules");
         for (unsigned i = 0; i < rules; ++i) {
             const auto id = u16();

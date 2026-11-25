@@ -12,25 +12,26 @@ class ExternalCatalog {
         Definition definition{};
     };
     std::map<unsigned, Entry> entries;
+    std::map<std::uint64_t, unsigned> contracts;
 
   public:
     ExternalCatalog() = default;
     ExternalCatalog(const ExternalCatalog&) = delete;
     ExternalCatalog& operator=(const ExternalCatalog&) = delete;
-    bool add(unsigned id, unsigned version, std::string name, unsigned character,
-             unsigned difficulty, unsigned players, std::uint64_t contract) {
-        if (id < externalRuleBase || id > 65535 || !version || version > 65535 || name.empty() ||
-            name.size() > 96 || name.find('\0') != std::string::npos ||
-            character > unrestrictedCharacter || difficulty > 3 ||
-            (players && (players < 2 || players > 4)) || !contract ||
-            entries.size() >= maxExternalRules)
-            return false;
-        auto [it, added] = entries.try_emplace(id);
-        if (!added)
-            return false;
-        auto& entry = it->second;
+    unsigned add(unsigned version, std::string name, unsigned character, unsigned difficulty,
+                 unsigned players, std::uint64_t contract, bool lockRoomOptions = false) {
+        if (!version || version > 65535 || name.empty() || name.size() > 96 ||
+            name.find('\0') != std::string::npos || character > unrestrictedCharacter ||
+            difficulty > 3 || (players && (players < 2 || players > 4)) || !contract ||
+            contracts.contains(contract) || entries.size() + definitions.size() >= maxLobbyRules)
+            return 0;
+        unsigned slot = externalRuleBase;
+        while (entries.contains(slot))
+            ++slot;
+        auto& entry = entries[slot];
         entry.name = std::move(name);
-        entry.definition = {.id = static_cast<std::uint16_t>(id),
+        contracts.emplace(contract, slot);
+        entry.definition = {.id = static_cast<std::uint16_t>(slot),
                             .version = static_cast<std::uint16_t>(version),
                             .character = static_cast<std::uint16_t>(character),
                             .difficulty = static_cast<std::uint8_t>(difficulty),
@@ -42,22 +43,39 @@ class ExternalCatalog {
                             .goalStageType = -1,
                             .nextBag = false,
                             .requiredAchievements = {},
-                            .roomOptionsLocked = true,
+                            .roomOptionsLocked = lockRoomOptions,
                             .requiredPlayers = players,
                             .contract = contract};
-        return true;
+        return slot;
     }
     void erase(unsigned id) {
-        entries.erase(id);
+        if (const auto it = entries.find(id); it != entries.end()) {
+            contracts.erase(it->second.definition.contract);
+            entries.erase(it);
+        }
     }
     void clear() {
         entries.clear();
+        contracts.clear();
     }
     const Definition* lookup(unsigned id) const {
         if (id < externalRuleBase)
             return find(id);
         const auto it = entries.find(id);
         return it == entries.end() ? nullptr : &it->second.definition;
+    }
+    const Definition* lookup(const RunRules& rules) const {
+        if (!rules.contract)
+            return find(rules.id);
+        const auto it = contracts.find(rules.contract);
+        return it == contracts.end() ? nullptr : lookup(it->second);
+    }
+    // An unavailable external declaration can be selected before a guest joins.
+    int localId(const RunRules& rules) const {
+        if (!rules.contract)
+            return rules.id;
+        const auto* definition = lookup(rules);
+        return definition ? definition->id : -1;
     }
     template <typename Visitor> void each(Visitor visit) const {
         for (const auto& def : definitions)
