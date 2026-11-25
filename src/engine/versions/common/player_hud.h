@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <optional>
 
 namespace isaac::engine::native_player_hud {
@@ -12,6 +13,9 @@ inline constexpr unsigned primaryPanels = 4;
 inline constexpr unsigned totalPanels = primaryPanels * 2;
 inline bool localOnly(unsigned connectedMask) {
     return static_cast<unsigned>(std::popcount(connectedMask)) > primaryPanels;
+}
+inline unsigned seatBit(int slot) {
+    return slot >= 0 && slot < std::numeric_limits<unsigned>::digits ? 1u << slot : 0u;
 }
 struct Layout {
     unsigned visible, stride, player, controller;
@@ -30,7 +34,8 @@ template <class T> T read(std::uintptr_t address, unsigned offset) {
 // Return scalar copies, never a player/HUD pointer or an owned native object.
 template <class SelectLayout, class Position>
 std::optional<Anchor> anchor(std::uintptr_t hud, unsigned index, float width, float height,
-                             const Layout& fields, SelectLayout layout, Position position) {
+                             unsigned audience, const Layout& fields, SelectLayout layout,
+                             Position position) {
     if (!hud || index >= primaryPanels || !std::isfinite(width) || !std::isfinite(height) ||
         width <= 0 || height <= 0 || !read<bool>(hud, fields.visible))
         return {};
@@ -38,7 +43,7 @@ std::optional<Anchor> anchor(std::uintptr_t hud, unsigned index, float width, fl
     if (!player)
         return {};
     const auto controller = read<int>(player, fields.controller);
-    if (controller < 1 || controller > 4)
+    if (controller < 1 || !(audience & seatBit(controller - 1)))
         return {};
     const int mode = layout(hud, index, player);
     if (mode < 0 || mode > 3)

@@ -4,6 +4,7 @@
 #include <MinHook.h>
 #include <windows.h>
 #include <cstring>
+#include <limits>
 #include <vector>
 #ifdef ISAAC_LAN_TEST_REPENTANCE
 #include "engine/versions/repentance/entrypoints.h"
@@ -31,6 +32,12 @@ int localViewSlot() {
     return local;
 }
 } // namespace isaac::runtime
+namespace isaac::rooms {
+unsigned online = 0xf;
+unsigned connected() {
+    return online;
+}
+} // namespace isaac::rooms
 extern "C" {
 extern void* isaac_lan_crafting_hud_original;
 extern void* isaac_lan_crafting_pocket_original;
@@ -382,7 +389,7 @@ int main() {
                 isaac_lan_crafting_get_active_item = nativeActiveItem;
                 isaac::runtime::target = local;
                 verify(hudFor[local], 0, hudFor[local]);
-                for (int invalid : {-2, 4}) {
+                for (int invalid : {-2, std::numeric_limits<unsigned>::digits}) {
                     isaac::runtime::target = invalid;
                     for (auto hud : hudFor)
                         verify(hud, 0, 0);
@@ -394,6 +401,20 @@ int main() {
                 }
                 verify(0, 0, 0);
             }
+        isaac::rooms::online = 0x1f;
+        isaac::runtime::local = 1;
+        isaac::runtime::target = 2;
+        verify(hudFor[1], 0, hudFor[1]);
+        verify(hudFor[2], 0, 0);
+        auto& fifthController = *reinterpret_cast<int*>(players[1].data() + controllerOffset);
+        fifthController = 5;
+        isaac::runtime::local = 4;
+        isaac::runtime::target = 0;
+        verify(hudFor[1], 0, hudFor[1]);
+        isaac::rooms::online &= ~(1u << 2);
+        verify(hudFor[1], hudFor[0], hudFor[1]);
+        fifthController = 2;
+        isaac::rooms::online = 0xf;
 #ifdef ISAAC_LAN_TEST_REPENTANCE
         isaac::runtime::local = 0;
         isaac::runtime::target = 1;

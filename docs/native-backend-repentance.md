@@ -232,7 +232,7 @@ StatHUD／HistoryHUD 玩家查询入口为 `0x508370/0x508000`，以 ECX 接收�
 
 ## 玩家 HUD 坐标
 
-[坐标组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance/player_hud.h) 复用[借用与范围检查](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/player_hud.h)，只返回控制器栏位、布局和坐标。原生可见位为 `HUD+0xc3eb6`；仅查看前四个主 HUD，不保留指针或写入缓存。空槽、隐藏、无效控制器、非有限或非正视口尺寸及屏幕外位置均不返回坐标。
+[坐标组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance/player_hud.h) 复用[借用与范围检查](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/player_hud.h)，只返回玩家席位、布局和坐标。原生可见位为 `HUD+0xc3eb6`。组件检查四个主面板，以本次视图可见的在线席位筛选绑定玩家，不保留指针或写入缓存。空槽、隐藏、无效归属、非有限或非正视口尺寸及屏幕外位置均不返回坐标。
 
 忏悔没有独立的布局／坐标查询方法；`HUD::Render` 在心形绘制调用 `0x505965` 前按 HUD 数组顺序构造四个位置。令 `m=1-HUDOffset`，其坐标分别为 `(68-20*m, 24-12*m)`、`(width-135+24*m, 24-12*m)`、`(80-22*m, height-33+6*m)`、`(width-135+16*m, height-33+6*m)`。组件按原生规则先计算相对坐标，再为负坐标加上视口尺寸；布局编号为对应的 0–3 角位，联机身份独立取自绑定玩家的控制器。调用方须处于与 HUD 绘制一致的本机名单作用域。
 

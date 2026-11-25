@@ -38,13 +38,13 @@ bool canRestoreControls(Address) {
     return true;
 }
 std::optional<native_player_hud::Anchor> hudAnchor(Address image, Address game, unsigned index,
-                                                   float width, float height) {
+                                                   float width, float height, unsigned audience) {
     const auto manager = at<Address>(image, backend::globals::manager);
     if (!manager)
         return {};
     return backend::player_hud::anchor(
         game + layout::game::hud, index, width, height,
-        at<float>(manager, layout::manager::options + layout::options::hudOffset));
+        at<float>(manager, layout::manager::options + layout::options::hudOffset), audience);
 }
 } // namespace
 const Bindings bindings{

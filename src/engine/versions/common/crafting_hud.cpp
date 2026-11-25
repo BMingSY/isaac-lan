@@ -1,6 +1,8 @@
 #include "engine/crafting_hud.h"
+#include "engine/rooms.h"
 #include "compat/game_ids.h"
 #include "engine/versions/common/crafting_hud_bindings.h"
+#include "engine/versions/common/player_hud.h"
 #include "runtime/session.h"
 #include <MinHook.h>
 #include <array>
@@ -10,6 +12,7 @@ namespace {
 using Address = std::uintptr_t;
 using engine::native_crafting_hud::bindings;
 using engine::native_crafting_hud::PocketLayout;
+namespace panels = engine::native_player_hud;
 Address image;
 bool installed;
 template <class T> const T& at(Address address, unsigned offset = 0) {
@@ -17,7 +20,7 @@ template <class T> const T& at(Address address, unsigned offset = 0) {
 }
 bool localHud(Address hud) {
     const int slot = runtime::localViewSlot();
-    if (!hud || slot < 0 || slot >= 4)
+    if (!hud || !panels::seatBit(slot))
         return false;
     const auto player = at<Address>(hud, bindings.playerHud.player);
     return player && at<int>(player, bindings.controller) == slot + 1;
@@ -37,14 +40,16 @@ Address __cdecl isaac_lan_crafting_hud_receiver(std::uintptr_t hud) {
     const int target = runtime::craftingBagViewTarget();
     if (target == -1)
         return hud;
-    if (target < 0 || target >= 4 || !localHud(hud) || target == runtime::localViewSlot())
+    const auto connected = rooms::connected();
+    if (!(connected & panels::seatBit(target)) || panels::localOnly(connected) || !localHud(hud) ||
+        target == runtime::localViewSlot())
         return 0;
     const auto root = at<Address>(hud, bindings.playerHud.root);
     if (!root || !isaac_lan_crafting_get_active_item)
         return 0;
     using GetActiveItem = int(__attribute__((thiscall))*)(void*, int);
     const auto activeItem = reinterpret_cast<GetActiveItem>(isaac_lan_crafting_get_active_item);
-    for (unsigned i = 0; i < 8; ++i) {
+    for (unsigned i = 0; i < panels::totalPanels; ++i) {
         const auto candidate = root + i * bindings.playerHud.stride;
         const auto player = at<Address>(candidate, bindings.playerHud.player);
         if (!player || at<int>(player, bindings.controller) != target + 1)
@@ -69,7 +74,8 @@ __attribute__((used, force_align_arg_pointer)) int __cdecl isaac_lan_crafting_po
     const int target = runtime::craftingBagViewTarget();
     if (target == -1)
         return 1;
-    if (target < 0 || target >= 4 || !localHud(hud))
+    // Keep the local pocket when the challenge's next seat is offline.
+    if (!panels::seatBit(target) || !localHud(hud))
         return 0;
     const auto root = at<Address>(hud, bindings.playerHud.root);
     if (!root || !isaac_lan_crafting_screen_width || !isaac_lan_crafting_screen_height)

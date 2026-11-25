@@ -32,7 +32,7 @@ bool canRestoreControls(Address game) {
     return at<int>(game, layout::game::controlRestoreGuard) < nativeControlLock;
 }
 std::optional<native_player_hud::Anchor> hudAnchor(Address image, Address game, unsigned index,
-                                                   float width, float height) {
+                                                   float width, float height, unsigned audience) {
     using Layout = int(__attribute__((thiscall))*)(void*, int, void*);
     using Position = float*(__attribute__((thiscall))*)(void*, float*, int, int);
     return backend::player_hud::anchor(
@@ -44,7 +44,8 @@ std::optional<native_player_hud::Anchor> hudAnchor(Address image, Address game, 
         [image](auto hud, auto point, auto corner, auto placement) {
             reinterpret_cast<Position>(image + backend::entry::hUDPlayerPosition)(
                 reinterpret_cast<void*>(hud), point, corner, placement);
-        });
+        },
+        audience);
 }
 } // namespace
 const Bindings bindings{

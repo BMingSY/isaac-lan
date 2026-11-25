@@ -170,12 +170,14 @@ int playerHuds(lua_State* L) {
     const auto width = at<float>(image, bindings.logicalWidth);
     const auto height = at<float>(image, bindings.logicalHeight);
     const int local = runtime::localViewSlot();
-    const bool personal = local >= 0 && panels::localOnly(rooms::connected());
+    const auto connected = rooms::connected();
+    const bool personal = local >= 0 && panels::localOnly(connected);
+    const auto audience = personal ? connected & panels::seatBit(local) : connected;
     rooms::withView(
         [&] {
             for (unsigned i = 0; i < panels::primaryPanels; ++i) {
-                const auto anchor = bindings.hudAnchor(image, game, i, width, height);
-                if (!anchor || (personal && anchor->slot != local))
+                const auto anchor = bindings.hudAnchor(image, game, i, width, height, audience);
+                if (!anchor)
                     continue;
                 lua.createTable(L, 0, 3);
                 lua.pushInteger(L, anchor->layout);

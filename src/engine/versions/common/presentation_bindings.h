@@ -35,8 +35,8 @@ struct Bindings {
     bool (*introMarker)(Address transition);
     bool (*canRestoreControls)(Address game);
     std::optional<native_player_hud::Anchor> (*hudAnchor)(Address image, Address game,
-                                                          unsigned index, float width,
-                                                          float height);
+                                                          unsigned index, float width, float height,
+                                                          unsigned audience);
 };
 extern const Bindings bindings;
 } // namespace isaac::engine::native_presentation

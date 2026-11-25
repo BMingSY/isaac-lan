@@ -1771,6 +1771,9 @@ void challengeRules() {
         rejects([&] { Archive::decode(archive.encode()); },
                 "Normal run carried challenge constraints");
     }
+    require(isaac::compat::challenges::nextSeat(3, 5) == 4 &&
+                isaac::compat::challenges::nextSeat(4, 5) == 0,
+            "Fifth seat lost its crafting-bag challenge target");
     require(isaac::compat::challenges::nextSeat(0, 1) == -1 &&
                 isaac::compat::challenges::nextSeat(4, 4) == -1,
             "Invalid ring accepted");
