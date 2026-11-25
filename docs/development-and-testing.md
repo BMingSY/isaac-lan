@@ -12,6 +12,8 @@ BUG 修复、需求新增和日常重构按影响范围执行离线回归与必�
 
 实机工具通过所选构建的 `game-profile.json` 核对资料目录、Lua 模块及存档格式。忏悔的原生存档有 638 个成就和 496 个计数器，忏悔＋有 642 个成就和 523 个计数器。路线夹具在隔离存档中写入各自的校验值，选择存档后再通过游戏内进度接口核对。无需预置解锁的场景可直接运行 [run_network_engine.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_network_engine.py)。
 
+多人实机夹具在 `--host` 和 `--client` 之后为每个额外实例传一次 `--extra-client`，每端使用独立的隔离目录。`--native-record-view` 按启动顺序选择实例，房主编号为 0。前端夹具可用 `peerIndex` 标识进程，用会话的 `slot` 判断玩家归属。`--check-local-stats` 根据各端实际在线名单核对原生面板。
+
 | 定向检查 | 离线范围 |
 | --- | --- |
 | `native.save-repentance_plus`／`native.save-repentance` | 调用约定、原始编码字节、重复解码、流失败、大小限制及文件名／流字段恢复 |
