@@ -171,6 +171,8 @@ Boss 演出事件使用独立序号和楼层／维度／房间身份。权威端
 
 犯罪模式启用且房间就绪时，`crime_view()` 采集原版 HUD 的通缉和持枪数据，`crime_view(bytes)` 仅在客机恢复。大端载荷以全队的通缉值（float32，0～6）和星标闪烁计时（int32，−10～56）开头，分别来自 `Game+0x26644` 的 `+0x4/+0x47c`。随后按完整角色名单逐人记录控制器、武器掩码、当前枪（各一字节，`0xff` 表示空手）和四种弹药（各两字节）。接收端核对整份载荷、名单顺序和取值后，再写入各角色的 `+0x2f10/+0x2f14/+0x2f08`。转房时，原生房间后端以 `Player+0x2f18` 的持枪引用识别随行实体，引用本身由游戏管理。[忏悔＋犯罪模式状态](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance_plus/crime_view.cpp)
 
+忏悔＋后端校验犯罪模式死亡演出的原生入口（J511 RVA `0x28980`，thiscall，仅接收游戏持有的模式对象）。联机挑战中，角色转成合作幽灵前，后端临时切回完整在线名单，调用原版存活人数查询。仍有其他活人时跳过这次演出，否则将模式对象交还原版处理。计时、全灭确认和结算由游戏管理。
+
 ## 玩家轮廓
 
 [`outlines::withPlayers(connected, render)`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/player_outlines.h) 仅在本机房间绘制期间借用 LAN 在线槽位掩码，退出或异常时恢复外层掩码；不缓存角色地址，不增加同步字段。至少两名玩家在线且 `Player+0x161c` 属于有效槽位时，使用表现层的固定配色。挑战要求隐藏玩家时传入空掩码。单人、退出会话及不属于在线槽位的实体继续原版路径。

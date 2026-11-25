@@ -46,6 +46,7 @@ const Bindings bindings{
         .engineRoomsChange = repentance_plus::entry::engineRoomsChange,
         .engineRoomsCooldown = repentance_plus::entry::engineRoomsCooldown,
         .engineRoomsDead = repentance_plus::entry::engineRoomsDead,
+        .crimeDeathIntro = repentance_plus::entry::crimeDeathIntro,
         .engineRoomsDelete = repentance_plus::entry::engineRoomsDelete,
         .engineRoomsDesc = repentance_plus::entry::engineRoomsDesc,
         .engineRoomsDoorPosition = repentance_plus::entry::engineRoomsDoorPosition,

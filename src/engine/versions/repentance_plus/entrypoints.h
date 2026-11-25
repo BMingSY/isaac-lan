@@ -197,6 +197,7 @@ inline constexpr std::uint32_t runtimeNetExecuteStart = 0x5cd130;
 inline constexpr std::uint32_t engineInputSpawn = 0x5d11a0;
 inline constexpr std::uint32_t engineRoomsIsCoop = 0x5d72f0;
 inline constexpr std::uint32_t engineRoomsLiving = 0x5d7360;
+inline constexpr std::uint32_t crimeDeathIntro = 0x28980;
 inline constexpr std::uint32_t engineRoomsDead = 0x5d73d0;
 inline constexpr std::uint32_t runtimeNetClear = 0x5df500;
 inline constexpr std::uint32_t engineSaveWrite = 0x5e0f50;
