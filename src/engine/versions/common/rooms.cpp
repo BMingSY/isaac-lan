@@ -3763,11 +3763,10 @@ void beforeStart(bool preserveItemPixels) {
 void withMapPickups(const std::function<void()>& cache) {
     engine::native_room_data::withMapPickups(cache);
 }
-bool install(Address base, void (*log)(const std::string&)) {
+bool install(Address base, void (*log)(const std::string&), HMODULE luaModule) {
     image = base;
     logger = log;
-    if (!lua.load(GetModuleHandleW(L"Lua5.3.3r.dll"),
-                  {isaac::lua::Symbol::getTop, isaac::lua::Symbol::setTop}))
+    if (!lua.load(luaModule, {isaac::lua::Symbol::getTop, isaac::lua::Symbol::setTop}))
         return false;
     auto hook = [](Address rva, void* replacement, void** original) {
         return MH_CreateHook(reinterpret_cast<void*>(image + rva), replacement, original) ==

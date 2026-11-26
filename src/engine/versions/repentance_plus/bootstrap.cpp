@@ -1,3 +1,4 @@
+#include "engine/bootstrap.h"
 #include "engine/versions/common/bootstrap_bindings.h"
 #include "engine/versions/repentance_plus/entrypoints.h"
 #include "engine/versions/repentance_plus/layout.h"
@@ -19,3 +20,9 @@ const Bindings bindings{
      {layout::vector::end}},
     &backend::roomProbe};
 } // namespace isaac::engine::native_bootstrap
+
+namespace isaac::engine::bootstrap {
+HookTiming scheduleGameHooks(std::uintptr_t, const std::filesystem::path&, void (*)()) {
+    return HookTiming::immediate;
+}
+} // namespace isaac::engine::bootstrap
