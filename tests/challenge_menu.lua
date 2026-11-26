@@ -652,6 +652,46 @@ local model = dofile(root .. "/src/bridge/presentation/menu_model.lua")(
     _IsaacLanModules["presentation/menu_characters"](),
     _IsaacLanModules["presentation/menu_locale"](true)
 )
+do
+    local localSlot = 0x8002
+    local list = {
+        [tostring(localSlot)] = {
+            id = localSlot,
+            route = "external",
+            name = "雷霆",
+            team_available = true,
+            difficulty = 0,
+        },
+    }
+    local lobby =
+        { phase = phaseValues.lobby, hosting = 1, players = 2, slot = 0, challenge = localSlot }
+    local selected
+    local deps = {
+        character = tostring,
+        options = options,
+        command = function(action, value)
+            selected = { action, value }
+        end,
+    }
+    local page = { page = "challenges", difficulty = 0, seed = "" }
+    local rows = model.rows(page, lobby, { 0 }, list, deps)
+    assert(rows[1].label == "雷霆" and rows[1].enabled)
+    rows[1].action()
+    assert(selected[1] == "challenge" and selected[2] == tostring(localSlot))
+    local function findRow(label)
+        for _, row in ipairs(model.rows(page, lobby, { 0 }, list, deps)) do
+            if row.label == label then
+                return row
+            end
+        end
+        error("Missing menu row " .. label)
+    end
+    assert(findRow("挑战：雷霆") and findRow("房间规则：无").enabled)
+    list[tostring(localSlot)].roomOptionsLocked = true
+    assert(not findRow("房间规则：无").enabled)
+    lobby.hosting, lobby.slot, lobby.challenge = 0, 1, -1
+    assert(not findRow("缺少房主所选挑战或版本不兼容").enabled)
+end
 for _, host in ipairs({ 0, 1 }) do
     local selected
     local rows = model.rows(

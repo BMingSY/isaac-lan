@@ -37,8 +37,7 @@ struct Socket : SendQueue {
         return true;
     }
     void sendMessage(const Writer& w) {
-        if (w.bytes.empty() || w.bytes.size() > maxMessageSize ||
-            queuedBytes() + w.bytes.size() > maxSocketQueueBytes)
+        if (!validMessageSize(w.bytes) || queuedBytes() + w.bytes.size() > maxSocketQueueBytes)
             throw std::runtime_error("Network queue limit exceeded");
         append(w.bytes);
         if (pipe)

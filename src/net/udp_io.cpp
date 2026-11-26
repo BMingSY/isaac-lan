@@ -739,7 +739,7 @@ void NetworkIo::runDatagrams() {
             std::map<ENetPeer*, std::unique_ptr<DatagramConnection>> connections;
         };
         std::vector<Endpoint> endpoints;
-        StateCompression worldCodec, messageCodec(maxMessageSize);
+        StateCompression worldCodec, messageCodec(maxLobbyMessageSize);
         for (;;) {
             while (auto value = listeners.pop())
                 endpoints.push_back({(*value)->datagrams, *value, {}});

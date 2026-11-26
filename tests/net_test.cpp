@@ -1668,9 +1668,18 @@ void lobby() {
 }
 void runRules() {
     const RunRules rules{1001, 2, 23, 0, true, 1};
+    const RunRules external{isaac::externalRuleBase, 1, 0, 0, true, 0, 17};
+    auto hostAccess = testAccess(), guestAccess = testAccess();
+    auto common = external;
+    common.contract += 2;
+    common.options = isaac::roomOptions::lootRoll;
+    hostAccess.rules.push_back({external.id, external.version, external.contract});
+    guestAccess.rules.push_back({external.id, external.version, external.contract + 1});
+    for (auto* access : {&hostAccess, &guestAccess})
+        access->rules.push_back({common.id, common.version, common.contract});
     TestSession host, guest;
-    require(host.host(0, "test", {}, testAccess()), "Host failed");
-    require(guest.join("127.0.0.1", host.port(), "test", {}, {}, testAccess()), "Join failed");
+    require(host.host(0, "test", {}, hostAccess), "Host failed");
+    require(guest.join("127.0.0.1", host.port(), "test", {}, {}, guestAccess), "Join failed");
     auto poll = [&] {
         host.poll();
         guest.poll();
@@ -1679,6 +1688,16 @@ void runRules() {
         poll();
         return host.players() == 2 && guest.phase() == Phase::lobby;
     });
+    require(!host.configureRules(external) && !guest.rulesAvailable(external),
+            "Different external namespaces qualified for the same challenge");
+    require(host.configureRules(common),
+            "Shared challenge rejected with different local catalogues");
+    until([&] {
+        poll();
+        return guest.rules() == common;
+    });
+    require(guest.rulesAvailable(common) && guest.rules().options == isaac::roomOptions::lootRoll,
+            "Guest lost shared declaration or host room options");
     require(!guest.configureRules(rules), "Guest changed run rules");
     require(host.configureRules(rules), "Host configuration failed");
     until([&] {
@@ -2107,14 +2126,15 @@ void deferredChoice() {
     for (unsigned i = 0; i < 256; ++i)
         maximum.characters.push_back(i);
     maximum.unlockedCharacters = maximum.characters;
-    for (unsigned i = 1; i <= 64; ++i)
-        maximum.rules.push_back({static_cast<std::uint16_t>(i), 1});
+    for (unsigned i = 1; i <= isaac::maxLobbyRules; ++i)
+        maximum.rules.push_back({isaac::externalRuleBase, 1, 0x123456789abcdefULL + i});
     Writer roster(Message::lobby);
     for (unsigned i = 0; i < maxPlayers; ++i)
         roster.access(maximum);
     for (unsigned i = 0; i < maxPlayers; ++i)
         roster.choice({0, true, 0, maximum.characters}, maximum);
-    require(roster.bytes.size() + 64 <= maxMessageSize, "Deferred roster exceeds message bound");
+    require(roster.bytes.size() + 64 <= maxLobbyMessageSize,
+            "Deferred roster exceeds message bound");
     Reader full(roster.bytes);
     full.u8();
     for (unsigned i = 0; i < maxPlayers; ++i)
@@ -2228,12 +2248,13 @@ void lobbyAccess() {
     for (unsigned i = 0; i < 256; ++i)
         maximum.characters.push_back(i);
     maximum.unlockedCharacters = maximum.characters;
-    for (unsigned i = 1; i <= 64; ++i)
-        maximum.rules.push_back({static_cast<std::uint16_t>(i), 1});
+    for (unsigned i = 1; i <= isaac::maxLobbyRules; ++i)
+        maximum.rules.push_back({isaac::externalRuleBase, 1, 0x123456789abcdefULL + i});
     Writer encoded(Message::lobby);
     for (unsigned i = 0; i < maxPlayers; ++i)
         encoded.access(maximum);
-    require(encoded.bytes.size() + 64 <= maxMessageSize, "Access roster exceeds message bound");
+    require(encoded.bytes.size() + 64 <= maxLobbyMessageSize,
+            "Access roster exceeds message bound");
     Reader roundtrip(encoded.bytes);
     roundtrip.u8();
     for (unsigned i = 0; i < maxPlayers; ++i)
@@ -3062,7 +3083,17 @@ void hostDisconnect() {
             "Host departure did not end guest simulation");
 }
 void wireCompression() {
-    StateCompression codec(maxMessageSize);
+    StateCompression codec(maxLobbyMessageSize);
+    std::vector<std::uint8_t> largeRoster(maxLobbyMessageSize, 0);
+    largeRoster.front() = static_cast<std::uint8_t>(Message::lobby);
+    require(decodeWire(encodeWire(largeRoster, codec), codec) == largeRoster,
+            "Full lobby did not pass through bounded control framing");
+    largeRoster.front() = static_cast<std::uint8_t>(Message::input);
+    rejects([&] { encodeWire(largeRoster, codec); }, "Oversized ordinary message accepted");
+    auto disguised = codec.compress(largeRoster);
+    disguised.insert(disguised.begin(), compressedMessageTag);
+    rejects([&] { decodeWire(disguised, codec); },
+            "Oversized compressed ordinary message accepted");
     for (const auto type : {Message::hello, Message::lobby, Message::start, Message::communication,
                             Message::integration, Message::lifecycle}) {
         Writer message(type);

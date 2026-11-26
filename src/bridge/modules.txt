@@ -98,6 +98,7 @@ compat/characters/blue_baby
 compat/characters/keeper
 sync/effect_classes
 api/codec
+api/challenges
 api/effect_sync
 api/lifecycle
 api/actions
