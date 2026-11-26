@@ -6,12 +6,15 @@
 #include "compat/game_ids.h"
 #include <MinHook.h>
 #include <array>
+#include <cmath>
 namespace isaac::engine::native_frontend_hud {
+Filters filters;
 namespace {
 using Address = std::uintptr_t;
 using MenuUpdate = void(__attribute__((thiscall)) *)(void*);
 Address image = 0;
 bool installed = false;
+HeartRenderer heartRenderer = nullptr;
 template <class T> T& read(Address object, unsigned offset) {
     return *reinterpret_cast<T*>(object + offset);
 }
@@ -120,6 +123,39 @@ void __attribute__((fastcall)) hudRender(void* hud, void*) {
 }
 
 } // namespace
+void setHeartRenderer(HeartRenderer renderer) {
+    heartRenderer = renderer;
+}
+bool hideActiveItem(void* hud) {
+    if (!filters.activeItem || !hud)
+        return false;
+    const auto player = read<Address>(reinterpret_cast<Address>(hud), 0);
+    return player && hidden(filters.activeItem, read<int>(player, bindings.player.controller),
+                            runtime::localViewSlot());
+}
+bool replaceHearts(void* hud, Point position, float scale) {
+    if ((!filters.hearts && !heartRenderer) || !hud || !image)
+        return false;
+    const int slot = runtime::localViewSlot();
+    const auto player = read<Address>(reinterpret_cast<Address>(hud), 0);
+    if (slot < 0 || !player)
+        return false;
+    if (hidden(filters.hearts, read<int>(player, bindings.player.controller), slot))
+        return true;
+    if (!heartRenderer || !std::isfinite(position.x) || !std::isfinite(position.y) ||
+        !std::isfinite(scale) || scale == 0)
+        return false;
+    // Isaac.GetPlayer indexes the current render roster (local bodies first).
+    const auto game = read<Address>(image, bindings.game);
+    if (!game)
+        return false;
+    const auto begin = read<Address>(game, bindings.players);
+    const auto end = read<Address>(game, bindings.players + sizeof(Address));
+    for (auto entry = begin; entry < end; entry += sizeof(Address))
+        if (read<Address>(entry, 0) == player)
+            return heartRenderer((entry - begin) / sizeof(Address), position, scale);
+    return false;
+}
 bool install(Address base) {
     if (!base || installed)
         return false;
@@ -128,7 +164,7 @@ bool install(Address base) {
         void* detour;
         void** original;
     };
-    const std::array<Hook, 5> hooks{{
+    const std::array<Hook, 7> hooks{{
         {bindings.entry.statPlayerId, reinterpret_cast<void*>(statPlayerId),
          reinterpret_cast<void**>(&originalStatPlayerId)},
         {bindings.entry.historyPlayerId, reinterpret_cast<void*>(historyPlayerId),
@@ -139,6 +175,8 @@ bool install(Address base) {
          reinterpret_cast<void**>(&originalHudPostUpdate)},
         {bindings.entry.render, reinterpret_cast<void*>(hudRender),
          reinterpret_cast<void**>(&originalHudRender)},
+        {bindings.entry.hearts, heartHook.detour, heartHook.original},
+        {bindings.entry.activeItem, activeItemHook.detour, activeItemHook.original},
     }};
     image = base;
     unsigned created = 0;

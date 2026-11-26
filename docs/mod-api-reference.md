@@ -20,6 +20,10 @@
 | `GetLocalRoom()` | LAN 的 `{runId, worldEpoch, index, dimension}`；单机或未就绪时为 `nil` |
 | `WithLocalView(fn)` | 在本机房间与本机角色名单中执行读操作，保留全部返回值；未就绪时 `nil, "view_not_ready"` |
 | `OnLocalRender(fn)` | 每个可用渲染帧调用 `fn(view)`，返回可重复调用的取消函数 |
+| `GetHUDPlayers()` | 按需取得已连接玩家各身体的血量与身份副本，未就绪时为空数组 |
+| `HideHUD(component, audience)` | 在本机隐藏选定参与者的一种原版 HUD 组件，返回恢复函数 |
+| `OnHUDHearts(audience, draw)` | 在本机绘制心格的位置调用 `draw(panel)`，返回取消函数 |
+| `RegisterMenuSetting(definition)` | 在本机大厅的「Mod 设置」页登记选项，返回撤销函数 |
 | `On(event, fn)` | 订阅 LAN 生命周期，返回取消函数；无 LAN 时不产生事件 |
 | `RequireEffectSync(variant, subtype?)` | 完整同步匹配的房间特效，返回可重复调用的释放函数，见下文 |
 | `Action(name, definition?)` | 定义或取得动作对象，见下文 |
@@ -49,6 +53,47 @@
 | `SessionReady` | 第一份或重建后的第一份视图就绪 |
 
 事件在游戏主线程、完整状态应用和原生作用域恢复后、UI 绘制前执行，按表中顺序触发需要的事件。除 `StateReset` 外在本机只读视图中调用。事件参数为提交上下文副本；取角色用 `lan:View()`。不会补发订阅前的事件；`SessionReady` 可在同局多次发生。订阅报错只停用该订阅。`StateReset` 时不能用旧对象访问世界。
+
+## 联机 HUD 与大厅设置
+
+这些接口只影响安装该 Mod 的这台机器。设置、隐藏请求和绘制回调可以在 Mod 加载时登记。房主与客机各自选择，加入或重连时无需交换选择。没有注册选项时，大厅省略「Mod 设置」入口。普通单机沿用游戏 HUD。兼容较早的 API 2 构建时，先检查对应的句柄方法是否存在。
+
+`HideHUD` 支持 `"hearts"`（心格）、`"activeItem"`（主动道具栏）和 `"pocketItems"`（口袋卡牌、药丸等栏位）。`audience` 可取 `"local"`（自己及自己控制的伴生身体）、`"teammates"` 或 `"all"`。例如 `local restore = lan:HideHUD("hearts", "teammates")` 只隐藏本机屏幕上的队友心格。调用 `restore()` 释放本次请求，同一组件的其他有效请求继续生效。
+
+要替换血条，直接注册 `OnHUDHearts`。游戏准备绘制一个身体的心格时，按注册顺序调用匹配的渲染器。返回 `true` 接管当次绘制，返回 `false` 或 `nil` 让后续渲染器处理，最终回退到原版。绘制异常会停用该渲染器并继续分派。`HideHUD("hearts", …)` 优先于渲染器，同一个自绘血条只需登记绘制回调。原版 HUD 整体关闭时也会暂停分派。
+
+| `panel` 字段 | 含义 |
+| --- | --- |
+| `ownerId`、`playerId`、`isLocal`、`playerType` | 联机参与者、逻辑身体 ID、本机归属和游戏角色类型。同一参与者的双子使用不同的身体 ID |
+| `x`、`y`、`scale` | 此身体当帧的原生心格锚点与缩放，使用游戏逻辑屏幕坐标 |
+| `unknown`、`isGhost` | 未知诅咒、合作幽灵。两种情况下 `health` 均为 `nil`，可交还原版绘制 |
+| `health` | 普通值副本。`red`、`maxRed`、`soul` 沿用游戏的半心单位，`blackMask` 沿用 `GetBlackHearts()` 位掩码。`bone`、`broken`、`rotten`、`eternal`、`golden` 对应角色的同名心数查询 |
+
+回调内的游戏查询仍处于本机房间与本机角色名单中。队友的显示数据取自 `panel`。双人联机时，原版忏悔为本机双子分别绘制心格，为远端双子绘制主身体的心格。忏悔＋也会为远端双子分别绘制心格。
+
+自定义布局可在 `OnLocalRender` 中调用 `lan:GetHUDPlayers()`。它为已连接参与者的每个已登记身体返回上表的身份、可见性与血量字段，包括原生布局省略的身体。返回值没有位置字段，由 Mod 自选位置，同一角色用 `playerId` 识别。比如用 `lan:HideHUD("hearts", "all")` 关闭原版心格，然后用该列表绘制整队血条。需要跟随游戏 HUD 显隐时，在自己的绘制回调内检查 `Game():GetHUD():IsVisible()`。
+
+下面的选项允许每个玩家独立选择如何显示队友的血量。
+
+```lua
+local mode = 1
+lan:RegisterMenuSetting({
+    id = "team-health", name = "队友血量",
+    choices = { "原版", "隐藏", "数字" },
+    onChange = function(index) mode = index end,
+})
+lan:OnHUDHearts("teammates", function(panel)
+    if mode == 2 then return true end
+    if mode == 3 and panel.health then
+        local hp = panel.health
+        Isaac.RenderText(string.format("Red %d  Soul %d", hp.red, hp.soul),
+            panel.x, panel.y, 1, 1, 1, 1)
+        return true
+    end
+end)
+```
+
+`RegisterMenuSetting` 的 `id` 是当前 Mod 内唯一的 1–64 字节标识，可用字母、数字、下划线、点和连字符。`name` 和至少两个 `choices` 是 Mod 提供的本地化文字。`selected` 为从 1 开始的初始索引，默认 1。玩家用左右键切换，确认或点击切到下一项，选中后调用 `onChange(index)`。登记时不会触发该回调。希望跨启动保留选择的 Mod 可用自己的存档读取和保存索引。各项按命名空间和局部 ID 排序，出错的选项会被移除。三个接口的撤销函数均可重复调用，关闭句柄、卸载或重载 Mod 会清理它拥有的注册。
 
 ## 大厅挑战
 

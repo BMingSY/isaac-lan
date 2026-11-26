@@ -2,6 +2,7 @@
 #include "native_call.h"
 #include "engine/versions/common/frontend_hud.cpp"
 #include <cstring>
+#include <bit>
 #include <iostream>
 #include <vector>
 #ifdef ISAAC_LAN_TEST_REPENTANCE
@@ -9,15 +10,15 @@ constexpr unsigned gameGlobal = 0x7fd65c, playersOffset = 0x1ba50, historyOffset
 constexpr unsigned controllerOffset = 0x154c, indexOffset = 0x1550, twinOffset = 0x1d80,
                    kindOffset = 0x130c, parentOffset = 0x314, activeOffset = 0x16a;
 constexpr unsigned partSize = 0x6b0, refreshOffset = 0x6a0;
-constexpr std::array<unsigned, 8> entries{0x508370, 0x508400, 0x508000, 0x507c90,
-                                          0x4f9780, 0x5027e0, 0x502a20, 0x504610};
+constexpr std::array<unsigned, 10> entries{0x508370, 0x508400, 0x508000, 0x507c90, 0x4f9780,
+                                           0x5027e0, 0x502a20, 0x504610, 0x4fb8d0, 0x4fc950};
 #else
 constexpr unsigned gameGlobal = 0x89a5f8, playersOffset = 0x1baa8, historyOffset = 0x5c54;
 constexpr unsigned controllerOffset = 0x161c, indexOffset = 0x1620, twinOffset = 0x1e68,
                    kindOffset = 0x13c4, parentOffset = 0x3bc, activeOffset = 0x172;
 constexpr unsigned partSize = 0x6dc, refreshOffset = 0x6ac;
-constexpr std::array<unsigned, 8> entries{0x454a20, 0x454ac0, 0x444510, 0x4441a0,
-                                          0x44aa10, 0x5ba0f0, 0x5ba290, 0x5bb510};
+constexpr std::array<unsigned, 10> entries{0x454a20, 0x454ac0, 0x444510, 0x4441a0, 0x44aa10,
+                                           0x5ba0f0, 0x5ba290, 0x5bb510, 0x44c9e0, 0x44de60};
 #endif
 namespace {
 namespace view = isaac::engine::native_frontend_hud;
@@ -85,17 +86,75 @@ void __attribute__((fastcall)) renderNative(void* hud, void*) {
     if (failRender)
         throw std::runtime_error("Fixture HUD rendering failure");
 }
+using Point = view::Point;
+constexpr Point nativeOrigin{58.f, 31.f}, nativeExtent{24.f, 12.f};
+void* const spriteToken = reinterpret_cast<void*>(0x5e11u);
+Point lastOrigin{};
+unsigned activeCalls = 0;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+Point* __attribute__((fastcall)) heartsNative(void*, void*, Point* extent, void* sprite,
+                                              const Point* pos, float scale) {
+    lastOrigin = *pos;
+#else
+Point* __attribute__((fastcall)) heartsNative(void*, void*, Point* extent, void* sprite, int layout,
+                                              float scale, Point pos) {
+    require(layout == 3, "Changed native heart layout");
+    lastOrigin = pos;
+#endif
+    require(sprite == spriteToken && scale == 0.75f, "Changed heart sprite or scale");
+    *extent = nativeExtent;
+    return extent;
+}
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+void __attribute__((fastcall)) activeNative(void*, void*, unsigned slot, const Point* pos,
+                                            float alpha, float size) {
+#else
+void __attribute__((fastcall)) activeNative(void*, void*, unsigned slot, const Point* pos,
+                                            int layout, float size, float alpha, bool overlay) {
+    require(layout == 3 && overlay, "Changed active item layout or overlay");
+#endif
+    require(slot == 1 && pos == &nativeOrigin && alpha == 0.75f && size == 1.f,
+            "Changed active item arguments");
+    ++activeCalls;
+}
+void checkDraw(void* part, bool heartsVisible, bool activeVisible) {
+    const auto bits = [](float value) { return std::bit_cast<unsigned>(value); };
+    Point extent{};
+    const auto calls = activeCalls;
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+    const auto heart = native_fixture::call(
+        image + entries[8], part,
+        {address(&extent), address(spriteToken), address(&nativeOrigin), bits(0.75f)});
+    const auto item = native_fixture::call(image + entries[9], part,
+                                           {1, address(&nativeOrigin), bits(0.75f), bits(1.f)});
+#else
+    const auto heart = native_fixture::call(image + entries[8], part,
+                                            {address(&extent), address(spriteToken), 3, bits(0.75f),
+                                             bits(nativeOrigin.x), bits(nativeOrigin.y)});
+    const auto item = native_fixture::call(
+        image + entries[9], part, {1, address(&nativeOrigin), 3, bits(1.f), bits(0.75f), 1});
+#endif
+    require(heart.balanced && heart.preserved && heart.eax == address(&extent) &&
+                extent.x == nativeExtent.x && extent.y == nativeExtent.y,
+            "Suppression lost heart dimensions or violated the native ABI");
+    const auto expected = heartsVisible ? nativeOrigin : view::outsideViewport;
+    require(lastOrigin.x == expected.x && lastOrigin.y == expected.y, "Wrong heart visibility");
+    require(item.balanced && item.preserved && activeCalls == calls + unsigned(activeVisible),
+            "Wrong active item visibility or ABI");
+}
 void installHooks() {
-    const std::array<void*, 8> functions{
+    const std::array<void*, 10> functions{
         reinterpret_cast<void*>(statNative),     reinterpret_cast<void*>(resetStats),
         reinterpret_cast<void*>(historyNative),  reinterpret_cast<void*>(recomputeHistory),
         reinterpret_cast<void*>(resetPlayerHud), reinterpret_cast<void*>(updateNative),
-        reinterpret_cast<void*>(postNative),     reinterpret_cast<void*>(renderNative)};
+        reinterpret_cast<void*>(postNative),     reinterpret_cast<void*>(renderNative),
+        reinterpret_cast<void*>(heartsNative),   reinterpret_cast<void*>(activeNative)};
     for (unsigned i = 0; i < entries.size(); ++i)
         jump(image + entries[i], functions[i]);
     FlushInstructionCache(GetCurrentProcess(), image, privateGameImageBytes);
     require(!view::install(0), "Null image installed frontend HUD hooks");
-    const std::array<unsigned, 5> hooks{entries[0], entries[2], entries[5], entries[6], entries[7]};
+    const std::array<unsigned, 7> hooks{entries[0], entries[2], entries[5], entries[6],
+                                        entries[7], entries[8], entries[9]};
     for (unsigned conflict = 0; conflict < hooks.size(); ++conflict) {
         auto* target = image + hooks[conflict];
         require(MH_CreateHook(target, functions[0], nullptr) == MH_OK, "Create foreign HUD hook");
@@ -200,6 +259,28 @@ int main() {
         require(resets == std::array<unsigned, 8>{1, 1, 1, 1, 1, 1, 1, 1} &&
                     historyRefreshes == 1 && hud == expected,
                 "Repeated HUD binding reset owned caches again");
+        auto* twinHud = hud.data() + 5 * partSize;
+        field<short>(twinHud, 8) = 5;
+        view::filters = {2, 1, 0};
+        checkDraw(hud.data(), false, true);
+        checkDraw(twinHud, true, false);
+        localSlot = -1;
+        checkDraw(hud.data(), true, true);
+        localSlot = 1;
+        view::filters = {};
+        view::setHeartRenderer([](unsigned index, Point position, float scale) {
+            require(index == 1 && position.x == nativeOrigin.x && scale == 0.75f,
+                    "Renderer identified the wrong twin or anchor");
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+            require(position.y == nativeOrigin.y, "Wrong J835 twin Y");
+#else
+            require(position.y == nativeOrigin.y + 34.f, "Wrong compact Esau Y");
+#endif
+            return true;
+        });
+        checkDraw(twinHud, false, true);
+        view::setHeartRenderer(nullptr);
+        checkDraw(twinHud, true, true);
         roster = {address(players[1].data()), address(players[0].data())};
         setRoster();
         callHud(7);
@@ -269,7 +350,7 @@ int main() {
         const auto noGame = hud;
         callHud(6);
         require(hud == noGame && !depth, "Released Game changed native HUD bindings");
-        for (auto index : {0u, 2u, 5u, 6u, 7u})
+        for (auto index : {0u, 2u, 5u, 6u, 7u, 8u, 9u})
             require(MH_RemoveHook(image + entries[index]) == MH_OK,
                     "Remove frontend HUD fixture hook");
         require(MH_Uninitialize() == MH_OK, "Uninitialize frontend HUD fixture");

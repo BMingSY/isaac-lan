@@ -1,6 +1,7 @@
 // Execute both production x86 HUD detours without loading the game.
 #include "test_support.h"
 #include "engine/crafting_hud.h"
+#include "engine/versions/common/frontend_hud.h"
 #include <MinHook.h>
 #include <windows.h>
 #include <cstring>
@@ -22,6 +23,9 @@ constexpr unsigned hudSize = 0x6dc, rootSize = 0x5954;
 #include <bit>
 #include <cstdint>
 #include <cstdio>
+namespace isaac::engine::native_frontend_hud {
+Filters filters;
+}
 namespace isaac::runtime {
 int target = -1, local = -1;
 int craftingBagViewTarget() {
@@ -301,6 +305,14 @@ int main() {
             for (auto hud : hudFor)
                 verify(hud, hud, hud);
         }
+        namespace display = isaac::engine::native_frontend_hud;
+        isaac::runtime::local = 1;
+        display::filters.pocketItems = 2;
+        verify(hudFor[1], hudFor[1], hudFor[1]);
+        verify(hudFor[0], hudFor[0], 0);
+        isaac::runtime::local = -1;
+        verify(hudFor[0], hudFor[0], hudFor[0]);
+        display::filters = {};
         isaac_lan_crafting_screen_width = nullptr;
         isaac_lan_crafting_screen_height = nullptr;
         verify(hudFor[0], hudFor[0], hudFor[0]);

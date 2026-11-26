@@ -20,6 +20,7 @@ return function(root, native, modules)
     if _IsaacLanState then
         _IsaacLanState.setChallenges = function() end
     end
+    ModCallbacks.MC_PRE_MOD_UNLOAD = ModCallbacks.MC_PRE_MOD_UNLOAD or 73
     ModCallbacks.MC_PRE_SPAWN_CLEAN_AWARD = ModCallbacks.MC_PRE_SPAWN_CLEAN_AWARD or 9
     ModCallbacks.MC_ENTITY_TAKE_DMG = ModCallbacks.MC_ENTITY_TAKE_DMG or 11
     ModCallbacks.MC_USE_ITEM = ModCallbacks.MC_USE_ITEM or 12

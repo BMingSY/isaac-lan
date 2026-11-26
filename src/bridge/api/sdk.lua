@@ -63,6 +63,25 @@
 ---@field id string Qualified ID for comparison with view.challengeId.
 ---@field Finish fun(self: IsaacLANChallenge): boolean
 ---@field Close fun(self: IsaacLANChallenge)
+---@alias IsaacLANHUDAudience 'local'|'teammates'|'all'
+---@class IsaacLANHUDPlayer
+---@field ownerId integer
+---@field playerId string
+---@field playerType integer
+---@field isLocal boolean
+---@field unknown boolean Curse of the Unknown.
+---@field isGhost boolean
+---@field health? {red: integer, maxRed: integer, soul: integer, blackMask: integer, bone: integer, broken: integer, rotten: integer, eternal: integer, golden: integer}
+---@class IsaacLANHeartPanel: IsaacLANHUDPlayer
+---@field x number
+---@field y number
+---@field scale number
+---@class IsaacLANMenuSetting
+---@field id string
+---@field name string
+---@field choices string[]
+---@field selected? integer Initial index, defaults to 1.
+---@field onChange fun(index: integer)
 ---@class IsaacLANHandle
 ---@field IsAttached fun(self: IsaacLANHandle): boolean
 ---@field IsActive fun(self: IsaacLANHandle): boolean
@@ -77,6 +96,10 @@
 ---@field WithLocalView fun(self: IsaacLANHandle, fn: function): any
 ---@field On fun(self: IsaacLANHandle, event: string, fn: fun(context: table)): function LAN lifecycle subscription.
 ---@field OnLocalRender fun(self: IsaacLANHandle, fn: fun(view: IsaacLANView)): function Per-render callback in the local view.
+---@field GetHUDPlayers fun(self: IsaacLANHandle): IsaacLANHUDPlayer[]
+---@field HideHUD fun(self: IsaacLANHandle, component: 'hearts'|'activeItem'|'pocketItems', audience: IsaacLANHUDAudience): function
+---@field OnHUDHearts fun(self: IsaacLANHandle, audience: IsaacLANHUDAudience, draw: fun(panel: IsaacLANHeartPanel): boolean?): function
+---@field RegisterMenuSetting fun(self: IsaacLANHandle, definition: IsaacLANMenuSetting): function
 ---@field RegisterChallenge fun(self: IsaacLANHandle, definition: IsaacLANChallengeDefinition): IsaacLANChallenge
 ---@field RequireEffectSync fun(self: IsaacLANHandle, variant: integer, subtype?: integer): function Keep matching room effects in this view. Returns a release function.
 ---@field Action fun(self: IsaacLANHandle, name: string, definition?: IsaacLANActionDefinition): IsaacLANAction
@@ -207,6 +230,23 @@ function SDK.create(mod, id, backend)
         assert(type(fn) == "function", "invalid_subscription")
         -- Session lifecycle notifications exist only when LAN is installed.
         return own(backend and backend.on(event, fn) or function() end)
+    end
+    -- LAN presentation extensions are inert when the standalone SDK runs in solo.
+    local function noop() end
+    function handle:GetHUDPlayers()
+        return not closed and backend and backend.hudPlayers() or {}
+    end
+    function handle:HideHUD(component, audience)
+        attached()
+        return backend and own(backend.hideHUD(component, audience)) or noop
+    end
+    function handle:OnHUDHearts(audience, draw)
+        attached()
+        return backend and own(backend.renderHearts(audience, draw)) or noop
+    end
+    function handle:RegisterMenuSetting(definition)
+        attached()
+        return backend and own(backend.menuSetting(definition)) or noop
     end
     function handle:RegisterChallenge(definition)
         attached()

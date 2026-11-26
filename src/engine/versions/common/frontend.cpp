@@ -489,6 +489,30 @@ bool invoke(int nargs, int results) {
     logger("frontend_error=" + error);
     return false;
 }
+bool renderHearts(unsigned viewIndex, engine::native_frontend_hud::Point position, float scale) {
+    if (!state || bridgeFailed || !prepared)
+        return false;
+    const int top = lua.getTop(state);
+    bool replaced = false;
+    if (lua.getGlobal(state, "_IsaacLanRenderHearts") == luaFunction) {
+        lua.pushInteger(state, viewIndex);
+        lua.pushNumber(state, position.x);
+        lua.pushNumber(state, position.y);
+        lua.pushNumber(state, scale);
+        replaced = invoke(4, 1) && lua.toBoolean(state, -1);
+    }
+    lua.setTop(state, top);
+    return replaced;
+}
+int hudFilters(lua_State* L) {
+    using namespace engine::native_frontend_hud;
+    const auto mask = [&](int index) {
+        return static_cast<unsigned>(lua.toInteger(L, index, nullptr)) & 3u;
+    };
+    filters = {mask(1), mask(2), mask(3)};
+    setHeartRenderer(lua.toBoolean(L, 4) ? renderHearts : nullptr);
+    return 0;
+}
 void openMenu() {
     const int top = lua.getTop(state);
     if (lua.getGlobal(state, "_IsaacLanMenuOpen") == luaFunction && !invoke(0, 0))
@@ -760,6 +784,8 @@ BOOL WINAPI swap(HDC dc) {
 void __cdecl close(lua_State* L) {
     if (state == L) {
         lab_capture::stop();
+        engine::native_frontend_hud::filters = {};
+        engine::native_frontend_hud::setHeartRenderer(nullptr);
         state = nullptr;
         chat_input::reset();
         emotes::reset();
@@ -769,6 +795,8 @@ void __cdecl close(lua_State* L) {
 }
 void __attribute__((fastcall)) init(void* engine, void*, bool debug) {
     originalInit(engine, debug);
+    engine::native_frontend_hud::filters = {};
+    engine::native_frontend_hud::setHeartRenderer(nullptr);
     bridgeFailed = false;
     visible = officialRequested = false;
     mainPaper.reset();
@@ -832,6 +860,8 @@ void __attribute__((fastcall)) init(void* engine, void*, bool debug) {
         lua.setTop(state, lua.getTop(state) - 1);
         lua.pushClosure(state, integrationNonce, 0);
         lua.setField(state, -2, "api_nonce");
+        lua.pushClosure(state, hudFilters, 0);
+        lua.setField(state, -2, "presentation_hud_filters");
         lua.pushClosure(state, integrationSetting, 0);
         lua.setField(state, -2, "api_setting");
         lua.pushClosure(state, modInfo, 0);

@@ -1,4 +1,5 @@
 #include "engine/crafting_hud.h"
+#include "engine/versions/common/frontend_hud.h"
 #include "compat/game_ids.h"
 #include "engine/versions/common/crafting_hud_bindings.h"
 #include "runtime/session.h"
@@ -66,6 +67,14 @@ Address __cdecl isaac_lan_crafting_hud_receiver(std::uintptr_t hud) {
 // and 0 for a hidden teammate or an unavailable local view.
 __attribute__((used, force_align_arg_pointer)) int __cdecl isaac_lan_crafting_pocket_layout(
     std::uintptr_t hud, PocketLayout* layout) {
+    namespace display = engine::native_frontend_hud;
+    if (display::filters.pocketItems && hud) {
+        const auto player = at<Address>(hud, bindings.playerHud.player);
+        if (player &&
+            display::hidden(display::filters.pocketItems, at<int>(player, bindings.controller),
+                            runtime::localViewSlot()))
+            return 0;
+    }
     const int target = runtime::craftingBagViewTarget();
     if (target == -1)
         return 1;
