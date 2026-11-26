@@ -171,7 +171,7 @@ struct Fixture {
     }
     bool query(int action, unsigned kind = native::entry::inputTriggered, float* result = nullptr,
                int* source = nullptr) {
-        return input::query(image + 0x87f068, nullptr, queryController,
+        return input::query(image + 0x880068, nullptr, queryController,
                             reinterpret_cast<void*>(base() + kind), &action, result, source);
     }
     void press(unsigned action) {
@@ -186,7 +186,7 @@ struct Fixture {
     void onlyLocalQueries() const {
         require(!queries.empty(), "Expected native physical queries");
         for (const auto& query : queries)
-            require(query.receiver == image + 0x87f068 && query.controller == -1,
+            require(query.receiver == image + 0x880068 && query.controller == -1,
                     "Pause input queried a peer controller instead of the local source");
     }
 };

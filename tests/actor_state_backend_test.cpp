@@ -11,7 +11,7 @@ constexpr unsigned pocketsOffset = 0x16c8, bagOffset = 0x1e44, previewOffset = 0
 constexpr unsigned poopMana = 0x1e50, poopQueue = 0x1e54, hudStride = 0x6b0, bagDirty = 0x6a1;
 constexpr std::array<unsigned, 3> spriteOffsets{0x36c, 0xf48, 0xe34};
 #else
-constexpr unsigned gameGlobal = 0x8994f8, getHudEntry = 0x18de0, spriteOffset = 0x48;
+constexpr unsigned gameGlobal = 0x89a5f8, getHudEntry = 0x18de0, spriteOffset = 0x48;
 constexpr unsigned typeOffset = 0x13c4, costumesOffset = 0x1220, chargesOffset = 0x758;
 constexpr unsigned pocketsOffset = 0x17a0, bagOffset = 0x1f44, previewOffset = 0x1f4c;
 constexpr unsigned poopMana = 0x1f54, poopQueue = 0x1f58, hudStride = 0x6dc, bagDirty = 0x6ad;

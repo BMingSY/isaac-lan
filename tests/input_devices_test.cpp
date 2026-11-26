@@ -25,7 +25,7 @@ constexpr unsigned managerOffset = 0x7e7c98, beginOffset = 4, endOffset = 8;
 constexpr unsigned stride = 4, idOffset = 8, updateEntry = 0x56a150;
 #else
 namespace backend = isaac::engine::repentance_plus;
-constexpr unsigned managerOffset = 0x87f068, beginOffset = 8, endOffset = 12;
+constexpr unsigned managerOffset = 0x880068, beginOffset = 8, endOffset = 12;
 constexpr unsigned stride = 8, idOffset = 12, updateEntry = 0;
 #endif
 constexpr unsigned imageSize = privateGameImageBytes;

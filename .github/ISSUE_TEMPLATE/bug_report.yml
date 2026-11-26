@@ -8,7 +8,7 @@ body:
     attributes:
       label: 游戏和扩展版本 / Game and Isaac LAN versions
       description: 请写明忏悔或忏悔＋、游戏版本号和 Isaac LAN 版本。 Include the edition, game build and extension version. If unknown, say so.
-      placeholder: "Repentance+ v1.9.7.19.J511 / Isaac LAN v0.10.0"
+      placeholder: "Repentance+ v1.9.7.20.J514 / Isaac LAN v0.11.0"
     validations:
       required: true
   - type: dropdown

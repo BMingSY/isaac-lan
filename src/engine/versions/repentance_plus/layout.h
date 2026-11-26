@@ -465,10 +465,10 @@ inline constexpr unsigned extraData = 0xee0;
 namespace tether {
 inline constexpr unsigned points = 0x8, capacity = 0xc;
 inline constexpr unsigned first = 0x10, count = 0x14, sprite = 0x18, size = 0x158;
-inline constexpr unsigned dataVtable = 0x780ffc;
+inline constexpr unsigned dataVtable = 0x782034;
 } // namespace tether
 namespace familiarBody {
-inline constexpr unsigned dataVtable = 0x787bf4;
+inline constexpr unsigned dataVtable = 0x788c2c;
 inline constexpr unsigned sprites = 0x4, layers = 0x568;
 } // namespace familiarBody
 namespace emote {
