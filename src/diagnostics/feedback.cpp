@@ -1,4 +1,5 @@
 #include "diagnostics/feedback.h"
+#include "diagnostics/feedback_crash.h"
 #include "core/feedback.h"
 #include "core/chat.h"
 #include "diagnostics/runtime_log.h"
@@ -34,6 +35,7 @@ constexpr std::size_t maxMods = 200, maxContext = 32, maxFieldBytes = 200, maxFi
 constexpr std::size_t maxResponseBytes = 4096, readChunk = 1024 * 1024;
 // Room for the manifest and zip headers under the receiver's limit.
 constexpr std::size_t archiveHeadroom = 64 * 1024;
+constexpr std::size_t maxCrashLogBytes = 128 * 1024;
 constexpr int resolveMs = 10000, connectMs = 10000, sendMs = 60000, receiveMs = 30000;
 
 lua::API lua;
@@ -168,8 +170,7 @@ void addText(std::vector<feedback::File>& files, std::string name,
         files.push_back({std::move(name), {content.begin(), content.end()}});
     }
 }
-std::vector<feedback::File> collect(const Job& job, std::size_t limit,
-                                    const std::vector<std::string>& redacted) {
+std::vector<std::string> recentLaunches(const Job& job) {
     namespace fs = std::filesystem;
     const auto logs = job.launch.parent_path();
     std::vector<std::string> names;
@@ -177,8 +178,15 @@ std::vector<feedback::File> collect(const Job& job, std::size_t limit,
     for (fs::directory_iterator it(logs, error), end; !error && it != end; it.increment(error))
         if (it->is_directory(error))
             names.push_back(utf8(it->path().filename()));
-    std::vector<feedback::File> files;
-    for (const auto& launch : launches(names, utf8(job.launch.filename()))) {
+    return launches(std::move(names), utf8(job.launch.filename()));
+}
+void collect(std::vector<feedback::File>& files, const Job& job,
+             const std::vector<std::string>& recent, std::size_t limit,
+             const std::vector<std::string>& redacted) {
+    namespace fs = std::filesystem;
+    const auto logs = job.launch.parent_path();
+    std::error_code error;
+    for (const auto& launch : recent) {
         const auto root = logs / wide(launch);
         std::vector<fs::path> paths;
         error.clear();
@@ -199,7 +207,6 @@ std::vector<feedback::File> collect(const Job& job, std::size_t limit,
     }
     addText(files, "game/log.txt", logs.parent_path().parent_path() / L"log.txt", limit, redacted);
     addText(files, "config/config.ini", job.environment.config, limit, redacted);
-    return files;
 }
 Package package(const Job& job) {
     SYSTEMTIME time{};
@@ -226,8 +233,20 @@ Package package(const Job& job) {
         if (const auto equal = line.find('='); equal != line.npos && equal)
             manifest.context.emplace_back(line.substr(0, equal), line.substr(equal + 1));
     const auto redacted = profiles();
-    for (auto limit = maxFileBytes; limit >= minFileBytes; limit /= 2) {
-        auto files = collect(job, limit, redacted);
+    const auto recent = recentLaunches(job);
+    std::vector<feedback::File> crashFiles;
+    if (recent.size() == collectedLaunches) {
+        const auto crash = previousCrash(job.launch.parent_path() / wide(recent.front()),
+                                         job.launch, job.environment.game);
+        if (!crash.summary.empty())
+            crashFiles.push_back(
+                {"game/crash-summary.json", {crash.summary.begin(), crash.summary.end()}});
+        if (!crash.log.empty())
+            addText(crashFiles, "game/crash.txt", crash.log, maxCrashLogBytes, redacted);
+    }
+    for (auto limit = maxFileBytes; limit >= minFileBytes;) {
+        auto files = crashFiles;
+        collect(files, job, recent, limit, redacted);
         manifest.files.clear();
         for (const auto& file : files)
             manifest.files.push_back(file.name);
@@ -236,6 +255,11 @@ Package package(const Job& job) {
         auto archive = zip(files, dosTime, dosDate);
         if (archive.size() + archiveHeadroom <= maxUploadBytes)
             return {std::move(archive), stamp};
+        // A crash attachment must never prevent the ordinary report from fitting.
+        if (limit == minFileBytes && !crashFiles.empty())
+            crashFiles.pop_back();
+        else
+            limit /= 2;
     }
     throw std::runtime_error("logs exceed the upload limit");
 }

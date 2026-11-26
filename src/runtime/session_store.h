@@ -10,6 +10,11 @@ class SessionStore {
     explicit SessionStore(std::filesystem::path value) : path(std::move(value)) {}
     std::size_t write(const lan::Archive& archive) const;
     std::size_t writeBytes(const std::vector<std::uint8_t>& bytes) const;
+    std::size_t writeFloor(const std::vector<std::uint8_t>& bytes) const;
     std::optional<lan::Archive> read() const;
+    void discard() const;
+
+  private:
+    std::filesystem::path floorPath() const;
 };
 } // namespace isaac::runtime
