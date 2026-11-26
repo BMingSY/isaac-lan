@@ -102,7 +102,9 @@ sequenceDiagram
 
 [`session_archive.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/session_archive.h) 定义存档封装：扩展指纹、开局设置、运行规则、全队位置、原生 GameState 和完整性哈希。`IsaacLAN/save/6` 保存 64 位房间选项及本局奖励账本，恢复时将独立房间类型选择归并为所属的自动传送组并清除未使用类型；读取 `save/4`、`save/5` 时将 32 位的集合选项转换为自动传送的房间类型集合。`save/3` 没有房间选项，`save/3`、`save/4` 没有奖励账本，缺失字段默认清空。读取须匹配格式与指纹，完整文件上限 8 MiB。
 
-房主三个存档栏分别使用 `session-1.bin`、`session-2.bin`、`session-3.bin`，与单人 Continue 分开管理。写入采用临时文件替换；失败时保留旧文件和进程内待保存快照，重试固定使用原存档栏，成功前不能开始新联机局。
+普通联机由房主在开局首层和每次新楼层加载完成、房间与队伍就绪后自动保存一次。普通换房和同层沙漏回退不写楼层存档。每个存档栏的楼层检查点保存在 `session-1.floor.bin`、`session-2.floor.bin` 或 `session-3.floor.bin`。异常退出后，原队伍可以从大厅“继续”最近一次写入成功的楼层。客机断线重连仍使用运行中的房主状态。
+
+房主选择保存退出时，`session-1.bin`、`session-2.bin` 或 `session-3.bin` 接替本栏楼层检查点。文件写入使用临时文件原子替换，显式保存失败会保留待重试快照与原存档栏，成功前不能开始新联机局。正常结算或放弃会清理本局续玩文件。单人 Continue 单独管理。
 
 整场关闭后的续玩要求原房主、原存档栏、原人数和原加入顺序。运行中重连按玩家标识恢复，与整场续玩的栏位条件分别校验。临时挑战不覆盖已有联机存档，只支持运行中重连，详见[联机挑战](https://github.com/BMingSY/isaac-lan/blob/main/docs/lan-challenges.md)。
 

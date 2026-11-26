@@ -1500,6 +1500,9 @@ int gate(lua_State* L) {
     view.authoritative.reset();
     view.replicaPending.reset();
     view.floorEpoch = session->worldEpoch();
+    view.firstFloor = !saves.resumingArchive;
+    const auto stage = backend::stage();
+    view.autosaveFloor = std::pair{stage.level, stage.type};
     localInput = {};
     lastInputRoom.reset();
     consumedInputSequences = {};
@@ -1707,6 +1710,8 @@ lan::Archive captureCheckpoint() {
     archive.settings = session->settings().metadata();
     archive.settings.progress = readProgress();
     archive.locations = rooms::captureLocations();
+    if (archive.locations.size() != session->players())
+        throw std::runtime_error("Cannot capture every player's floor location");
     for (unsigned slot = 1; slot < archive.locations.size(); ++slot)
         if (!(session->connectedMask() & (1u << slot)))
             archive.locations[slot] = archive.locations[0];
@@ -1774,7 +1779,7 @@ void afterExit(bool save) {
     try {
         const auto path = archivePath();
         if (host && !save && !saves.exitingTransient)
-            std::filesystem::remove(path);
+            SessionStore(path).discard();
         if (host && save && !saves.exitingTransient) {
             if (!saves.exitingArchive || saves.exitingArchive->locations.size() < 2)
                 throw std::runtime_error("No room state to save");
@@ -2055,6 +2060,10 @@ void beginStage(bool same, int animation, unsigned restart, unsigned cinematic,
         fail("Native floor transaction rejected");
         return;
     }
+    // A regenerated floor can have the same stage number and type. Its checkpoint
+    // becomes eligible only after the native transition commits.
+    if (!cinematic)
+        view.autosaveFloor.reset();
     view.playingCinematic = cinematic != 0;
     view.cinematicReady = false;
     if (view.playingCinematic) {
@@ -2133,6 +2142,58 @@ void halfStarted() {
     if (view.gated)
         input::finishUpdate();
 }
+namespace {
+bool floorSaveDue() {
+    const bool completed = rooms::takeFloorChange();
+    const bool first = std::exchange(view.firstFloor, false);
+    if ((!completed && !first) || session->settings().rules.transient)
+        return false;
+    const auto stage = backend::stage();
+    const auto floor = std::pair{stage.level, stage.type};
+    // A same-floor hourglass also rebuilds room contexts. It is not a floor entry.
+    const bool due = first || view.autosaveFloor != floor;
+    view.autosaveFloor = floor;
+    return due;
+}
+void updateCheckpoints() {
+    const bool floorSave = floorSaveDue(), rejoin = session->checkpointNeeded();
+    if (!floorSave && !rejoin)
+        return;
+    bool publishingRejoin = rejoin;
+    try {
+        const auto began = InputClock::now();
+        const auto checkpoint = captureCheckpoint();
+        const auto captured = InputClock::now();
+        auto settings = checkpoint.settings;
+        settings.snapshot = checkpoint.encode();
+        if (rejoin) {
+            if (logger)
+                logger("checkpoint_capture bytes=" + std::to_string(settings.snapshot.size()) +
+                       " capture_ms=" +
+                       std::to_string(
+                           std::chrono::duration<double, std::milli>(captured - began).count()) +
+                       " archive_ms=" +
+                       std::to_string(
+                           std::chrono::duration<double, std::milli>(InputClock::now() - captured)
+                               .count()));
+            if (!session->checkpoint(settings, nextTick))
+                throw std::runtime_error("Cannot publish current-floor checkpoint");
+            publishingRejoin = false;
+        }
+        if (floorSave) {
+            const auto bytes = SessionStore(archivePath()).writeFloor(settings.snapshot);
+            if (logger)
+                logger("floor_save=COMPLETE stage=" + std::to_string(view.autosaveFloor->first) +
+                       " bytes=" + std::to_string(bytes));
+        }
+    } catch (const std::exception& error) {
+        if (publishingRejoin)
+            throw;
+        if (logger)
+            logger("floor_save=FAILED " + std::string(error.what()));
+    }
+}
+} // namespace
 void halfCompleted() {
     if (!view.gated || !view.pendingHalf || view.playingEnding)
         return;
@@ -2141,27 +2202,8 @@ void halfCompleted() {
         session->completed(currentTick);
     if (session && session->isHost() && session->phase() == lan::Phase::running &&
         rooms::stateReady()) {
-        rooms::takeFloorChange();
         try {
-            if (session->checkpointNeeded()) {
-                const auto began = InputClock::now();
-                const auto checkpoint = captureCheckpoint();
-                const auto captured = InputClock::now();
-                auto settings = checkpoint.settings;
-                settings.snapshot = checkpoint.encode();
-                if (logger)
-                    logger(
-                        "checkpoint_capture bytes=" + std::to_string(settings.snapshot.size()) +
-                        " capture_ms=" +
-                        std::to_string(
-                            std::chrono::duration<double, std::milli>(captured - began).count()) +
-                        " archive_ms=" +
-                        std::to_string(
-                            std::chrono::duration<double, std::milli>(InputClock::now() - captured)
-                                .count()));
-                if (!session->checkpoint(settings, nextTick))
-                    throw std::runtime_error("Cannot publish current-floor checkpoint");
-            }
+            updateCheckpoints();
             integrationCallback("_IsaacLanViewCommitted");
             publishState();
         } catch (const std::exception& error) {

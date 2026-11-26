@@ -29,6 +29,46 @@ int main() {
         archive.game = {4, 5};
         store.write(archive);
         require(store.read()->game == archive.game, "Existing archive was not replaced");
+        const auto floor = path.parent_path() / "session.floor.bin";
+        archive.game = {6, 7};
+        store.writeFloor(archive.encode());
+        require(store.read()->game == archive.game && std::filesystem::exists(path),
+                "Floor checkpoint did not take precedence over the manual save");
+        std::filesystem::create_directory(floor.string() + ".tmp");
+        auto next = archive;
+        next.game = {8};
+        bool floorFailed = false;
+        try {
+            store.writeFloor(next.encode());
+        } catch (const std::exception&) {
+            floorFailed = true;
+        }
+        require(floorFailed && store.read()->game == archive.game,
+                "Failed floor write lost the last floor");
+        std::filesystem::remove(floor.string() + ".tmp");
+        std::ofstream(floor, std::ios::binary | std::ios::trunc) << "broken floor";
+        require(store.read()->game == std::vector<std::uint8_t>({4, 5}),
+                "Damaged floor shadowed the manual save");
+        store.writeFloor(archive.encode());
+        store.write(next);
+        require(store.read()->game == next.game && !std::filesystem::exists(floor),
+                "Manual save did not supersede the floor checkpoint");
+        // Interrupt the second rename of an explicit save. Continue should
+        // already see its new contents and a later retry should finish it.
+        std::filesystem::remove(path);
+        std::filesystem::create_directory(path);
+        bool promotionFailed = false;
+        try {
+            store.write(archive);
+        } catch (const std::exception&) {
+            promotionFailed = true;
+        }
+        require(promotionFailed && store.read()->game == archive.game,
+                "Interrupted manual promotion lost its new snapshot");
+        std::filesystem::remove(path);
+        store.write(archive);
+        require(!std::filesystem::exists(floor) && store.read()->game == archive.game,
+                "Retry did not finish the manual save");
         const auto previous = store.read()->encode();
         // A blocked staging path cannot destroy the committed save.
         std::filesystem::create_directory(path.string() + ".tmp");
@@ -48,6 +88,10 @@ int main() {
             failed = true;
         }
         require(failed, "Corrupt archive was accepted");
+        store.writeFloor(next.encode());
+        store.discard();
+        require(!store.read() && !std::filesystem::exists(floor),
+                "Ending retained a continuable floor");
         std::filesystem::remove_all(root);
         std::cout << "PASS session store replacement, corruption and failed-write protection\n";
         return 0;
