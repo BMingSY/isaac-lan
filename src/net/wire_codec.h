@@ -10,7 +10,7 @@ inline constexpr std::size_t minimumMessageCompressionSize = 256;
 // again. Small or incompressible messages keep their original wire bytes.
 inline std::vector<std::uint8_t> encodeWire(std::vector<std::uint8_t> message,
                                             StateCompression& codec) {
-    if (message.empty() || message.size() > maxMessageSize)
+    if (!validMessageSize(message))
         throw std::runtime_error("Invalid outgoing message size");
     const auto type = static_cast<Message>(message.front());
     if (message.size() < minimumMessageCompressionSize || type == Message::world ||
@@ -24,10 +24,14 @@ inline std::vector<std::uint8_t> encodeWire(std::vector<std::uint8_t> message,
 }
 inline std::vector<std::uint8_t> decodeWire(std::span<const std::uint8_t> message,
                                             StateCompression& codec) {
-    if (message.empty() || message.size() > maxMessageSize)
-        throw std::runtime_error("Invalid incoming message size");
-    if (message.front() == compressedMessageTag)
-        return codec.expand(message.subspan(1));
-    return {message.begin(), message.end()};
+    if (!message.empty() && message.front() == compressedMessageTag &&
+        message.size() <= maxLobbyMessageSize) {
+        auto decoded = codec.expand(message.subspan(1));
+        if (validMessageSize(decoded))
+            return decoded;
+    } else if (validMessageSize(message)) {
+        return {message.begin(), message.end()};
+    }
+    throw std::runtime_error("Invalid incoming message size");
 }
 } // namespace isaac::lan

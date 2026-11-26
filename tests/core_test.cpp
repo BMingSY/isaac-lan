@@ -29,7 +29,7 @@
 #include "compat/items/room_transitions.h"
 #include "runtime/room_clock.h"
 #include "compat/items/crafting_bag.h"
-#include "compat/challenges/catalog.h"
+#include "compat/challenges/external.h"
 #include "compat/items/team_effects.h"
 #include "compat/characters/keeper.h"
 #include "compat/characters/team_effects.h"
@@ -1667,6 +1667,49 @@ void archiveCapacity() {
 }
 
 void challengeRules() {
+    using isaac::compat::challenges::ExternalCatalog;
+    ExternalCatalog host, guest;
+    constexpr auto slot = isaac::externalRuleBase;
+    constexpr std::uint64_t first = 0x1122334455667788ull, second = first + 1;
+    require(host.add(3, "Host name", 0, 0, 4, first) == slot &&
+                host.add(3, "Other Mod", 0, 0, 4, second, true) == slot + 1 &&
+                guest.add(3, "Other Mod", 0, 0, 4, second, true) == slot &&
+                guest.add(3, "Localized name", 0, 0, 4, first) == slot + 1 &&
+                !host.add(3, "Duplicate contract", 0, 0, 4, first),
+            "Namespaces or registration order prevented coexistence");
+    RunRules selected{slot, 3, 0, 0, true, isaac::roomOptions::lootRoll, first};
+    require(host.localId(selected) == slot && guest.localId(selected) == slot + 1 &&
+                host.lookup(selected)->requiredPlayers == 4 &&
+                !host.lookup(selected)->roomOptionsLocked &&
+                guest.lookup(selected)->name == "Localized name",
+            "Network identity, local menu slots or default room policy changed");
+    auto checkpoint = sample(4);
+    checkpoint.settings.rules = selected;
+    require(Archive::decode(checkpoint.encode()).settings.rules == selected,
+            "Reconnect checkpoint lost scoped identity or room preferences");
+    isaac::lan::LobbyAccess local{{0}, {{slot, 3, first}, {slot, 3, second}}, {0}};
+    require(local.valid() && local.allowsRules(selected), "Namespaced challenge unavailable");
+    selected.contract = second;
+    require(host.lookup(selected)->roomOptionsLocked && local.allowsRules(selected),
+            "Opt-in room lock was not per declaration");
+    selected.contract++;
+    require(!local.allowsRules(selected) && guest.localId(selected) == -1,
+            "Missing namespace was mapped to a local challenge");
+    host.erase(slot);
+    require(!host.lookup(slot) && host.lookup(slot + 1) && host.lookup(1001) &&
+                host.add(3, "Reload", 0, 0, 4, first) == slot,
+            "Unregister or reload affected other challenges");
+    host.clear();
+    require(!host.lookup(slot) && host.add(3, "Reload", 0, 0, 4, first) == slot,
+            "Unloaded contract prevented later registration");
+
+    const auto capacity = isaac::maxLobbyRules - isaac::compat::challenges::definitions.size();
+    for (unsigned i = 1; i < capacity; ++i)
+        require(host.add(1, "More", 0, 0, 0, first + i),
+                "Catalog stopped before the lobby capacity");
+    require(!host.add(1, "Overflow", 0, 0, 0, first + capacity),
+            "Catalog exceeded the lobby capacity");
+
     const auto* definition = isaac::compat::challenges::find(1001);
     require(definition && definition->character == 23 && definition->difficulty == 0 &&
                 definition->transient && definition->nextBag,

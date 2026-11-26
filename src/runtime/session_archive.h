@@ -13,7 +13,7 @@ struct Archive {
     std::vector<std::uint8_t> game;
     std::vector<std::uint8_t> encode() const {
         Writer w(Message::snapshot);
-        w.string("IsaacLAN/save/6");
+        w.string(settings.rules.contract ? "IsaacLAN/save/7" : "IsaacLAN/save/6");
         w.string(fingerprint);
         w.string(settings.seed);
         w.u8(settings.difficulty);
@@ -23,6 +23,8 @@ struct Archive {
         w.u8(settings.rules.difficulty);
         w.u8(settings.rules.transient);
         w.u64(settings.rules.options);
+        if (settings.rules.contract)
+            w.u64(settings.rules.contract);
         for (auto c : settings.characters)
             w.u16(c);
         w.progress(settings.progress);
@@ -52,7 +54,8 @@ struct Archive {
             throw std::runtime_error("Unsupported saved session");
         const auto format = r.string();
         if (format != "IsaacLAN/save/3" && format != "IsaacLAN/save/4" &&
-            format != "IsaacLAN/save/5" && format != "IsaacLAN/save/6")
+            format != "IsaacLAN/save/5" && format != "IsaacLAN/save/6" &&
+            format != "IsaacLAN/save/7")
             throw std::runtime_error("Unsupported saved session");
         Archive out;
         out.fingerprint = r.string();
@@ -64,17 +67,19 @@ struct Archive {
         out.settings.rules.difficulty = r.u8();
         const auto transient = r.u8();
         out.settings.rules.transient = transient != 0;
-        if (format == "IsaacLAN/save/6")
+        if (format == "IsaacLAN/save/6" || format == "IsaacLAN/save/7")
             out.settings.rules.options = roomOptions::normalize(r.u64());
         else if (format != "IsaacLAN/save/3")
             out.settings.rules.options = roomOptions::migrateLegacy(r.u32());
+        if (format == "IsaacLAN/save/7")
+            out.settings.rules.contract = r.u64();
         if (transient > 1 || !out.settings.rules.valid() ||
             !roomOptions::valid(out.settings.rules.options))
             throw std::runtime_error("Invalid saved run rules");
         for (auto& c : out.settings.characters)
             c = r.u16();
         out.settings.progress =
-            r.progress(format == "IsaacLAN/save/5" || format == "IsaacLAN/save/6");
+            r.progress(format != "IsaacLAN/save/3" && format != "IsaacLAN/save/4");
         const auto players = r.u8();
         if (players < 2 || players > 4 || out.settings.seed.size() != 8 ||
             out.settings.difficulty > 3)

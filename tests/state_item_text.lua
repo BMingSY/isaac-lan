@@ -1,11 +1,6 @@
 -- Ordinary native guest pickups must resolve real ItemConfig objects on replay.
 local native = assert(_IsaacLan)
-local f = assert(io.open("./lan-test-role.txt", "r"))
-local host = f:read("*l") == "host"
-f:close()
-f = assert(io.open("./lan-test-menu-port.txt", "r"))
-local port = f:read("*l")
-f:close()
+local host, port = _IsaacLanTest.host, _IsaacLanTest.port
 local function report(text)
     Isaac.DebugString("LAN_NETWORK " .. text)
 end
@@ -134,3 +129,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         end
     end, collect, restore, present, beginFloor)
 end
+
+return {
+    done = function()
+        return finished
+    end,
+}

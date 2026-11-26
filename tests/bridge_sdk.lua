@@ -321,3 +321,148 @@ end
 print(
     "PASS API 2 SDK: render cadence, scope/error cleanup, owned bodies, results, versions, late replies, solo fallback"
 )
+
+-- External entries are registered before the lobby and can be applied on a
+-- guest independently of having stepped or captured a previous snapshot.
+do
+    local function registry(ordinal)
+        local peer = runtime.peer(ordinal)
+        local native, declarations = peer.env._IsaacLan, {}
+        function native.api_register_challenge(
+            version,
+            name,
+            who,
+            difficulty,
+            players,
+            contract,
+            locked
+        )
+            local slot = 0x8000
+            while declarations[slot] do
+                slot = slot + 1
+            end
+            declarations[slot] =
+                { version = version, players = players, contract = contract, locked = locked }
+            return slot
+        end
+        function native.api_remove_challenge(slot)
+            declarations[slot] = nil
+        end
+        function native.net_finish_challenge(slot)
+            return peer.challenge == slot
+        end
+        return peer, declarations
+    end
+    local host, hostSpecs = registry(0)
+    local guest, guestSpecs = registry(1)
+    local h = host.api:Attach(modFixture(), "raid.fixture")
+    local g = guest.api:Attach(modFixture(), "raid.fixture")
+    local other = host.api:Attach(modFixture(), "other.mod")
+    local remoteOther = guest.api:Attach(modFixture(), "other.mod")
+    local ticks, state, resets, replica = 0, false, 0, nil
+    local basic = { id = "raid", name = "Other", roomOptionsLocked = true }
+    local def = {
+        id = "raid",
+        name = "Raid",
+        players = 4,
+        character = 0,
+        step = function(ctx)
+            ticks = ticks + 1
+            assert(ctx.players[1] == runtime.actors[1] and ctx.players[2] == nil)
+        end,
+        capture = function()
+            return state
+        end,
+        apply = function(value)
+            replica = value
+        end,
+        reset = function()
+            resets = resets + 1
+        end,
+    }
+    local challenge = h:RegisterChallenge(def)
+    local second = other:RegisterChallenge(basic)
+    local guestOther = remoteOther:RegisterChallenge(basic)
+    local localized = {}
+    for key, value in pairs(def) do
+        localized[key] = value
+    end
+    localized.name = "雷霆"
+    local remote = g:RegisterChallenge(localized)
+    local function slotOf(peer, handle)
+        for slot, entry in pairs(peer.bridge.challenges.entries) do
+            if entry.key == handle.id then
+                return slot
+            end
+        end
+    end
+    local hs, gs = slotOf(host, challenge), slotOf(guest, remote)
+    assert(hs ~= gs and remote.id == challenge.id and challenge.id == "raid.fixture:raid")
+    assert(second.id == guestOther.id and second.id ~= challenge.id)
+    assert(hostSpecs[hs].contract == guestSpecs[gs].contract and hostSpecs[hs].players == 4)
+    assert(hostSpecs[hs].version == 1 and not hostSpecs[hs].locked and guestSpecs[hs].locked)
+    assert(hostSpecs[hs].contract ~= guestSpecs[hs].contract)
+    assert(not pcall(h.RegisterChallenge, h, def))
+    assert(
+        not pcall(h.RegisterChallenge, h, { id = "bad", name = "Bad", capture = function() end })
+    )
+    local coord = dofile(root .. "/src/bridge/runtime/challenges.lua")
+    local function coordinator(peer, selected)
+        local native = peer.env._IsaacLan
+        native.net_challenges = function()
+            return { [tostring(selected)] = { id = selected, version = 1 } }
+        end
+        local info = native.api_info
+        native.api_info = function()
+            local v = info()
+            v.challengeVersion = 1
+            return v
+        end
+        return coord({ native = native, external = peer.bridge.challenges.entries, routes = {} })
+    end
+    host.challenge, guest.challenge = hs, gs
+    host.bridge.commit()
+    guest.bridge.commit()
+    assert(h:View().challengeId == challenge.id and g:View().challengeId == remote.id)
+    local authority, client = coordinator(host, hs), coordinator(guest, gs)
+    host.connected = 1
+    authority.step()
+    authority.step()
+    assert(ticks == 1 and authority.snapshot()[3] == "F")
+    state = { damage = 6, party = { 1, 2, 3, 4 } }
+    local snapshot = authority.snapshot()
+    assert(snapshot[1] == challenge.id)
+    client.apply(snapshot)
+    client.apply(snapshot)
+    assert(replica.damage == 6 and replica.party[4] == 4)
+    assert(not pcall(client.apply, { second.id, 1, snapshot[3] }))
+    assert(challenge:Finish() and not second:Finish())
+    local originalContract = hostSpecs[hs].contract
+    local before = resets
+    h:Close()
+    challenge:Close()
+    assert(not hostSpecs[hs] and not challenge:Finish() and resets == before + 1)
+    assert(hostSpecs[slotOf(host, second)])
+    local replacement = host.api:Attach(modFixture(), "raid.fixture")
+    local locked = replacement:RegisterChallenge({
+        id = "raid",
+        name = "Raid",
+        players = 4,
+        character = 0,
+        roomOptionsLocked = true,
+    })
+    assert(
+        locked.id == challenge.id and hostSpecs[slotOf(host, locked)].contract ~= originalContract
+    )
+    local numeric = other:RegisterChallenge({ id = 1, name = "One" })
+    assert(
+        numeric.id == "other.mod:1"
+            and not pcall(other.RegisterChallenge, other, { id = "1", name = "One" })
+    )
+    assert(not challenge:Finish(), "A recycled slot revived a closed handle")
+    local minimal = coordinator(host, slotOf(host, numeric))
+    host.challenge = slotOf(host, numeric)
+    minimal.step()
+    assert(minimal.snapshot() == false)
+    minimal.apply(false)
+end

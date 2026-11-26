@@ -15,7 +15,7 @@ constexpr unsigned assignEntry = 0x28cf00, resizeEntry = 0x3da10;
 constexpr unsigned spriteOffset = 0x48, cartOffset = 0x3d4, heldOffset = 0x1414,
                    bombsOffset = 0xbf0;
 constexpr unsigned assignEntry = isaac::engine::repentance_plus::entry::entityPtrAssign,
-                   resizeEntry = 0x50010;
+                   resizeEntry = 0x4ff90;
 #endif
 struct lua_State {
     int top = 1;

@@ -600,6 +600,7 @@ add_library(
     src/diagnostics/performance.cpp
     src/diagnostics/crash_signal.cpp
     src/diagnostics/feedback.cpp
+    src/diagnostics/feedback_crash.cpp
     src/runtime/session.cpp
     src/runtime/extension_update.cpp
     src/runtime/extension_files.cpp
@@ -809,6 +810,16 @@ target_link_libraries(isaac_lan_heap_watch PRIVATE dbghelp)
 target_include_directories(isaac_lan_heap_watch PRIVATE src)
 target_compile_definitions(isaac_lan_heap_watch PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 if(BUILD_TESTING)
+    add_executable(isaac_lan_crash_feedback_test tests/feedback_crash_test.cpp
+                                                 src/diagnostics/feedback_crash.cpp)
+    target_link_libraries(isaac_lan_crash_feedback_test PRIVATE isaac_lan_feedback)
+    target_compile_definitions(isaac_lan_crash_feedback_test PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+    if(MINGW)
+        target_compile_options(isaac_lan_crash_feedback_test PRIVATE -Wall -Wextra -Werror)
+        target_link_options(isaac_lan_crash_feedback_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    add_test(NAME diagnostics.crash-feedback COMMAND isaac_lan_crash_feedback_test)
+    set_tests_properties(diagnostics.crash-feedback PROPERTIES TIMEOUT 30 LABELS "offline;logging")
     add_executable(isaac_lan_heap_fixture tests/heap_fixture.cpp src/diagnostics/crash_signal.cpp)
     target_include_directories(isaac_lan_heap_fixture PRIVATE src)
     target_compile_definitions(isaac_lan_heap_fixture PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)

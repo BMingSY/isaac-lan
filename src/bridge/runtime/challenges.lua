@@ -2,14 +2,21 @@
 return function(deps)
     local native, definitions = deps.native, deps.native.net_challenges()
     local pendingLayout, lastRun = true, nil
-    local routes, effects = deps.routes, deps.effects or {}
+    local routes, effects, external = deps.routes, deps.effects or {}, deps.external or {}
+    local lastExternal
+    local function component(id)
+        return effects[id] or external[id]
+    end
     local function reset()
         for _, effect in pairs(effects) do
             if effect.reset then
                 effect.reset()
             end
         end
-        lastRun = nil
+        if lastExternal then
+            lastExternal.reset()
+        end
+        lastRun, lastExternal = nil, nil
     end
     local function current()
         local info = native.api_info()
@@ -19,12 +26,13 @@ return function(deps)
             end
             return
         end
-        local definition = assert(definitions[tostring(info.challenge)], "Unknown LAN challenge")
-        assert(definition.version == info.challengeVersion, "LAN challenge version mismatch")
         if lastRun ~= info.runId then
             reset()
-            lastRun, pendingLayout = info.runId, true
+            definitions = native.net_challenges()
+            lastRun, pendingLayout, lastExternal = info.runId, true, external[info.challenge]
         end
+        local definition = assert(definitions[tostring(info.challenge)], "Unknown LAN challenge")
+        assert(definition.version == info.challengeVersion, "LAN challenge version mismatch")
         return definition, info
     end
     local function authority()
@@ -35,14 +43,14 @@ return function(deps)
     end
     local function view()
         local definition, info = current()
-        local effect = definition and effects[definition.id]
+        local effect = definition and component(definition.id)
         if effect and effect.initialize and info.ready == 1 and info.authority ~= 1 then
             effect.initialize(info)
         end
     end
     local function pickup(p)
         local definition = authority()
-        if definition then
+        if definition and routes[definition.route] then
             routes[definition.route].pickup(p)
         end
     end
@@ -52,7 +60,7 @@ return function(deps)
             return
         end
         local route = routes[definition.route]
-        if not route.handles(p) then
+        if not route or not route.handles(p) then
             return
         end
         local player = collider:ToPlayer()
@@ -76,7 +84,7 @@ return function(deps)
         if not definition then
             return
         end
-        local effect = effects[definition.id]
+        local effect = component(definition.id)
         if effect and effect.step then
             effect.step(info)
         end
@@ -100,6 +108,7 @@ return function(deps)
             return true
         end
         local map = deps.maps and deps.maps[definition.id]
+        map = map or external[definition.id]
         if not map or not map.canEnter then
             return true
         end
@@ -116,8 +125,8 @@ return function(deps)
     local function clearAward()
         local definition, info = authority()
         if definition then
-            local route, effect = routes[definition.route], effects[definition.id]
-            if route.clearAward then
+            local route, effect = routes[definition.route], component(definition.id)
+            if route and route.clearAward then
                 route.clearAward()
             end
             if effect and effect.clearAward then
@@ -127,7 +136,7 @@ return function(deps)
     end
     local function collect(owner, ...)
         local definition, info = authority()
-        local effect = definition and effects[definition.id]
+        local effect = definition and component(definition.id)
         if
             effect
             and effect.collect
@@ -141,17 +150,19 @@ return function(deps)
     end
     local function effect()
         local definition = current()
-        return definition and effects[definition.id]
+        return definition and component(definition.id)
     end
     local function snapshot()
         local definition = authority()
-        local value = definition and effects[definition.id]
-        return value and value.snapshot and { definition.id, definition.version, value.snapshot() }
+        local value = definition and component(definition.id)
+        return value
+                and value.snapshot
+                and { value.key or definition.id, definition.version, value.snapshot() }
             or false
     end
     local function apply(value)
         local definition = current()
-        local active = definition and effects[definition.id]
+        local active = definition and component(definition.id)
         if not active or not active.apply then
             assert(value == false, "Unexpected challenge view")
             return
@@ -159,7 +170,7 @@ return function(deps)
         assert(
             type(value) == "table"
                 and #value == 3
-                and value[1] == definition.id
+                and value[1] == (active.key or definition.id)
                 and value[2] == definition.version,
             "Challenge view identity mismatch"
         )

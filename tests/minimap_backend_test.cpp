@@ -10,10 +10,10 @@ constexpr unsigned roomOffset = 0x18194, dimensionOffset = 0x1819c;
 constexpr unsigned widthOffset = 0x80, heightOffset = 0x84, textureEntry = 0x55f990;
 constexpr std::array<unsigned, 4> entries{0x4e55f0, 0x4e5e50, 0x4e2e40, 0x565030};
 #else
-constexpr unsigned gameGlobal = 0x8994f8, renderer = 0x89e850, mapOffset = 0x25edc;
+constexpr unsigned gameGlobal = 0x89a5f8, renderer = 0x89f950, mapOffset = 0x25edc;
 constexpr unsigned roomOffset = 0x18304, dimensionOffset = 0x1830c;
 constexpr unsigned widthOffset = 0x10, heightOffset = 0x14, textureEntry = 0x1000;
-constexpr std::array<unsigned, 4> entries{0x5a4bd0, 0x5a5510, 0x5a2650, 0x6325d0};
+constexpr std::array<unsigned, 4> entries{0x5a5250, 0x5a5b90, 0x5a2cd0, 0x632c60};
 #endif
 namespace {
 namespace map = isaac::engine::native_minimap;

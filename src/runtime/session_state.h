@@ -3,6 +3,7 @@
 #include "runtime/pending_archive.h"
 #include <optional>
 #include <chrono>
+#include <utility>
 namespace isaac::runtime {
 struct RestartState {
     bool requested = false, exiting = false, heldVoted = false;
@@ -21,11 +22,15 @@ struct SessionView {
     bool gated = false, pendingHalf = false;
     bool playingEnding = false, playingCinematic = false, cinematicReady = false;
     std::uint32_t floorEpoch = 0;
+    bool firstFloor = false;
+    std::optional<std::pair<std::uint8_t, std::uint8_t>> autosaveFloor;
     std::optional<lan::WorldState> authoritative, replicaPending;
     std::optional<unsigned> pendingChallengeFinish;
     void stop() {
         gated = pendingHalf = playingEnding = playingCinematic = cinematicReady = false;
         pendingChallengeFinish.reset();
+        firstFloor = false;
+        autosaveFloor.reset();
     }
     void clearSnapshots() {
         authoritative.reset();

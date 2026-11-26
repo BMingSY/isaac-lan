@@ -212,6 +212,7 @@ callback(ModCallbacks.MC_POST_NPC_RENDER, renderShadow)
 challenge = _IsaacLanModules["runtime/challenges"]({
     native = native,
     game = Game,
+    external = integration.challenges and integration.challenges.entries,
     routes = {
         lamb = goalRoute("lamb"),
         mom = goalRoute("mom"),

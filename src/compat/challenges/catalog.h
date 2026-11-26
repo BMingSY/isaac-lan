@@ -28,6 +28,9 @@ struct Definition {
     unsigned rewardChallenge = 0;
     bool hidePlayerOutlines = false;
 
+    unsigned requiredPlayers = 0;
+    std::uint64_t contract = 0;
+
     unsigned nativeRewardChallenge(int stage) const {
         // I RULE! continues past the Lamb to Mega Satan. The Dark Room needs
         // its ordinary Lamb chest for the LAN trophy.
