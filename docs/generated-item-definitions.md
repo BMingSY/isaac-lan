@@ -8,9 +8,9 @@
 
 | 字段或入口 | 忏悔＋ | 忏悔 |
 | --- | --- | --- |
-| 注册表指针向量 | `Game+0x67758` | `Game+0x283c20` |
-| 生成函数 RVA | `0x5f49a0` | `0x532980` |
-| 原生恢复的 CALL 位置 RVA | `0x5f802b` | `0x535cbb` |
+| 注册表指针向量 | `Game+0x67e48` | `Game+0x283c20` |
+| 生成函数 RVA | `0x5f5010` | `0x532980` |
+| 原生恢复的 CALL 位置 RVA | `0x5f869b` | `0x535cbb` |
 | 玩家数量树头指针／大小 | `+0x1fcc/+0x1fd0` | `+0x1ec4/+0x1ec8` |
 | 版本绑定 | [忏悔＋](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance_plus/generated_items.cpp) | [忏悔](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance/generated_items.cpp) |
 

@@ -13,7 +13,7 @@ constexpr unsigned gameGlobal = isaac::engine::repentance_plus::globals::game, g
 constexpr unsigned railOffset = 0x7484, extraSprite = 0x27c;
 constexpr unsigned removeEntry =
     isaac::engine::repentance_plus::entry::roomRemoveGridEntityImmediate;
-constexpr unsigned makeEntry = 0x3f6e50;
+constexpr unsigned makeEntry = 0x3f6df0;
 #endif
 struct lua_State {
     int top = 0;

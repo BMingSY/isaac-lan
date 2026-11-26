@@ -19,10 +19,10 @@
 
 | 入口 | RVA | 用途与 ABI |
 | --- | --- | --- |
-| `Room::GetDevilRoomChance` | `0x401b50` | Lua 公开查询、HUD 和实际开门共用；`thiscall`，x87 返回 |
-| 原版条件天使概率查询 | `0x401f90` | HUD 与房间类型初始化共用；无参数，XMM0 返回 |
+| `Room::GetDevilRoomChance` | `0x401af0` | Lua 公开查询、HUD 和实际开门共用；`thiscall`，x87 返回 |
+| 原版条件天使概率查询 | `0x401f30` | HUD 与房间类型初始化共用；无参数，XMM0 返回 |
 | `Level::InitializeDevilAngelRoom` | `0x351870` | 决定实际生成类型；`thiscall(bool, bool)` |
-| `Room::TrySpawnDevilRoomDoor` | `0x400c50` | 原版清房开门及公开 API；`thiscall(bool, bool)` |
+| `Room::TrySpawnDevilRoomDoor` | `0x400bf0` | 原版清房开门及公开 API；`thiscall(bool, bool)` |
 
 四个入口均受启动签名校验。条件天使查询的 SSE 返回约定由后端桥接，普通 C++／Lua 浮点接口使用正常 ABI，返回边界须正确转换 x87 与 XMM0。
 

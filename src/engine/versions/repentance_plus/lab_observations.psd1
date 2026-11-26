@@ -1,7 +1,7 @@
 @{
-    manager = 0x89a094
-    menus = 0x89a8a4
-    game = 0x8994f8
+    manager = 0x89b194
+    menus = 0x89b9a4
+    game = 0x89a5f8
     dialogs = 0x4d444
     page = 0x40
     selected = 0xb94

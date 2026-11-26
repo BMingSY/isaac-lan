@@ -1,26 +1,26 @@
 {
     "format": 1,
     "backend": "repentance_plus",
-    "game_build": "1.9.7.19.J511",
+    "game_build": "1.9.7.20.J514",
     "game_name": "Repentance+",
     "documents_directory": "Binding of Isaac Repentance+",
     "lua_module": "Lua5.3.3r.dll",
-    "version_rva": 7990092,
-    "minimum_image_size": 9182196,
+    "version_rva": 7994180,
+    "minimum_image_size": 9186308,
     "sections": [
         {
             "start": 4096,
-            "size": 7571540,
+            "size": 7573524,
             "flags": 1610612736
         },
         {
-            "start": 7577600,
-            "size": 936272,
+            "start": 7581696,
+            "size": 936736,
             "flags": 1073741824
         },
         {
-            "start": 8515584,
-            "size": 666612,
+            "start": 8519680,
+            "size": 666628,
             "flags": 3221225472
         }
     ],
