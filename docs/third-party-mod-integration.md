@@ -16,6 +16,8 @@ local lan = include("isaac_lan").attach(mod, "author.my-mod")
 | 要做的事 | 接口 |
 | --- | --- |
 | 属性面板、地图、说明等本机 UI | `lan:OnLocalRender(fn)`，回调中读取 `view.players` |
+| 隐藏或自绘心格、主动道具、饰品、口袋栏和联机延迟，读取整队库存与资源 | `lan:HideHUD(...)`、`lan:OnHUDRender(...)`、`lan:GetHUDPlayers()`，见[联机 HUD 与大厅设置](https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-api-reference.md#联机-hud-与大厅设置) |
+| 在本机联机大厅提供切换选项 | `lan:RegisterMenuSetting(definition)` |
 | 判断回调角色是否属于本机 | `lan:IsLocalPlayer(player)` |
 | 从 UI 发起修改世界的操作 | `lan:Action(name, definition)`，再 `action:Request(...)` |
 | 依赖房间里某种特效的每一个实例 | `lan:RequireEffectSync(variant, subtype)`，省略子类型可保留该变体全部实例，见[特效声明](https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-api-reference.md#房间特效) |

@@ -1,5 +1,5 @@
 -- Follow native heart HUD anchors, whose order is local-view dependent.
-return function(native, Phase)
+return function(native, Phase, replace)
     local white = KColor(1, 1, 1, 1)
     local function measured(value)
         return value and value >= 0 and value .. " ms" or "—"
@@ -20,7 +20,19 @@ return function(native, Phase)
                 local textWidth = font:GetStringWidthUTF8(label) * 0.6
                 local x = math.floor(math.max(1, math.min(width - textWidth - 1, hud.x + 12)))
                 local y = math.floor(math.max(1, math.min(height - 9, hud.y - 13)))
-                font:DrawStringScaledUTF8(label, x, y, 0.6, 0.6, white, 0, false)
+                if
+                    not replace
+                    or not replace(
+                        slot + 1,
+                        x,
+                        y,
+                        0.6,
+                        status["network" .. slot],
+                        status["sync" .. slot]
+                    )
+                then
+                    font:DrawStringScaledUTF8(label, x, y, 0.6, 0.6, white, 0, false)
+                end
             end
         end
     end

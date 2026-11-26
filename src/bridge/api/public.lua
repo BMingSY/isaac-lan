@@ -46,6 +46,9 @@ bridge.challenges = modules["api/challenges"](native, modules["api/codec"])
 bridge.lifecycle = modules["api/lifecycle"](bridge)
 bridge.effects = modules["api/effect_sync"](modules["sync/effect_classes"], EffectVariant)
 bridge.actions = modules["api/actions"](bridge)
+bridge.hud = modules["api/hud"](bridge, native, modules["api/hud_players"](bridge, native))
+bridge.menuSettings = modules["api/menu_settings"](bridge.log)
+_G._IsaacLanRenderHUD = bridge.hud.render
 local sdk = assert(modules["api/sdk"])
 local function identity(player)
     if not bridge.ready() or not player then
@@ -116,6 +119,14 @@ function api:Attach(mod, id)
         registerChallenge = function(def)
             return bridge.challenges.register(id, def)
         end,
+        hudPlayers = bridge.hud.players,
+        hideHUD = bridge.hud.hide,
+        renderHUD = function(component, audience, fn)
+            return bridge.hud.subscribe(id, component, audience, fn)
+        end,
+        menuSetting = function(def)
+            return bridge.menuSettings.register(id, def)
+        end,
         requireEffect = bridge.effects.register,
         on = function(event, fn)
             return bridge.lifecycle.on(id, event, fn)
@@ -168,6 +179,7 @@ function bridge.reset(reason)
         local context = bridge.copy(bridge.context)
         context.reason = reason
         bridge.context, bridge.players, bridge.identities = nil, {}, {}
+        bridge.hud.reset()
         bridge.actions.reset(reason)
         bridge.lifecycle.emit("StateReset", context)
     end

@@ -189,7 +189,13 @@ for actor, p in ipairs(observed) do
     assert(p.items[1] == actor and p.items[5] == 0 and p.items[-1] == actor + 1)
     assert(p.actives[1][1] == 2 and p.actives[1][2] == actor)
 end
-print("PASS shared repair catalog, independent passive/generated counts and active slots")
+local displayCatalog = {}
+for actor, p in ipairs(observed) do
+    local items = repairs.passiveItems(p, displayCatalog)
+    assert(#items == 2 and items[1].id == 1 and items[1].count == actor)
+    assert(items[2].id == -1 and items[2].count == actor + 1)
+end
+print("PASS shared repair and HUD catalogs, independent passive/generated counts and active slots")
 
 -- Reuse values, never cached native counts. Same-size replacements and removals
 -- must leave a prior published inventory untouched.

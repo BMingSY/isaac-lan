@@ -490,6 +490,39 @@ bool invoke(int nargs, int results) {
     logger("frontend_error=" + error);
     return false;
 }
+bool renderHudComponent(engine::native_frontend_hud::Component component, unsigned viewIndex,
+                        const engine::native_frontend_hud::Draw& draw) {
+    using namespace engine::native_frontend_hud;
+    if (!state || bridgeFailed || !prepared)
+        return false;
+    const int top = lua.getTop(state);
+    bool replaced = false;
+    if (lua.getGlobal(state, "_IsaacLanRenderHUD") == luaFunction) {
+        lua.pushString(state, names[static_cast<unsigned>(component)].data());
+        lua.pushInteger(state, viewIndex);
+        lua.pushNumber(state, draw.position.x);
+        lua.pushNumber(state, draw.position.y);
+        lua.pushNumber(state, draw.scale);
+        lua.pushNumber(state, draw.alpha);
+        lua.pushInteger(state, draw.slot);
+        replaced = invoke(7, 1) && lua.toBoolean(state, -1);
+    }
+    lua.setTop(state, top);
+    return replaced;
+}
+int hudFilters(lua_State* L) {
+    using namespace engine::native_frontend_hud;
+    const char* name = lua.toString(L, 1, nullptr);
+    const auto it = name ? std::find(names.begin(), names.end(), name) : names.end();
+    if (it != names.end()) {
+        const auto mask = [&](int index) {
+            return static_cast<unsigned>(lua.toInteger(L, index, nullptr)) & 3u;
+        };
+        configure(static_cast<Component>(it - names.begin()), {mask(2), mask(3)},
+                  renderHudComponent);
+    }
+    return 0;
+}
 void openMenu() {
     const int top = lua.getTop(state);
     if (lua.getGlobal(state, "_IsaacLanMenuOpen") == luaFunction && !invoke(0, 0))
@@ -761,6 +794,7 @@ BOOL WINAPI swap(HDC dc) {
 void __cdecl close(lua_State* L) {
     if (state == L) {
         lab_capture::stop();
+        engine::native_frontend_hud::resetFilters();
         state = nullptr;
         chat_input::reset();
         emotes::reset();
@@ -770,6 +804,7 @@ void __cdecl close(lua_State* L) {
 }
 void __attribute__((fastcall)) init(void* engine, void*, bool debug) {
     originalInit(engine, debug);
+    engine::native_frontend_hud::resetFilters();
     bridgeFailed = false;
     visible = officialRequested = false;
     mainPaper.reset();
@@ -833,6 +868,8 @@ void __attribute__((fastcall)) init(void* engine, void*, bool debug) {
         lua.setTop(state, lua.getTop(state) - 1);
         lua.pushClosure(state, integrationNonce, 0);
         lua.setField(state, -2, "api_nonce");
+        lua.pushClosure(state, hudFilters, 0);
+        lua.setField(state, -2, "presentation_hud_filters");
         lua.pushClosure(state, integrationSetting, 0);
         lua.setField(state, -2, "api_setting");
         lua.pushClosure(state, modInfo, 0);

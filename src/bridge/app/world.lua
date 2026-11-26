@@ -163,6 +163,7 @@ local inventoryState = component("sync/inventory")({
         return native.actor_pockets(player:GetSprite(), value)
     end,
 })
+modules["api/public"].readHUDCollectibles = inventoryState.passiveItems
 local inventory = performance.wrap("capture.inventory", inventoryState.capture)
 local applyInventory = performance.wrap("apply.inventory", inventoryState.apply)
 local actorsPresentation = component("presentation/actors")(native, function(path)

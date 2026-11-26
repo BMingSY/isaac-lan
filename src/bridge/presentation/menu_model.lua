@@ -65,6 +65,10 @@ return function(Phase, Command, endpoint, characters, text)
             ui.page, ui.selection = "lan", ui.ruleReturn or 1
             ui.ruleReturn, ui.listScroll = nil, nil
             return true
+        elseif ui.page == "modSettings" then
+            ui.page, ui.selection, ui.listScroll = "lan", ui.modReturn or 1, nil
+            ui.modReturn = nil
+            return true
         elseif ui.page == "challenges" then
             ui.page, ui.selection, ui.listScroll = "lan", 3, nil
             return true
@@ -142,6 +146,10 @@ return function(Phase, Command, endpoint, characters, text)
                 end
             end
         end
+        local settings = deps.modSettings or {}
+        if ui.page == "modSettings" and #settings == 0 then
+            back(ui)
+        end
         if status.pendingSave == 1 then
             row(text("重新保存"), function()
                 command("retry_save")
@@ -200,6 +208,15 @@ return function(Phase, Command, endpoint, characters, text)
                 else
                     deps.hide()
                 end
+            end)
+        elseif phase == Phase.lobby and ui.page == "modSettings" then
+            for _, setting in ipairs(settings) do
+                row(text("%s：%s", setting.name, setting.value), function()
+                    setting.change(1)
+                end, true, setting.change)
+            end
+            row(text("返回"), function()
+                back(ui)
             end)
         elseif phase == Phase.lobby and ui.page == "autoTeleport" and teleport then
             ruleCount = selectedRooms
@@ -401,6 +418,12 @@ return function(Phase, Command, endpoint, characters, text)
             end
             if not host then
                 ruleEntry()
+            end
+            if #settings > 0 then
+                local index = #rows + 1
+                row(text("Mod 设置"), function()
+                    ui.page, ui.selection, ui.listScroll, ui.modReturn = "modSettings", 1, 1, index
+                end)
             end
             row(text("离开房间"), function()
                 command("close")

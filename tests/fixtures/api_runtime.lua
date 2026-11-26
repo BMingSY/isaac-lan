@@ -71,6 +71,10 @@ return function(root)
                 runId = p.runId or string.rep("a", 32),
             }
         end
+        function native.presentation_hud_filters(component, hidden, rendered)
+            p.hudFilters = p.hudFilters or {}
+            p.hudFilters[component] = { hidden, rendered }
+        end
         function native.api_nonce()
             return string.rep(tostring(slot + 1), 32)
         end
@@ -101,6 +105,15 @@ return function(root)
                 error(errorMessage, 0)
             end
             return true
+        end
+        function native.api_with_hud_players(fn)
+            local previous = p.scope
+            p.scope = nil
+            local ok, reason = pcall(fn)
+            p.scope = previous
+            if not ok then
+                error(reason, 0)
+            end
         end
         function native.api_with_owner(owner, fn)
             local previous = p.scope
@@ -136,6 +149,9 @@ return function(root)
             "api/codec",
             "api/lifecycle",
             "api/actions",
+            "api/hud_players",
+            "api/hud",
+            "api/menu_settings",
             "api/sdk",
             "api/public",
             "compat/mods/wrapping",

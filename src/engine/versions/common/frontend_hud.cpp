@@ -6,12 +6,18 @@
 #include "compat/game_ids.h"
 #include <MinHook.h>
 #include <array>
+#include <cmath>
 namespace isaac::engine::native_frontend_hud {
 namespace {
 using Address = std::uintptr_t;
 using MenuUpdate = void(__attribute__((thiscall)) *)(void*);
 Address image = 0;
 bool installed = false;
+struct ComponentFilter {
+    Filter mask;
+    Renderer draw = nullptr;
+};
+std::array<ComponentFilter, names.size()> filters{};
 template <class T> T& read(Address object, unsigned offset) {
     return *reinterpret_cast<T*>(object + offset);
 }
@@ -120,6 +126,42 @@ void __attribute__((fastcall)) hudRender(void* hud, void*) {
 }
 
 } // namespace
+void configure(Component component, Filter filter, Renderer draw) {
+    filters[static_cast<unsigned>(component)] = {filter, draw};
+}
+void resetFilters() {
+    filters = {};
+}
+bool replace(Component component, void* hud, const Draw& draw) {
+    const auto [filter, renderer] = filters[static_cast<unsigned>(component)];
+    if ((!filter.hidden && !filter.rendered) || !hud || !image)
+        return false;
+    const int slot = runtime::localViewSlot();
+    const auto player = read<Address>(reinterpret_cast<Address>(hud), 0);
+    if (slot < 0 || !player)
+        return false;
+    const auto controller = read<int>(player, bindings.player.controller);
+    if (controller < 1 || controller > static_cast<int>(lan::maxPlayers))
+        return false;
+    constexpr unsigned local = 1, teammates = 2;
+    const auto audience = controller == slot + 1 ? local : teammates;
+    if (filter.hidden & audience)
+        return true;
+    if (!(filter.rendered & audience) || !renderer || !std::isfinite(draw.position.x) ||
+        !std::isfinite(draw.position.y) || !std::isfinite(draw.scale) || draw.scale == 0 ||
+        !std::isfinite(draw.alpha))
+        return false;
+    // Isaac.GetPlayer indexes the current render roster (local bodies first).
+    const auto game = read<Address>(image, bindings.game);
+    if (!game)
+        return false;
+    const auto begin = read<Address>(game, bindings.players);
+    const auto end = read<Address>(game, bindings.players + sizeof(Address));
+    for (auto entry = begin; entry < end; entry += sizeof(Address))
+        if (read<Address>(entry, 0) == player)
+            return renderer(component, (entry - begin) / sizeof(Address), draw);
+    return false;
+}
 bool install(Address base) {
     if (!base || installed)
         return false;
@@ -128,7 +170,7 @@ bool install(Address base) {
         void* detour;
         void** original;
     };
-    const std::array<Hook, 5> hooks{{
+    const std::array<Hook, 8> hooks{{
         {bindings.entry.statPlayerId, reinterpret_cast<void*>(statPlayerId),
          reinterpret_cast<void**>(&originalStatPlayerId)},
         {bindings.entry.historyPlayerId, reinterpret_cast<void*>(historyPlayerId),
@@ -139,6 +181,9 @@ bool install(Address base) {
          reinterpret_cast<void**>(&originalHudPostUpdate)},
         {bindings.entry.render, reinterpret_cast<void*>(hudRender),
          reinterpret_cast<void**>(&originalHudRender)},
+        {bindings.entry.hearts, heartHook.detour, heartHook.original},
+        {bindings.entry.activeItem, activeItemHook.detour, activeItemHook.original},
+        {bindings.entry.trinket, trinketHook.detour, trinketHook.original},
     }};
     image = base;
     unsigned created = 0;

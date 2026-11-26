@@ -27,12 +27,19 @@ local huds = {
     ["2"] = { x = 110, y = 230 },
     ["3"] = { x = 350, y = 235 },
 }
-local render = dofile(root .. "/src/bridge/presentation/ping.lua")({
-    presentation_player_huds = function()
-        reads = reads + 1
-        return huds
-    end,
-}, dofile(root .. "/tests/fixtures/net_phases.lua"))
+local replace
+local render = dofile(root .. "/src/bridge/presentation/ping.lua")(
+    {
+        presentation_player_huds = function()
+            reads = reads + 1
+            return huds
+        end,
+    },
+    dofile(root .. "/tests/fixtures/net_phases.lua"),
+    function(...)
+        return replace and replace(...)
+    end
+)
 local status = {
     prepared = true,
     phase = 3,
@@ -63,6 +70,21 @@ for i, slot in ipairs({ "1", "2", "3" }) do
     )
     assert(draws[i].x == huds[slot].x + 12 and draws[i].y == huds[slot].y - 13)
 end
+-- Claim just guest 2; the rest keep their normal label, coordinates and order.
+local called = {}
+replace = function(owner, x, y, scale, network, sync)
+    local hud = huds[tostring(owner - 1)]
+    assert(x == hud.x + 12 and y == hud.y - 13 and scale == 0.6)
+    assert(network == status["network" .. (owner - 1)] and sync == status["sync" .. (owner - 1)])
+    called[#called + 1] = owner
+    return owner == 2
+end
+draw()
+assert(table.concat(called, ",") == "2,3,4")
+assert(
+    #draws == 2 and draws[1].text:find("150 ms", 1, true) and draws[2].text:find("280 ms", 1, true)
+)
+replace = nil
 status.players, status.connected = 2, 3
 for _, ping in ipairs({ 0, 99, 100, 199, 200, 12345 }) do
     status.network1 = ping

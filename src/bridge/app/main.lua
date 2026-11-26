@@ -10,6 +10,12 @@ local battleHud
 local function callback(id, fn)
     Isaac.AddCallback(owner, id, fn)
 end
+callback(ModCallbacks.MC_PRE_MOD_UNLOAD, function(_, mod)
+    local handle = integration.modHandles[mod]
+    if handle then
+        handle:Close()
+    end
+end)
 callback(ModCallbacks.MC_POST_RENDER, function()
     if _IsaacLanState then
         _IsaacLanState.render()

@@ -1746,18 +1746,24 @@ int withPlayer(lua_State* L) {
     lua.pushBoolean(L, true);
     return 1;
 }
-int withLocalView(lua_State* L) {
+int withApiView(lua_State* L, bool localOnly) {
     int result = 0;
     withView(
         [&] {
             lua.pushValue(L, 1);
             result = lua.pcall(L, 0, 0, 0, 0, nullptr);
         },
-        true);
+        localOnly);
     if (result)
         return lua.error(L);
     lua.pushBoolean(L, true);
     return 1;
+}
+int withLocalView(lua_State* L) {
+    return withApiView(L, true);
+}
+int withHudPlayers(lua_State* L) {
+    return withApiView(L, false);
 }
 int moveParticipant(lua_State* L, RoomRouting routing, bool animateDeparture) {
     const auto slot = lua.checkInteger(L, 1), index = lua.checkInteger(L, 2),
@@ -3886,6 +3892,7 @@ bool bind(lua_State* L, HMODULE module) {
     function("api_move", integrationMove);
     function("api_cancel_move", cancelIntegrationMove);
     function("api_with_local_view", withLocalView);
+    function("api_with_hud_players", withHudPlayers);
     function("api_actors", actorIdentities);
     function("api_with_owner", withOwner);
     function("rooms_enable", enable);

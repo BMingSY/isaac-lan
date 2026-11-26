@@ -20,6 +20,11 @@
 | `GetLocalRoom()` | LAN 的 `{runId, worldEpoch, index, dimension}`；单机或未就绪时为 `nil` |
 | `WithLocalView(fn)` | 在本机房间与本机角色名单中执行读操作，保留全部返回值；未就绪时 `nil, "view_not_ready"` |
 | `OnLocalRender(fn)` | 每个可用渲染帧调用 `fn(view)`，返回可重复调用的取消函数 |
+| `GetHUDPlayers(options?)` | 读取已连接玩家各身体的血量、物品槽和资源，可选被动道具清单。未就绪时返回空数组 |
+| `HideHUD(component, audience)` | 在本机隐藏选定参与者的一种 HUD 组件，返回恢复函数 |
+| `OnHUDRender(component, audience, draw)` | 在该组件的绘制位置调用 `draw(panel)`，返回取消函数 |
+| `OnHUDHearts(audience, draw)` | 等价于 `OnHUDRender("hearts", audience, draw)` |
+| `RegisterMenuSetting(definition)` | 在本机大厅的「Mod 设置」页登记选项，返回撤销函数 |
 | `On(event, fn)` | 订阅 LAN 生命周期，返回取消函数；无 LAN 时不产生事件 |
 | `RequireEffectSync(variant, subtype?)` | 完整同步匹配的房间特效，返回可重复调用的释放函数，见下文 |
 | `Action(name, definition?)` | 定义或取得动作对象，见下文 |
@@ -49,6 +54,48 @@
 | `SessionReady` | 第一份或重建后的第一份视图就绪 |
 
 事件在游戏主线程、完整状态应用和原生作用域恢复后、UI 绘制前执行，按表中顺序触发需要的事件。除 `StateReset` 外在本机只读视图中调用。事件参数为提交上下文副本；取角色用 `lan:View()`。不会补发订阅前的事件；`SessionReady` 可在同局多次发生。订阅报错只停用该订阅。`StateReset` 时不能用旧对象访问世界。
+
+## 联机 HUD 与大厅设置
+
+这些接口只影响安装该 Mod 的这台机器。设置、隐藏请求和绘制回调可以在 Mod 加载时登记。房主与客机各自选择，加入或重连时无需交换选择。没有注册选项时，大厅省略「Mod 设置」入口。普通单机沿用游戏 HUD。兼容较早的 API 2 构建时，先检查对应的句柄方法是否存在。
+
+用 `HideHUD(component, audience)` 隐藏组件，用 `OnHUDRender(component, audience, draw)` 替换绘制。两者支持相同的组件和受众。受众可以是 `"local"`（本机及其伴生身体）、`"teammates"` 或 `"all"`。例如 `local restore = lan:HideHUD("activeItem", "teammates")` 隐藏队友的主动道具，调用 `restore()` 即可释放这次请求。
+
+| `component` | 绘制时机和专用字段 |
+| --- | --- |
+| `"hearts"` | 每个原生心格面板一次。`unknown` 表示未知诅咒，`isGhost` 表示合作幽灵，两种情况下都省略 `health`。其余情况下，`health.red/maxRed/soul` 以半心计，`blackMask` 沿用 `GetBlackHearts()` 的位掩码，另有 `bone/broken/rotten/eternal/golden` |
+| `"activeItem"` | 每次绘制有物品的主动槽。用 `panel.activeItem` 读取 `slot`、道具 `id`、普通充能 `charge`、电池额外充能 `batteryCharge`，以及已占用槽的有效容量 `maxCharge` 和游戏充能类型 `chargeType` |
+| `"trinket"` | 每次绘制有物品的饰品槽。`panel.trinket` 含 `slot` 和 `id`，保留金饰品标志 |
+| `"pocketItems"` | 整组口袋物品共用一次绘制。`panel.pocketItems` 是显示顺序中的四个槽，每项含 `slot`、`kind`、`id`。种类为 `empty`、`card`、`pill` 或 `activeItem`。药丸 ID 是颜色并保留大药丸标志，口袋主动提供道具 ID 和对应的 `activeSlot`。接管口袋栏也会接管其中的图标 |
+| `"ping"` | 每个已连接客机的延迟标签一次，按 `ownerId` 区分。字段 `networkMs` 和 `syncMs` 分别为网络和同步延迟的毫秒数，各自在尚无测量值时为 `nil` |
+
+所有面板都有 `component`、`ownerId`、`isLocal`、`x`、`y`、`scale` 和 `alpha`。坐标是该次绘制传入的游戏逻辑屏幕锚点，物品图标可在锚点附近排版。缩放可带镜像符号，未提供透明度的组件取 1。按身体绘制的四个组件还有 `playerId` 和 `playerType`。双子属于同一参与者，各有自己的身体 ID。数组按 Lua 习惯从 1 取值，每个物品记录的 `slot`、`activeSlot` 沿用游戏的从 0 开始的槽号。
+
+同一组件按注册顺序分派。回调返回 `true` 即接管这一次绘制，返回 `false` 或 `nil` 则继续尝试下一个回调，最后回退到默认界面。隐藏请求优先于自绘，注册自绘无需再调用 `HideHUD`。每个回调收到独立的数据副本，回调出错时停用该回调。回调内的游戏查询使用本机房间和角色名单。游戏省略的面板也会省略回调，例如双人联机的原版忏悔只绘制远端双子的主身体心格。
+
+需要独立排版时，可以在 `OnLocalRender` 中调用 `GetHUDPlayers()`。每个身体提供身份、上表的血量字段、四个 `activeItems`、两个 `trinkets`、四个 `pocketItems` 和 `resources`。空槽的 `id` 为 0。`resources` 含 `coins/bombs/keys`、金炸弹与金钥匙标志 `goldenBomb/goldenKey` 以及 `soulCharge/bloodCharge`。使用 `GetHUDPlayers({includeCollectibles = true})` 才会读取被动道具及跟班清单 `collectibles`，每项为 `{id, count}`。同一视图提交内可重复读取。资源和被动清单可供 Mod 自绘，当前原位替换的组件列在上表。整队查询包含原生布局省略的身体，由 Mod 自选坐标，可用 `Game():GetHUD():IsVisible()` 跟随游戏 HUD 显隐。
+
+例如，让每个玩家在大厅选择如何显示队友的主动道具。选择「充能」时只接管有道具的槽位。
+
+```lua
+local mode = 1
+lan:RegisterMenuSetting({
+    id = "team-active", name = "队友主动道具",
+    choices = { "原版", "隐藏", "充能" },
+    onChange = function(index) mode = index end,
+})
+lan:OnHUDRender("activeItem", "teammates", function(panel)
+    if mode == 1 then return end
+    if mode == 3 then
+        local item = panel.activeItem
+        Isaac.RenderText(tostring(item.charge + item.batteryCharge),
+            panel.x, panel.y, 1, 1, 1, panel.alpha)
+    end
+    return true
+end)
+```
+
+`RegisterMenuSetting` 的 `id` 是当前 Mod 内唯一的 1–64 字节标识，可用字母、数字、下划线、点和连字符。`name` 和至少两个 `choices` 是 Mod 提供的本地化文字。`selected` 为从 1 开始的初始索引，默认 1。玩家用左右键切换，确认或点击切到下一项，选中后调用 `onChange(index)`。登记时不会触发该回调。希望跨启动保留选择的 Mod 可用自己的存档读取和保存索引。各项按命名空间和局部 ID 排序，出错的选项会被移除。这些接口的撤销函数均可重复调用，关闭句柄、卸载或重载 Mod 会清理它拥有的注册。
 
 ## 大厅挑战
 

@@ -1,6 +1,7 @@
 // Execute both production x86 HUD detours without loading the game.
 #include "test_support.h"
 #include "engine/crafting_hud.h"
+#include "engine/versions/common/frontend_hud.h"
 #include <MinHook.h>
 #include <windows.h>
 #include <cstring>
@@ -22,6 +23,15 @@ constexpr unsigned hudSize = 0x6dc, rootSize = 0x5954;
 #include <bit>
 #include <cstdint>
 #include <cstdio>
+namespace isaac::engine::native_frontend_hud {
+void* claimedHud = nullptr;
+Draw lastDraw{};
+bool replace(Component component, void* hud, const Draw& draw) {
+    require(component == Component::pocketItems, "Unexpected pocket component");
+    lastDraw = draw;
+    return hud && hud == claimedHud;
+}
+} // namespace isaac::engine::native_frontend_hud
 namespace isaac::runtime {
 int target = -1, local = -1;
 int craftingBagViewTarget() {
@@ -177,6 +187,11 @@ void invoke(bool pocket, std::uintptr_t hud, std::uintptr_t expected, int layout
             require(observedLayout == 0, "Local pocket kept a compact co-op layout");
             expectedXmm[12] = std::bit_cast<std::uint32_t>(1.0f);
 #endif
+            const auto sdk = isaac::engine::native_frontend_hud::lastDraw;
+            require(sdk.position.x == expectedAnchor[0] && sdk.position.y == expectedAnchor[1] &&
+                        sdk.scale == expectedPocketScale &&
+                        sdk.alpha == std::bit_cast<float>(invocationAlpha),
+                    "SDK pocket panel did not follow the challenge layout");
         } else {
             require(observedPosition == reinterpret_cast<std::uintptr_t>(&position) &&
                         observedPositionValue == originalPosition,
@@ -301,6 +316,18 @@ int main() {
             for (auto hud : hudFor)
                 verify(hud, hud, hud);
         }
+        namespace display = isaac::engine::native_frontend_hud;
+        isaac::runtime::local = 1;
+        display::claimedHud = reinterpret_cast<void*>(hudFor[0]);
+        verify(hudFor[1], hudFor[1], hudFor[1]);
+        verify(hudFor[0], hudFor[0], 0);
+        const auto ordinary = display::lastDraw;
+        require(ordinary.position.x == 75 && ordinary.position.y == 13 && ordinary.scale == 1 &&
+                    ordinary.alpha == 0.35f,
+                "SDK lost native pocket geometry");
+        display::claimedHud = nullptr;
+        isaac::runtime::local = -1;
+        verify(hudFor[0], hudFor[0], hudFor[0]);
         isaac_lan_crafting_screen_width = nullptr;
         isaac_lan_crafting_screen_height = nullptr;
         verify(hudFor[0], hudFor[0], hudFor[0]);

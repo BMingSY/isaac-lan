@@ -517,6 +517,7 @@ inline constexpr unsigned cacheStride = 0xcc;
 inline constexpr unsigned cacheCount = 0x2;
 } // namespace statHud
 namespace playerHud {
+inline constexpr unsigned index = 8;
 inline constexpr unsigned bagDirty = 0x6ad;
 inline constexpr unsigned size = 0x6dc;
 inline constexpr unsigned player = 0x0;

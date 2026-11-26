@@ -23,7 +23,8 @@ local Command = _IsaacLan.net_commands()
 local drawVote = _IsaacLanModules["presentation/vote_progress"]()
 local renderRestart = _IsaacLanModules["presentation/restart"](drawVote)
 local renderSkip = _IsaacLanModules["presentation/animation_skip"](drawVote)
-local renderPing = _IsaacLanModules["presentation/ping"](_IsaacLan, Phase)
+local renderPing =
+    _IsaacLanModules["presentation/ping"](_IsaacLan, Phase, _IsaacLanModules["api/public"].hud.ping)
 -- menu_key reports Windows virtual-key codes from the native frontend.
 local Key = {
     escape = 27,
@@ -53,7 +54,7 @@ function _IsaacLanMenuOpen(returning)
             and "modes"
         or "lan"
     ui.selection, ui.editing = 1, nil
-    ui.ruleReturn, ui.listScroll = nil, nil
+    ui.ruleReturn, ui.listScroll, ui.modReturn = nil, nil, nil
     ui.autoReturn, ui.autoScroll = nil, nil
     _IsaacLan.menu_text_end()
 end
@@ -251,10 +252,15 @@ function _IsaacLanMenuRender(
         ui.selection, ui.editing, ui.lastPhase = 1, nil, phase
         if
             phase ~= Phase.lobby
-            and (ui.page == "rules" or ui.page == "autoTeleport" or ui.page == "challenges")
+            and (
+                ui.page == "rules"
+                or ui.page == "autoTeleport"
+                or ui.page == "challenges"
+                or ui.page == "modSettings"
+            )
         then
             ui.page, ui.ruleReturn, ui.listScroll = "lan", nil, nil
-            ui.autoReturn, ui.autoScroll = nil, nil
+            ui.autoReturn, ui.autoScroll, ui.modReturn = nil, nil, nil
         end
         _IsaacLan.menu_text_end()
     end
@@ -335,16 +341,18 @@ function _IsaacLanMenuRender(
         catalog = characterCatalog,
         accent = amber,
         options = roomOptions,
+        modSettings = _IsaacLanModules["api/public"].menuSettings.entries,
         hide = function()
             visible = false
         end,
     })
     local rulesPage = ruleCount ~= nil
-    local listPage = rulesPage or ui.page == "challenges"
+    local listPage = rulesPage or ui.page == "challenges" or ui.page == "modSettings"
     local heading = message(
         modes and "联机模式"
             or ui.page == "autoTeleport" and "自动传送"
             or rulesPage and "房间规则"
+            or ui.page == "modSettings" and "Mod 设置"
             or ui.page == "challenges" and "联机挑战"
             or "局域网联机"
     )

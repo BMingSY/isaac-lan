@@ -209,6 +209,7 @@ _IsaacLanModules = {
     ["presentation/vote_progress"] = dofile(root .. "/src/bridge/presentation/vote_progress.lua"),
     ["presentation/animation_skip"] = dofile(root .. "/src/bridge/presentation/animation_skip.lua"),
     ["presentation/update_notice"] = dofile(root .. "/src/bridge/presentation/update_notice.lua"),
+    ["api/public"] = { menuSettings = { entries = {} }, hud = {} },
     ["presentation/menu_model"] = dofile(root .. "/src/bridge/presentation/menu_model.lua"),
     ["presentation/menu_characters"] = dofile(
         root .. "/src/bridge/presentation/menu_characters.lua"
@@ -658,6 +659,41 @@ local model = dofile(root .. "/src/bridge/presentation/menu_model.lua")(
     _IsaacLanModules["presentation/menu_characters"](),
     _IsaacLanModules["presentation/menu_locale"](true)
 )
+do
+    local registry = dofile(root .. "/src/bridge/api/menu_settings.lua")(error)
+    local value = 1
+    local remove = registry.register("skin", {
+        id = "hearts",
+        name = "队友血量",
+        choices = { "原版", "隐藏" },
+        onChange = function(index)
+            value = index
+        end,
+    })
+    for _, host in ipairs({ 0, 1 }) do
+        local lobby = { phase = phaseValues.lobby, hosting = host, players = 2, slot = 1 - host }
+        local page = { page = "lan", difficulty = 0, seed = "" }
+        local deps = { character = tostring, modSettings = registry.entries, command = error }
+        local function rows()
+            return model.rows(page, lobby, { 0 }, {}, deps)
+        end
+        local lobbyRows = rows()
+        local index = #lobbyRows - 1
+        assert(lobbyRows[index].label == "Mod 设置")
+        lobbyRows[index].action()
+        assert(rows()[1].label == "队友血量：原版")
+        rows()[1].change(-1)
+        assert(value == 2 and rows()[1].label == "队友血量：隐藏")
+        rows()[1].action()
+        if host == 0 then
+            rows()[2].action()
+        else
+            remove()
+            assert(rows()[index].label == "离开房间")
+        end
+        assert(page.page == "lan" and page.selection == index and value == 1)
+    end
+end
 do
     local localSlot = 0x8002
     local list = {
