@@ -636,6 +636,12 @@ for reason, title in pairs({
         "Long versions were truncated instead of fitting the footer"
     )
 end
+status.compatibilityError = { reason = "luaRuntime", localVersion = "5.3", remoteVersion = "5.4" }
+draw()
+assert(
+    labels["无法加入：游戏的 Lua 运行时不一致"]
+        and labels["房主：Lua 5.4　你：Lua 5.3"]
+)
 status.phase, status.compatibilityError = 1, nil
 draw()
 assert(

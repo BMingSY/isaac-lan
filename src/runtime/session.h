@@ -1,4 +1,5 @@
 #pragma once
+#include "core/lua_version.h"
 #include <windows.h>
 #include <cstdint>
 #include <string>
@@ -16,7 +17,7 @@ void roomLeaving();
 void requestWindowClose();
 bool install(std::uintptr_t image, void (*logger)(const std::string&), void (*halfUpdate)(),
              void (*restorePositions)());
-bool bind(lua_State* state, HMODULE luaModule);
+bool bind(lua_State* state, HMODULE luaModule, isaac::lua::Version version);
 bool halfAllowed();
 void halfStarted();
 void halfCompleted();

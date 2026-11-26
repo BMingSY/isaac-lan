@@ -1,7 +1,7 @@
 local api, wrapping = assert(IsaacLAN), _IsaacLanModules["compat/mods/wrapping"]
 local definition = {
     id = "isaac-lan.compat.eid",
-    adapterVersion = 3,
+    adapterVersion = 4,
     modName = "External Item Descriptions",
     targets = { { workshopId = "836319872" } },
 }
@@ -164,13 +164,9 @@ function definition.dispatch(target, record, ...)
     local lifecycle = record.id == callbacks.MC_POST_NEW_ROOM
         or record.id == callbacks.MC_POST_NEW_LEVEL
         or record.id == callbacks.MC_POST_GAME_STARTED
-    if
-        record.id == callbacks.MC_POST_RENDER
-        or record.id == callbacks.MC_POST_UPDATE
-        or record.id == callbacks.MC_POST_NEW_ROOM
-        or record.id == callbacks.MC_POST_NEW_LEVEL
-        or record.id == callbacks.MC_POST_GAME_STARTED
-    then
+    -- EID moves its description drawing to REPENTOGON's HUD callback when available.
+    local render = record.id == callbacks.MC_POST_RENDER or record.id == callbacks.MC_HUD_RENDER
+    if render or record.id == callbacks.MC_POST_UPDATE or lifecycle then
         if not lan:IsReady() then
             if lifecycle then
                 local pending, args = target.pendingLifecycle, table.pack(...)
@@ -187,7 +183,7 @@ function definition.dispatch(target, record, ...)
         local args = table.pack(...)
         return lan:WithLocalView(function()
             target.mod:setPlayer()
-            if record.id == callbacks.MC_POST_RENDER then
+            if render then
                 return renderRoom(
                     not lan:IsAuthority(),
                     record.original,
