@@ -102,6 +102,7 @@ api/challenges
 api/effect_sync
 api/lifecycle
 api/actions
+api/hud_players
 api/hud
 api/menu_settings
 api/sdk

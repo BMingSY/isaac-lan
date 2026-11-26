@@ -1,17 +1,17 @@
 local mod = RegisterMod("Isaac LAN API example", 1)
 local lan = include("isaac_lan").attach(mod, "isaac-lan.example")
 -- Local lobby choices can use the same SDK on the host and guest.
-if lan.RegisterMenuSetting then
+if lan.OnHUDRender then
     local mode = 1
     lan:RegisterMenuSetting({
-        id = "team-hearts",
-        name = "Team hearts",
+        id = "team-hud",
+        name = "Team HUD",
         choices = { "Default", "Hide", "Numbers" },
         onChange = function(index)
             mode = index
         end,
     })
-    lan:OnHUDHearts("teammates", function(panel)
+    lan:OnHUDRender("hearts", "teammates", function(panel)
         if mode == 2 then
             return true
         elseif mode == 3 and panel.health then
@@ -23,6 +23,23 @@ if lan.RegisterMenuSetting then
                 1,
                 1,
                 1
+            )
+            return true
+        end
+    end)
+    lan:OnHUDRender("activeItem", "teammates", function(panel)
+        if mode == 2 then
+            return true
+        elseif mode == 3 then
+            local item = panel.activeItem
+            Isaac.RenderText(
+                "Charge " .. (item.charge + item.batteryCharge),
+                panel.x,
+                panel.y,
+                1,
+                1,
+                1,
+                panel.alpha
             )
             return true
         end

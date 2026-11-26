@@ -341,8 +341,8 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 | `presentation_player_huds` | 四个主 PlayerHUD，步长 `0x6dc`，调用原生布局与位置函数 | 在本机视图内返回控制器、布局和坐标；过滤隐藏、空槽、无效值和屏幕外坐标，不持有原生对象 |
 | `presentation_minimap` | 复用 `Minimap::Render` 内的纹理绘制观察，读取 `layout::mapConfig` 的纹理、格距和锚点及绘制 quad | 返回本帧实际绘制的小／大地图视图：网格原点中心、横纵格距、屏幕裁剪矩形、透明度和维度，均为普通值。只接受有限数值、正尺寸和轴对齐绘制；不绘制时返回空表；`_IsaacLanMinimapRender` 在本机原生地图绘制后调用，上层可使用当帧坐标追加提示。每次游戏绘制前清空，不保留原生指针、不改写地图或探索状态 |
 | `api_with_hud_players` | 在本机房间的完整临时玩家名单中运行内部采集函数，结束或报错时恢复外层名单 | SDK 仅复制已登记且在线身体的身份与血量，不保留房间或玩家引用 |
-| 心格与主动栏 | `PlayerHUD::RenderHearts` RVA `0x44c9e0`、`RenderActiveItem` RVA `0x44de60`，均为 thiscall，清栈 24 字节 | 只在联机本机视图使用受限的组件开关。心格按当前绘制名单解析绑定身体，向 Lua 传递索引、当帧锚点和缩放。紧凑双子的副行锚点下移 34。隐藏时用屏幕外坐标调用原生方法，保留返回的尺寸向量供后续栏位排版。主动栏可按控制器归属跳过绘制 |
-| 副手绘制 | RVA `0x44fc60`，`ECX=PlayerHUD*`、`XMM3=scale`、栈参数 12 字节 | 仅绘制本机 HUD，保留 receiver、透明度与其他口袋内容；挑战使用完整布局和缩放 1 |
+| 心格、主动栏、饰品 | `PlayerHUD::RenderHearts` RVA `0x44c9e0`、`RenderActiveItem` RVA `0x44de60`，均为 thiscall、清栈 24 字节。饰品 `RenderTrinket` RVA `0x44fa90` 清栈 20 字节 | 联机本机视图按绑定身体筛选隐藏或自绘。向 Lua 传递当帧锚点、缩放，以及主动或饰品的槽号。紧凑双子的副行锚点下移 34。隐藏时用屏幕外坐标调用原生方法，保留返回的尺寸向量供后续栏位排版。主动栏传入原生透明度，饰品使用 1 |
+| 副手绘制 | RVA `0x44fc60`，`ECX=PlayerHUD*`、`XMM3=scale`、栈参数 12 字节 | 仅绘制本机 HUD，保留 receiver、透明度与其他口袋内容；挑战使用完整布局和缩放 1。口袋栏自绘使用布局调整后的锚点、缩放和原生透明度 |
 | 完整副手位置 | 调用点 RVA `0x5beb41`；逻辑宽高 RVA `0x89ee7c/0x89f0d0`，HUD 偏移 `+0x594c/+0x5950` | 使用 `(width-28+offsetX, height-18+offsetY)`，临时栈 Vector 不改写调用方数据 |
 | 百宝袋绘制 | RVA `0x451fd0`，`ECX=PlayerHUD*`、栈 `Vector*`、`XMM2=scale`，被调方清理 4 字节 | 保留寄存器与 SSE；仅借用目标 receiver，本机位置不变，不写入材料或预览缓存 |
 | HUD 终点 | 绘制标记 RVA `0x5bc53c`，参数读取边界 `0x5bcb60` | 原生查询照常执行，仅在 HUD 内替换 EAX 中的借用结果；标量视图不进入玩法或原生容器析构 |
@@ -415,7 +415,7 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 
 `items_collectible_name(id)` 读取配置名称并解析本机 `Items` 翻译键，返回最多 1024 字节的文本；不暴露配置或字符串指针。上述能力不增加同步字段或网络消息，库存、药丸映射与实体沿用现有契约，扩展指纹包含后端与嵌入 Lua 的变更。
 
-`items_active_charge(sprite, slot)` 返回当前主动的原生充能类型和有效容量，分别调用 `Player::GetActiveChargeType`（RVA `0x39a1b0`）与 `GetActiveMaxCharge`（`0x399fa0`），均为 `thiscall(Player*, int)`、`RET 4`。`items_add_active_charge(sprite, slot, amount)` 调用 `AddActiveCharge`（`0x39a220`，`thiscall(Player*, int amount, int slot, bool, bool, bool)`、`RET 20`），三个标志均为 false，返回实际增加量；容量、额外电池槽和充满演出由原生处理。接口沿用发放道具的玩家身份校验，仅接受 0–3 槽和 0–1024 的非负增量，不允许强制溢出或任意内存访问。
+`items_active_charge(sprite, slot)` 返回当前主动的原生充能类型和有效容量，分别调用 `Player::GetActiveChargeType`（RVA `0x39a1b0`）与 `GetActiveMaxCharge`（`0x399fa0`），均为 `thiscall(Player*, int)`、`RET 4`。`items_add_active_charge(sprite, slot, amount)` 调用 `AddActiveCharge`（`0x39a220`，`thiscall(Player*, int amount, int slot, bool, bool, bool)`、`RET 20`），三个标志均为 false，返回实际增加量；容量、额外电池槽和充满演出由原生处理。两端都能在就绪视图中查询已连接身体的有效容量和类型。发放充能仅限权威端。接口仅接受 0–3 槽和 0–1024 的非负增量，不允许强制溢出或任意内存访问。
 
 原生 `Player::TriggerRoomClear` 返回后通知运行层原调用玩家及清房的维度／房间编号；记录原生已经处理的玩家，实际补发在房间模拟退出后执行。通知只表示清房事件，不在后端解释规则，也不替其他房间调用完整的 `TriggerRoomClear`。客机继续抑制原生清房玩法，接受主机库存状态。
 

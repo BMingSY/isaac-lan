@@ -111,9 +111,11 @@ void __attribute__((fastcall)) queueLegacy(void* player, void*, void* config, in
     queueAt(reinterpret_cast<Address>(__builtin_return_address(0)), player, config, charge, flags,
             data, native_items::unavailablePool);
 }
-Address playerArgument(lua_State* L, bool snapshot = false) {
-    if (!rooms::virtualized() || (!snapshot && (runtime::replica() || !rooms::viewReady())) ||
-        lua.rawLength(L, 1) != spriteWrapperBytes)
+enum class PlayerAccess { mutation, view, snapshot };
+Address playerArgument(lua_State* L, PlayerAccess access = PlayerAccess::mutation) {
+    const bool snapshot = access == PlayerAccess::snapshot;
+    if (!rooms::virtualized() || (access == PlayerAccess::mutation && runtime::replica()) ||
+        (!snapshot && !rooms::viewReady()) || lua.rawLength(L, 1) != spriteWrapperBytes)
         return 0;
     const auto wrapper = static_cast<Address*>(lua.toUserdata(L, 1));
     if (!wrapper || !wrapper[1])
@@ -141,7 +143,7 @@ Address playerArgument(lua_State* L, bool snapshot = false) {
 }
 int smeltedTrinkets(lua_State* L) {
     try {
-        const auto actor = playerArgument(L, true);
+        const auto actor = playerArgument(L, PlayerAccess::snapshot);
         if (!actor)
             throw std::runtime_error("Smelted trinkets require a listed player");
         namespace smelted = engine::native_smelted_trinkets;
@@ -185,7 +187,7 @@ int smeltedTrinkets(lua_State* L) {
 }
 int inventoryOrder(lua_State* L) {
     try {
-        const auto actor = playerArgument(L, true);
+        const auto actor = playerArgument(L, PlayerAccess::snapshot);
         if (!actor)
             throw std::runtime_error("Inventory order requires a listed player");
         if (lua.getTop(L) == 1) {
@@ -218,7 +220,7 @@ int inventoryOrder(lua_State* L) {
 }
 int activeData(lua_State* L) {
     try {
-        const auto actor = playerArgument(L, true);
+        const auto actor = playerArgument(L, PlayerAccess::snapshot);
         if (!actor)
             throw std::runtime_error("Active item data requires a listed player");
         if (lua.getTop(L) == 1) {
@@ -267,7 +269,7 @@ Address itemConfig(int id) {
                   : 0;
 }
 int activeCharge(lua_State* L) {
-    const auto actor = playerArgument(L);
+    const auto actor = playerArgument(L, PlayerAccess::view);
     const int slot = static_cast<int>(lua.checkInteger(L, 2));
     if (!actor || slot < 0 || slot >= 4)
         return 0;

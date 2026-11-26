@@ -4,7 +4,7 @@ struct Bindings {
     unsigned game, players, history;
     struct Entry {
         unsigned statPlayerId, frontendStatHUDReset, historyPlayerId, historyHUDRecomputeAll;
-        unsigned playerHUDReset, update, postUpdate, render, hearts, activeItem;
+        unsigned playerHUDReset, update, postUpdate, render, hearts, activeItem, trinket;
     } entry;
     struct Stats {
         unsigned player, cacheStride, cacheCount;
@@ -24,5 +24,5 @@ struct DrawHook {
     void* detour;
     void** original;
 };
-extern const DrawHook heartHook, activeItemHook;
+extern const DrawHook heartHook, activeItemHook, trinketHook;
 } // namespace isaac::engine::native_frontend_hud

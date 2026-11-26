@@ -64,6 +64,12 @@
 ---@field Finish fun(self: IsaacLANChallenge): boolean
 ---@field Close fun(self: IsaacLANChallenge)
 ---@alias IsaacLANHUDAudience 'local'|'teammates'|'all'
+---@alias IsaacLANHUDComponent 'hearts'|'activeItem'|'trinket'|'pocketItems'|'ping'
+---@alias IsaacLANHUDHealth {red: integer, maxRed: integer, soul: integer, blackMask: integer, bone: integer, broken: integer, rotten: integer, eternal: integer, golden: integer}
+---@alias IsaacLANHUDActiveItem {slot: integer, id: integer, charge: integer, batteryCharge: integer, maxCharge: integer?, chargeType: integer?}
+---@alias IsaacLANHUDTrinket {slot: integer, id: integer}
+---@alias IsaacLANHUDPocketItem {slot: integer, kind: 'empty'|'card'|'pill'|'activeItem', id: integer, activeSlot: integer?}
+---@alias IsaacLANHUDResources {coins: integer, bombs: integer, keys: integer, goldenBomb: boolean, goldenKey: boolean, soulCharge: integer, bloodCharge: integer}
 ---@class IsaacLANHUDPlayer
 ---@field ownerId integer
 ---@field playerId string
@@ -71,11 +77,31 @@
 ---@field isLocal boolean
 ---@field unknown boolean Curse of the Unknown.
 ---@field isGhost boolean
----@field health? {red: integer, maxRed: integer, soul: integer, blackMask: integer, bone: integer, broken: integer, rotten: integer, eternal: integer, golden: integer}
----@class IsaacLANHeartPanel: IsaacLANHUDPlayer
+---@field health? IsaacLANHUDHealth
+---@field activeItems IsaacLANHUDActiveItem[]
+---@field trinkets IsaacLANHUDTrinket[]
+---@field pocketItems IsaacLANHUDPocketItem[]
+---@field resources IsaacLANHUDResources
+---@field collectibles? {id: integer, count: integer}[] Present with includeCollectibles.
+---@class IsaacLANHUDPanel
+---@field component IsaacLANHUDComponent
+---@field ownerId integer
+---@field isLocal boolean
+---@field playerId? string Present for a body-bound component.
+---@field playerType? integer
 ---@field x number
 ---@field y number
----@field scale number
+---@field scale number Signed layout scale.
+---@field alpha number
+---@field unknown? boolean Heart panel.
+---@field isGhost? boolean Heart panel.
+---@field health? IsaacLANHUDHealth Visible heart panel.
+---@field activeItem? IsaacLANHUDActiveItem Occupied active slot.
+---@field trinket? IsaacLANHUDTrinket Occupied trinket slot.
+---@field pocketItems? IsaacLANHUDPocketItem[] Pocket panel in display order.
+---@field networkMs? integer Ping label, when measured.
+---@field syncMs? integer Ping label, when measured.
+---@alias IsaacLANHeartPanel IsaacLANHUDPanel
 ---@class IsaacLANMenuSetting
 ---@field id string
 ---@field name string
@@ -96,8 +122,9 @@
 ---@field WithLocalView fun(self: IsaacLANHandle, fn: function): any
 ---@field On fun(self: IsaacLANHandle, event: string, fn: fun(context: table)): function LAN lifecycle subscription.
 ---@field OnLocalRender fun(self: IsaacLANHandle, fn: fun(view: IsaacLANView)): function Per-render callback in the local view.
----@field GetHUDPlayers fun(self: IsaacLANHandle): IsaacLANHUDPlayer[]
----@field HideHUD fun(self: IsaacLANHandle, component: 'hearts'|'activeItem'|'pocketItems', audience: IsaacLANHUDAudience): function
+---@field GetHUDPlayers fun(self: IsaacLANHandle, options?: {includeCollectibles: boolean?}): IsaacLANHUDPlayer[]
+---@field HideHUD fun(self: IsaacLANHandle, component: IsaacLANHUDComponent, audience: IsaacLANHUDAudience): function
+---@field OnHUDRender fun(self: IsaacLANHandle, component: IsaacLANHUDComponent, audience: IsaacLANHUDAudience, draw: fun(panel: IsaacLANHUDPanel): boolean?): function
 ---@field OnHUDHearts fun(self: IsaacLANHandle, audience: IsaacLANHUDAudience, draw: fun(panel: IsaacLANHeartPanel): boolean?): function
 ---@field RegisterMenuSetting fun(self: IsaacLANHandle, definition: IsaacLANMenuSetting): function
 ---@field RegisterChallenge fun(self: IsaacLANHandle, definition: IsaacLANChallengeDefinition): IsaacLANChallenge
@@ -233,16 +260,19 @@ function SDK.create(mod, id, backend)
     end
     -- LAN presentation extensions are inert when the standalone SDK runs in solo.
     local function noop() end
-    function handle:GetHUDPlayers()
-        return not closed and backend and backend.hudPlayers() or {}
+    function handle:GetHUDPlayers(options)
+        return not closed and backend and backend.hudPlayers(options) or {}
     end
     function handle:HideHUD(component, audience)
         attached()
         return backend and own(backend.hideHUD(component, audience)) or noop
     end
-    function handle:OnHUDHearts(audience, draw)
+    function handle:OnHUDRender(component, audience, draw)
         attached()
-        return backend and own(backend.renderHearts(audience, draw)) or noop
+        return backend and own(backend.renderHUD(component, audience, draw)) or noop
+    end
+    function handle:OnHUDHearts(audience, draw)
+        return self:OnHUDRender("hearts", audience, draw)
     end
     function handle:RegisterMenuSetting(definition)
         attached()

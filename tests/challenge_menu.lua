@@ -209,7 +209,7 @@ _IsaacLanModules = {
     ["presentation/vote_progress"] = dofile(root .. "/src/bridge/presentation/vote_progress.lua"),
     ["presentation/animation_skip"] = dofile(root .. "/src/bridge/presentation/animation_skip.lua"),
     ["presentation/update_notice"] = dofile(root .. "/src/bridge/presentation/update_notice.lua"),
-    ["api/public"] = { menuSettings = { entries = {} } },
+    ["api/public"] = { menuSettings = { entries = {} }, hud = {} },
     ["presentation/menu_model"] = dofile(root .. "/src/bridge/presentation/menu_model.lua"),
     ["presentation/menu_characters"] = dofile(
         root .. "/src/bridge/presentation/menu_characters.lua"

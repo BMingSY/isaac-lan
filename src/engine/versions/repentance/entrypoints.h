@@ -68,6 +68,7 @@ inline constexpr std::uint32_t historyHUDGetPlayerId = 0x508000;
 inline constexpr std::uint32_t historyHUDRecomputeAll = 0x507c90;
 inline constexpr std::uint32_t playerHudRenderHearts = 0x4fb8d0;
 inline constexpr std::uint32_t playerHudRenderActiveItem = 0x4fc950;
+inline constexpr std::uint32_t playerHudRenderTrinket = 0x4fe610;
 inline constexpr std::uint32_t playerHUDReset = 0x4f9780;
 inline constexpr std::uint32_t hUDUpdate = 0x5027e0;
 inline constexpr std::uint32_t hUDPostUpdate = 0x502a20;

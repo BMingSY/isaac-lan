@@ -62,6 +62,56 @@ handle:OnHUDHearts("all", function(panel)
         return true
     end
 end)
+local componentHits = {}
+local expectedItem = CollectibleType.COLLECTIBLE_BOOK_OF_BELIAL
+local expectedTrinket = TrinketType.TRINKET_CURVED_HORN
+local expectedPassive = CollectibleType.COLLECTIBLE_SAD_ONION
+for _, component in ipairs({ "activeItem", "trinket", "pocketItems", "ping" }) do
+    handle:OnHUDRender(component, "all", function(panel)
+        if phase ~= 2 then
+            return
+        end
+        assert(panel.component == component and panel.isLocal == (panel.ownerId == localId))
+        assert(type(panel.x) == "number" and type(panel.y) == "number" and panel.scale ~= 0)
+        local text
+        if component == "activeItem" and panel.activeItem.id == expectedItem then
+            assert(
+                panel.activeItem.slot == 0
+                    and panel.activeItem.charge >= 0
+                    and panel.activeItem.maxCharge == 3
+                    and panel.activeItem.chargeType == ItemConfig.CHARGE_NORMAL
+            )
+            text = "A" .. panel.activeItem.charge
+        elseif component == "trinket" and panel.trinket.id == expectedTrinket then
+            assert(panel.trinket.slot == 0)
+            text = "TR"
+        elseif component == "pocketItems" and panel.pocketItems[1].kind == "card" then
+            assert(panel.pocketItems[1].id == Card.CARD_FOOL)
+            text = "CARD"
+        elseif component == "ping" then
+            assert(panel.ownerId == 2 and panel.networkMs and panel.syncMs)
+            text = "RTT"
+        end
+        if text then
+            local key = component .. ":" .. panel.ownerId
+            if not componentHits[key] then
+                report(
+                    string.format(
+                        "HUD_SDK replace=%s x=%.1f y=%.1f scale=%.2f alpha=%.2f",
+                        key,
+                        panel.x,
+                        panel.y,
+                        panel.scale,
+                        panel.alpha
+                    )
+                )
+            end
+            componentHits[key] = true
+            Isaac.RenderText(text, panel.x, panel.y, 1, 0.5, 0, panel.alpha)
+            return true
+        end
+    end)
+end
 local function setPhase(nextPhase)
     for _, release in ipairs(changes) do
         release()
@@ -104,6 +154,39 @@ function _IsaacLanFrame()
     if status.phase == 3 and status.prepared and tick >= 50 and not finished then
         local nextPhase = math.min(4, (tick - 50) // 100)
         if phase ~= nextPhase then
+            if phase == 2 then
+                for _, component in ipairs({ "activeItem", "trinket", "pocketItems" }) do
+                    assert(
+                        componentHits[component .. ":" .. localId],
+                        "Missing local " .. component
+                    )
+                    assert(
+                        componentHits[component .. ":" .. remoteId],
+                        "Missing teammate " .. component
+                    )
+                end
+                assert(componentHits["ping:2"], "Missing RTT panel")
+                local players = handle:GetHUDPlayers({ includeCollectibles = true })
+                assert(#players == 2)
+                for _, body in ipairs(players) do
+                    assert(
+                        body.activeItems[1].id == expectedItem
+                            and body.trinkets[1].id == expectedTrinket
+                    )
+                    assert(
+                        body.pocketItems[1].kind == "card"
+                            and body.pocketItems[1].id == Card.CARD_FOOL
+                    )
+                    assert(type(body.resources.coins) == "number")
+                    local found = false
+                    for _, item in ipairs(body.collectibles) do
+                        if item.id == expectedPassive and item.count == 1 then
+                            found = true
+                        end
+                    end
+                    assert(found, "Missing passive item for " .. body.playerId)
+                end
+            end
             if phase >= 0 then
                 assert(hits[phase][localId], "Local heart panel missing " .. phase)
                 assert(
@@ -165,6 +248,8 @@ _IsaacLan.net_gate = function(capture, before, ...)
             for i = 0, Game():GetNumPlayers() - 1 do
                 local player = Isaac.GetPlayer(i)
                 player:AddCollectible(CollectibleType.COLLECTIBLE_BOOK_OF_BELIAL, 3, false)
+                player:AddCollectible(expectedPassive)
+                player:AddTrinket(expectedTrinket)
                 player:SetCard(0, Card.CARD_FOOL)
             end
         end

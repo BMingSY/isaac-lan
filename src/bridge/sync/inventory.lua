@@ -347,6 +347,21 @@ return function(fields)
             end
             return #a[Inventory.trinkets] == #b[Inventory.trinkets]
         end
-        return { capture = inventory, apply = applyInventory, sameItems = sameItems }
+        local function passiveItems(player, catalog)
+            local result, owned = {}, reader(player)
+            for _, id in ipairs(catalogItems(catalog, true)) do
+                local amount = owned(id)
+                if amount > 0 then
+                    result[#result + 1] = { id = id, count = amount }
+                end
+            end
+            return result
+        end
+        return {
+            capture = inventory,
+            apply = applyInventory,
+            sameItems = sameItems,
+            passiveItems = passiveItems,
+        }
     end
 end

@@ -71,8 +71,9 @@ return function(root)
                 runId = p.runId or string.rep("a", 32),
             }
         end
-        function native.presentation_hud_filters(hearts, active, pocket, render)
-            p.hudFilters = { hearts, active, pocket, render }
+        function native.presentation_hud_filters(component, hidden, rendered)
+            p.hudFilters = p.hudFilters or {}
+            p.hudFilters[component] = { hidden, rendered }
         end
         function native.api_nonce()
             return string.rep(tostring(slot + 1), 32)
@@ -148,6 +149,7 @@ return function(root)
             "api/codec",
             "api/lifecycle",
             "api/actions",
+            "api/hud_players",
             "api/hud",
             "api/menu_settings",
             "api/sdk",

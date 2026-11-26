@@ -4,8 +4,12 @@ local host, guest = runtime.peer(0), runtime.peer(1)
 local h, g = host.api:Attach({}, "skin"), guest.api:Attach({}, "skin")
 local other = guest.api:Attach({}, "backup")
 local function expect(peer, hearts, active, pocket, render)
-    local v = peer.hudFilters or { 0, 0, 0, false }
-    assert(v[1] == hearts and v[2] == active and v[3] == pocket and v[4] == render)
+    local filters = peer.hudFilters or {}
+    local heart = filters.hearts or { 0, 0 }
+    assert(heart[1] == hearts and (heart[2] ~= 0) == render)
+    assert(
+        (filters.activeItem or { 0 })[1] == active and (filters.pocketItems or { 0 })[1] == pocket
+    )
 end
 local function invalid(fn, message)
     local ok, reason = pcall(fn)
@@ -74,7 +78,61 @@ for _, actor in ipairs(guest.actors) do
         return ghost
     end
 end
-local draw = guest.env._IsaacLanRenderHearts
+local function draw(index, x, y, scale)
+    return guest.env._IsaacLanRenderHUD("hearts", index, x, y, scale, 1, -1)
+end
+local reads = 0
+guest.bridge.readHUDCollectibles = function(player, catalog)
+    reads = reads + 1
+    catalog.read = true
+    return { { id = -2, count = player.hash } }
+end
+for _, actor in ipairs(guest.actors) do
+    function actor:GetSprite()
+        return self
+    end
+    function actor:GetActiveItem(slot)
+        return ({ 42, 0, 333, 0 })[slot + 1]
+    end
+    function actor:GetActiveCharge(slot)
+        return slot + 1
+    end
+    function actor:GetBatteryCharge(slot)
+        return slot + 2
+    end
+    function actor:GetTrinket(slot)
+        return slot == 0 and 32769 or 0
+    end
+    function actor:GetNumCoins()
+        return self.hash
+    end
+    function actor:GetNumKeys()
+        return 2
+    end
+    function actor:GetNumBombs()
+        return 7
+    end
+    function actor:HasGoldenBomb()
+        return true
+    end
+    function actor:HasGoldenKey()
+        return false
+    end
+    function actor:GetSoulCharge()
+        return 1
+    end
+    function actor:GetBloodCharge()
+        return 3
+    end
+end
+guest.env._IsaacLan.items_active_charge = function(sprite, slot)
+    assert(sprite:GetActiveItem(slot) ~= 0)
+    return 1, 6
+end
+guest.env._IsaacLan.actor_pockets = function(sprite)
+    assert(sprite.hash)
+    return string.pack(">I4I4I4I4I4I4I4I4", 11, 1, 3, 2, 2050, 0, 0, 1)
+end
 local faulty = 0
 g:OnHUDHearts("teammates", function(panel)
     faulty = faulty + 1
@@ -115,6 +173,83 @@ g:WithLocalView(function()
     assert(#g:GetHUDPlayers() == 2)
     guest.connected = nil
 end)
+assert(reads == 0)
+local snapshot = g:GetHUDPlayers({ includeCollectibles = true })[1]
+assert(reads == 3 and snapshot.collectibles[1].id == -2)
+assert(
+    #snapshot.activeItems == 4
+        and snapshot.activeItems[3].slot == 2
+        and snapshot.activeItems[3].id == 333
+)
+assert(snapshot.activeItems[3].charge == 3 and snapshot.activeItems[3].batteryCharge == 4)
+assert(
+    snapshot.activeItems[1].maxCharge == 6
+        and snapshot.activeItems[1].chargeType == 1
+        and snapshot.activeItems[2].maxCharge == nil
+)
+assert(snapshot.trinkets[1].id == 32769 and snapshot.trinkets[2].id == 0)
+assert(snapshot.pocketItems[1].kind == "card" and snapshot.pocketItems[1].id == 11)
+assert(
+    snapshot.pocketItems[2].kind == "activeItem"
+        and snapshot.pocketItems[2].activeSlot == 2
+        and snapshot.pocketItems[2].id == 333
+)
+assert(
+    snapshot.pocketItems[3].kind == "pill"
+        and snapshot.pocketItems[3].id == 2050
+        and snapshot.pocketItems[4].kind == "empty"
+)
+assert(
+    snapshot.resources.coins == 11
+        and snapshot.resources.goldenBomb
+        and not snapshot.resources.goldenKey
+)
+snapshot.collectibles[1].count = -5
+assert(
+    g:GetHUDPlayers({ includeCollectibles = true })[1].collectibles[1].count == 11 and reads == 3
+)
+assert(g:GetHUDPlayers()[1].collectibles == nil)
+guest.bridge.commit()
+assert(
+    g:GetHUDPlayers({ includeCollectibles = true })[1].collectibles[1].count == 11 and reads == 6
+)
+invalid(function()
+    g:GetHUDPlayers({ includeCollectibles = 1 })
+end, "invalid_hud_options")
+local calls = {}
+for _, component in ipairs({ "activeItem", "trinket", "pocketItems", "ping" }) do
+    g:OnHUDRender(component, "teammates", function(panel)
+        assert(
+            panel.component == component and panel.x == 12 and panel.y == 13 and panel.ownerId == 1
+        )
+        assert(panel.alpha == (component == "ping" and 1 or 0.25) and not panel.isLocal)
+        assert(panel.health == nil and panel.collectibles == nil)
+        if component == "activeItem" then
+            assert(panel.activeItem.slot == 2 and panel.activeItem.id == 333)
+        elseif component == "trinket" then
+            assert(panel.trinket.slot == 0 and panel.trinket.id == 32769)
+        elseif component == "pocketItems" then
+            assert(panel.pocketItems[2].id == 333)
+        else
+            assert(panel.networkMs == 0 and panel.syncMs == nil and panel.playerId == nil)
+        end
+        calls[component] = (calls[component] or 0) + 1
+        return true
+    end)
+end
+local componentDraw = guest.env._IsaacLanRenderHUD
+assert(componentDraw("activeItem", 0, 12, 13, -0.5, 0.25, 2))
+assert(not componentDraw("activeItem", 0, 12, 13, -0.5, 0.25, 1))
+assert(not componentDraw("activeItem", 1, 12, 13, -0.5, 0.25, 2))
+assert(componentDraw("trinket", 0, 12, 13, 0.5, 0.25, 0))
+assert(not componentDraw("trinket", 0, 12, 13, 0.5, 0.25, 1))
+assert(componentDraw("pocketItems", 0, 12, 13, 0.5, 0.25, -1))
+local ping = guest.bridge.hud.ping
+local show = g:HideHUD("ping", "teammates")
+assert(ping(1, 12, 13, 0.6, 0, -1) and calls.ping == nil)
+show()
+assert(ping(1, 12, 13, 0.6, 0, -1) and calls.ping == 1)
+assert(not ping(2, 12, 13, 0.6, 0, 0) and calls.ping == 1)
 assert(draw(0, 17, 22, 0.75) and faulty == 1 and #guest.logs == 1)
 unknown = 64
 assert(g:GetHUDPlayers()[1].health == nil)

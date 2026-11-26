@@ -36,7 +36,7 @@
 | 内容 | 归属 |
 | --- | --- |
 | 背景、镜头和地图焦点 | 本机角色所在房间 |
-| 血量、卡牌、主动栏 | 默认使用原版多人 HUD。各端的 Mod 可独立隐藏栏位，或在各身体的心格位置接管绘制，见[显示接口](https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-api-reference.md#联机-hud-与大厅设置) |
+| 血量、主动道具、饰品、口袋栏 | 默认使用原版多人 HUD。各端的 Mod 可按身体所属玩家隐藏组件或接管对应栏位的绘制，见[显示接口](https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-api-reference.md#联机-hud-与大厅设置) |
 | 属性栏、道具列表、拾取提示 | 本机控制器角色 |
 | Ping／同步 | 对应在线客机的 HUD，使用 `Ping 50 ms / 同步 84 ms` 的格式，每项保留名称与单位；未测得或过期显示 `—`，房主自身不显示 |
 | 地图与 Mod 界面操作 | 本机物理输入 |

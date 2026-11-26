@@ -23,7 +23,8 @@ local Command = _IsaacLan.net_commands()
 local drawVote = _IsaacLanModules["presentation/vote_progress"]()
 local renderRestart = _IsaacLanModules["presentation/restart"](drawVote)
 local renderSkip = _IsaacLanModules["presentation/animation_skip"](drawVote)
-local renderPing = _IsaacLanModules["presentation/ping"](_IsaacLan, Phase)
+local renderPing =
+    _IsaacLanModules["presentation/ping"](_IsaacLan, Phase, _IsaacLanModules["api/public"].hud.ping)
 -- menu_key reports Windows virtual-key codes from the native frontend.
 local Key = {
     escape = 27,

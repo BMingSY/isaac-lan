@@ -238,6 +238,7 @@ inline constexpr std::uint32_t hUDPostUpdate = 0x5ba290;
 inline constexpr std::uint32_t hUDUpdate = 0x5ba0f0;
 inline constexpr std::uint32_t playerHudRenderHearts = 0x44c9e0;
 inline constexpr std::uint32_t playerHudRenderActiveItem = 0x44de60;
+inline constexpr std::uint32_t playerHudRenderTrinket = 0x44fa90;
 inline constexpr std::uint32_t playerHUDReset = 0x44aa10;
 inline constexpr std::uint32_t playerHUDInventorySlot = 0x44bf06;
 inline constexpr std::uint32_t playerHUDInventoryHistory = 0x44bfa6;

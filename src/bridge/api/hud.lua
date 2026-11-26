@@ -1,128 +1,122 @@
--- All registrations belong to this Lua VM. Only the three audience masks and
--- presence of a renderer cross the native boundary.
-return function(bridge, native)
+-- Registrations are local to one VM. Native components receive only audience masks.
+return function(bridge, native, snapshots)
     local audiences = { ["local"] = 1, teammates = 2, all = 3 }
-    local hidden = { hearts = {}, activeItem = {}, pocketItems = {} }
-    local renderers = {}
-    local function mask(entries)
-        local value = 0
-        for _, bits in pairs(entries) do
-            value = value | bits
+    local components = {}
+    for _, name in ipairs({ "hearts", "activeItem", "trinket", "pocketItems", "ping" }) do
+        components[name] = { hidden = {}, renderers = {}, hideMask = 0, drawMask = 0 }
+    end
+    local function changed(name, group)
+        local hidden, drawn = 0, 0
+        for _, bits in pairs(group.hidden) do
+            hidden = hidden | bits
         end
-        return value
+        for _, entry in ipairs(group.renderers) do
+            drawn = drawn | entry.bits
+        end
+        group.hideMask, group.drawMask = hidden, drawn
+        if name ~= "ping" then
+            native.presentation_hud_filters(name, hidden, drawn)
+        end
     end
-    local function changed()
-        native.presentation_hud_filters(
-            mask(hidden.hearts),
-            mask(hidden.activeItem),
-            mask(hidden.pocketItems),
-            #renderers > 0
-        )
-    end
-    local hud = {}
-    function hud.hide(component, audience)
-        local entries = assert(hidden[component], "invalid_hud_component")
+    local hud = { players = snapshots.players, reset = snapshots.reset }
+    function hud.hide(name, audience)
+        local group = assert(components[name], "invalid_hud_component")
         local token = {}
-        entries[token] = assert(audiences[audience], "invalid_hud_audience")
-        changed()
+        group.hidden[token] = assert(audiences[audience], "invalid_hud_audience")
+        changed(name, group)
         return function()
-            entries[token] = nil
-            changed()
+            group.hidden[token] = nil
+            changed(name, group)
         end
     end
-    function hud.subscribe(id, audience, fn)
+    function hud.subscribe(id, name, audience, fn)
+        local group = assert(components[name], "invalid_hud_component")
         local bits = assert(audiences[audience], "invalid_hud_audience")
-        assert(type(fn) == "function", "invalid_heart_renderer")
+        assert(type(fn) == "function", "invalid_hud_renderer")
         local entry = { id = id, bits = bits, fn = fn }
-        renderers[#renderers + 1] = entry
-        changed()
+        table.insert(group.renderers, entry)
+        changed(name, group)
         function entry.remove()
             entry.fn = nil
-            -- A renderer may close its handle or register another renderer while drawing.
+            -- A callback may unregister itself or another renderer during this draw.
             local remaining = {}
-            for _, other in ipairs(renderers) do
+            for _, other in ipairs(group.renderers) do
                 if other ~= entry then
                     remaining[#remaining + 1] = other
                 end
             end
-            renderers = remaining
-            changed()
+            group.renderers = remaining
+            changed(name, group)
         end
         return entry.remove
     end
-    local function snapshot(player, identity, isLocal, x, y, scale)
-        local unknown = Game():GetLevel():GetCurses() & LevelCurse.CURSE_OF_THE_UNKNOWN ~= 0
-        local ghost = player:IsCoopGhost()
-        return {
-            playerId = identity.id,
-            ownerId = identity.owner,
-            isLocal = isLocal,
-            playerType = player:GetPlayerType(),
-            x = x,
-            y = y,
-            scale = scale,
-            unknown = unknown,
-            isGhost = ghost,
-            health = not unknown and not ghost and {
-                red = player:GetHearts(),
-                maxRed = player:GetMaxHearts(),
-                soul = player:GetSoulHearts(),
-                blackMask = player:GetBlackHearts(),
-                bone = player:GetBoneHearts(),
-                broken = player:GetBrokenHearts(),
-                rotten = player:GetRottenHearts(),
-                eternal = player:GetEternalHearts(),
-                golden = player:GetGoldenHearts(),
-            } or nil,
-        }
-    end
-    function hud.players()
-        local players = {}
-        if bridge.ready() then
-            local info = bridge.info()
-            -- Collect values synchronously, even if the caller is already inside a
-            -- local-only render callback. Never let a borrowed team actor escape.
-            native.api_with_hud_players(function()
-                for index = 0, Game():GetNumPlayers() - 1 do
-                    local player = Isaac.GetPlayer(index)
-                    local id = bridge.identities[GetPtrHash(player)]
-                    if id and info.connected & (1 << (id.owner - 1)) ~= 0 then
-                        players[#players + 1] = snapshot(player, id, id.owner == info.slot + 1)
-                    end
-                end
-            end)
-        end
-        return players
-    end
-    function hud.render(index, x, y, scale)
-        if #renderers == 0 or not bridge.ready() then
-            return false
-        end
-        -- Resolve the actual bound body before switching to the local-only Lua view.
-        local player = Isaac.GetPlayer(index)
-        local identity = player and bridge.identities[GetPtrHash(player)]
-        if not identity then
-            return false
-        end
-        local isLocal = identity.owner == bridge.info().slot + 1
-        local bit = isLocal and audiences["local"] or audiences.teammates
-        local current, panel = renderers, nil
+    local function dispatch(group, bit, panel)
+        local current = group.renderers
         for i = 1, #current do
             local entry = current[i]
-            if entry.fn and entry.bits & bit ~= 0 then
-                panel = panel or snapshot(player, identity, isLocal, x, y, scale)
+            if entry.fn and not entry.drawing and entry.bits & bit ~= 0 then
+                entry.drawing = true
                 local ok, claimed = pcall(bridge.withView, function()
                     return entry.fn(bridge.copy(panel))
                 end)
+                entry.drawing = nil
                 if not ok then
                     entry.remove()
-                    bridge.log(entry.id .. " heart_renderer_disabled=" .. tostring(claimed))
+                    bridge.log(
+                        entry.id
+                            .. " hud_renderer_disabled="
+                            .. panel.component
+                            .. " "
+                            .. tostring(claimed)
+                    )
                 elseif claimed == true then
                     return true
                 end
             end
         end
         return false
+    end
+    function hud.render(name, index, x, y, scale, alpha, slot)
+        local group = components[name]
+        if group.drawMask == 0 or not bridge.ready() then
+            return false
+        end
+        local panel = snapshots.panel(name, index, x, y, scale, alpha, slot)
+        return panel
+                and dispatch(
+                    group,
+                    panel.isLocal and audiences["local"] or audiences.teammates,
+                    panel
+                )
+            or false
+    end
+    function hud.ping(owner, x, y, scale, network, sync)
+        local group = components.ping
+        if group.hideMask == 0 and group.drawMask == 0 then
+            return false
+        end
+        if not bridge.ready() then
+            return false
+        end
+        local isLocal = owner == bridge.info().slot + 1
+        local bit = isLocal and audiences["local"] or audiences.teammates
+        if group.hideMask & bit ~= 0 then
+            return true
+        end
+        if group.drawMask & bit == 0 then
+            return false
+        end
+        return dispatch(group, bit, {
+            component = "ping",
+            ownerId = owner,
+            isLocal = isLocal,
+            x = x,
+            y = y,
+            scale = scale,
+            alpha = 1,
+            networkMs = network and network >= 0 and network or nil,
+            syncMs = sync and sync >= 0 and sync or nil,
+        })
     end
     return hud
 end

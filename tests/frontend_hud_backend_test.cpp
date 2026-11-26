@@ -10,15 +10,17 @@ constexpr unsigned gameGlobal = 0x7fd65c, playersOffset = 0x1ba50, historyOffset
 constexpr unsigned controllerOffset = 0x154c, indexOffset = 0x1550, twinOffset = 0x1d80,
                    kindOffset = 0x130c, parentOffset = 0x314, activeOffset = 0x16a;
 constexpr unsigned partSize = 0x6b0, refreshOffset = 0x6a0;
-constexpr std::array<unsigned, 10> entries{0x508370, 0x508400, 0x508000, 0x507c90, 0x4f9780,
-                                           0x5027e0, 0x502a20, 0x504610, 0x4fb8d0, 0x4fc950};
+constexpr std::array<unsigned, 11> entries{0x508370, 0x508400, 0x508000, 0x507c90,
+                                           0x4f9780, 0x5027e0, 0x502a20, 0x504610,
+                                           0x4fb8d0, 0x4fc950, 0x4fe610};
 #else
 constexpr unsigned gameGlobal = 0x89a5f8, playersOffset = 0x1baa8, historyOffset = 0x5c54;
 constexpr unsigned controllerOffset = 0x161c, indexOffset = 0x1620, twinOffset = 0x1e68,
                    kindOffset = 0x13c4, parentOffset = 0x3bc, activeOffset = 0x172;
 constexpr unsigned partSize = 0x6dc, refreshOffset = 0x6ac;
-constexpr std::array<unsigned, 10> entries{0x454a20, 0x454ac0, 0x444510, 0x4441a0, 0x44aa10,
-                                           0x5ba0f0, 0x5ba290, 0x5bb510, 0x44c9e0, 0x44de60};
+constexpr std::array<unsigned, 11> entries{0x454a20, 0x454ac0, 0x444510, 0x4441a0,
+                                           0x44aa10, 0x5ba0f0, 0x5ba290, 0x5bb510,
+                                           0x44c9e0, 0x44de60, 0x44fa90};
 #endif
 namespace {
 namespace view = isaac::engine::native_frontend_hud;
@@ -90,7 +92,7 @@ using Point = view::Point;
 constexpr Point nativeOrigin{58.f, 31.f}, nativeExtent{24.f, 12.f};
 void* const spriteToken = reinterpret_cast<void*>(0x5e11u);
 Point lastOrigin{};
-unsigned activeCalls = 0;
+unsigned activeCalls = 0, trinketCalls = 0;
 #ifdef ISAAC_LAN_TEST_REPENTANCE
 Point* __attribute__((fastcall)) heartsNative(void*, void*, Point* extent, void* sprite,
                                               const Point* pos, float scale) {
@@ -117,22 +119,47 @@ void __attribute__((fastcall)) activeNative(void*, void*, unsigned slot, const P
             "Changed active item arguments");
     ++activeCalls;
 }
-void checkDraw(void* part, bool heartsVisible, bool activeVisible) {
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+extern "C" {
+void* hud_slot_target = nullptr;
+__attribute__((naked)) void callSlotWithScale() {
+    __asm__ __volatile__("movl $0x3f000000, %eax\n\tmovd %eax, %xmm3\n\tjmp *_hud_slot_target");
+}
+}
+void __attribute__((fastcall)) trinketNative(void*, void*, unsigned slot, const Point* pos) {
+    float scale;
+    __asm__ __volatile__("movss %%xmm3,%0" : "=m"(scale));
+    require(scale == 0.5f, "Changed native trinket register scale");
+#else
+void __attribute__((fastcall)) trinketNative(void*, void*, unsigned slot, const Point* pos,
+                                             float unused, float scale, bool effect) {
+    require(unused == 0.75f && scale == 0.5f && effect, "Changed trinket layout arguments");
+#endif
+    require(slot == 1 && pos == &nativeOrigin, "Changed trinket slot or position");
+    ++trinketCalls;
+}
+void checkDraw(void* part, bool heartsVisible, bool activeVisible, bool trinketVisible = true) {
     const auto bits = [](float value) { return std::bit_cast<unsigned>(value); };
     Point extent{};
-    const auto calls = activeCalls;
+    const auto calls = activeCalls, trinkets = trinketCalls;
 #ifdef ISAAC_LAN_TEST_REPENTANCE
     const auto heart = native_fixture::call(
         image + entries[8], part,
         {address(&extent), address(spriteToken), address(&nativeOrigin), bits(0.75f)});
-    const auto item = native_fixture::call(image + entries[9], part,
+    hud_slot_target = image + entries[9];
+    const auto item = native_fixture::call(reinterpret_cast<void*>(callSlotWithScale), part,
                                            {1, address(&nativeOrigin), bits(0.75f), bits(1.f)});
+    hud_slot_target = image + entries[10];
+    const auto trinket = native_fixture::call(reinterpret_cast<void*>(callSlotWithScale), part,
+                                              {1, address(&nativeOrigin)});
 #else
     const auto heart = native_fixture::call(image + entries[8], part,
                                             {address(&extent), address(spriteToken), 3, bits(0.75f),
                                              bits(nativeOrigin.x), bits(nativeOrigin.y)});
     const auto item = native_fixture::call(
         image + entries[9], part, {1, address(&nativeOrigin), 3, bits(1.f), bits(0.75f), 1});
+    const auto trinket = native_fixture::call(
+        image + entries[10], part, {1, address(&nativeOrigin), bits(0.75f), bits(0.5f), 1});
 #endif
     require(heart.balanced && heart.preserved && heart.eax == address(&extent) &&
                 extent.x == nativeExtent.x && extent.y == nativeExtent.y,
@@ -141,20 +168,24 @@ void checkDraw(void* part, bool heartsVisible, bool activeVisible) {
     require(lastOrigin.x == expected.x && lastOrigin.y == expected.y, "Wrong heart visibility");
     require(item.balanced && item.preserved && activeCalls == calls + unsigned(activeVisible),
             "Wrong active item visibility or ABI");
+    require(trinket.balanced && trinket.preserved &&
+                trinketCalls == trinkets + unsigned(trinketVisible),
+            "Wrong trinket visibility or ABI");
 }
 void installHooks() {
-    const std::array<void*, 10> functions{
+    const std::array<void*, 11> functions{
         reinterpret_cast<void*>(statNative),     reinterpret_cast<void*>(resetStats),
         reinterpret_cast<void*>(historyNative),  reinterpret_cast<void*>(recomputeHistory),
         reinterpret_cast<void*>(resetPlayerHud), reinterpret_cast<void*>(updateNative),
         reinterpret_cast<void*>(postNative),     reinterpret_cast<void*>(renderNative),
-        reinterpret_cast<void*>(heartsNative),   reinterpret_cast<void*>(activeNative)};
+        reinterpret_cast<void*>(heartsNative),   reinterpret_cast<void*>(activeNative),
+        reinterpret_cast<void*>(trinketNative)};
     for (unsigned i = 0; i < entries.size(); ++i)
         jump(image + entries[i], functions[i]);
     FlushInstructionCache(GetCurrentProcess(), image, privateGameImageBytes);
     require(!view::install(0), "Null image installed frontend HUD hooks");
-    const std::array<unsigned, 7> hooks{entries[0], entries[2], entries[5], entries[6],
-                                        entries[7], entries[8], entries[9]};
+    const std::array<unsigned, 8> hooks{entries[0], entries[2], entries[5], entries[6],
+                                        entries[7], entries[8], entries[9], entries[10]};
     for (unsigned conflict = 0; conflict < hooks.size(); ++conflict) {
         auto* target = image + hooks[conflict];
         require(MH_CreateHook(target, functions[0], nullptr) == MH_OK, "Create foreign HUD hook");
@@ -261,14 +292,37 @@ int main() {
                 "Repeated HUD binding reset owned caches again");
         auto* twinHud = hud.data() + 5 * partSize;
         field<short>(twinHud, 8) = 5;
-        view::filters = {2, 1, 0};
-        checkDraw(hud.data(), false, true);
+        using Component = view::Component;
+        view::configure(Component::hearts, {2, 0}, nullptr);
+        view::configure(Component::activeItem, {1, 0}, nullptr);
+        view::configure(Component::trinket, {2, 0}, nullptr);
+        checkDraw(hud.data(), false, true, false);
         checkDraw(twinHud, true, false);
         localSlot = -1;
         checkDraw(hud.data(), true, true);
         localSlot = 1;
-        view::filters = {};
-        view::setHeartRenderer([](unsigned index, Point position, float scale) {
+        view::resetFilters();
+        const auto render = [](Component component, unsigned index, const view::Draw& draw) {
+            const auto position = draw.position;
+            const auto scale = draw.scale;
+            if (component != Component::hearts) {
+                require(index == 1 && draw.slot == 1 && position.x == nativeOrigin.x &&
+                            position.y == nativeOrigin.y,
+                        "Inventory renderer received the wrong body, slot or position");
+                if (component == Component::trinket)
+                    require(scale == 0.5f && draw.alpha == 1, "Trinket renderer lost scale");
+                else {
+#ifdef ISAAC_LAN_TEST_REPENTANCE
+                    constexpr float expectedScale = 0.5f;
+#else
+                    constexpr float expectedScale = 1.f;
+#endif
+                    require(component == Component::activeItem && scale == expectedScale &&
+                                draw.alpha == 0.75f,
+                            "Active renderer lost scale or alpha");
+                }
+                return true;
+            }
             require(index == 1 && position.x == nativeOrigin.x && scale == 0.75f,
                     "Renderer identified the wrong twin or anchor");
 #ifdef ISAAC_LAN_TEST_REPENTANCE
@@ -277,9 +331,12 @@ int main() {
             require(position.y == nativeOrigin.y + 34.f, "Wrong compact Esau Y");
 #endif
             return true;
-        });
-        checkDraw(twinHud, false, true);
-        view::setHeartRenderer(nullptr);
+        };
+        for (auto component : {Component::hearts, Component::activeItem, Component::trinket})
+            view::configure(component, {0, 1}, render);
+        checkDraw(twinHud, false, false, false);
+        checkDraw(hud.data(), true, true);
+        view::resetFilters();
         checkDraw(twinHud, true, true);
         roster = {address(players[1].data()), address(players[0].data())};
         setRoster();
@@ -350,7 +407,7 @@ int main() {
         const auto noGame = hud;
         callHud(6);
         require(hud == noGame && !depth, "Released Game changed native HUD bindings");
-        for (auto index : {0u, 2u, 5u, 6u, 7u, 8u, 9u})
+        for (auto index : {0u, 2u, 5u, 6u, 7u, 8u, 9u, 10u})
             require(MH_RemoveHook(image + entries[index]) == MH_OK,
                     "Remove frontend HUD fixture hook");
         require(MH_Uninitialize() == MH_OK, "Uninitialize frontend HUD fixture");

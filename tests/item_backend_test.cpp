@@ -378,7 +378,10 @@ void inventoryAndCharge() {
     }
     state.args[1] = 2;
     replica = true;
-    require(items::activeCharge(&state) == 0, "Replica modified native item state");
+    state.results.clear();
+    require(items::activeCharge(&state) == 2 && state.results == std::vector<long long>({1, 6}) &&
+                items::addActiveCharge(&state) == 0 && chargeCalls == 1,
+            "Replica HUD lost read-only charge data or granted a charge");
     replica = false;
     wrapperSize = 16;
     require(items::addActiveCharge(&state) == 0 && chargeCalls == 1,
