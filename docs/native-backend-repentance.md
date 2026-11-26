@@ -4,6 +4,8 @@
 
 目标游戏程序 SHA-256 为 `04469d0c3d3581936fcf85bea5f9f4f3a65b2ccf96b36310456c9626bac36dc6`，架构为 Windows x86。版本标记、PE 节区、Lua DLL 和资料目录以 [profile.json](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance/profile.json) 为准。两端须使用相同游戏和扩展构建，不能与忏悔＋混联。
 
+同时安装忏悔龙（REPENTOGON）时，LAN 在游戏入口校验原生签名并准备资料目录。J835 首次调用 OpenAL 的 `alcOpenDevice` 会初始化 DirectSound。该调用返回后，LAN 才安装更新、绘制和 Lua 初始化钩子。联机帧调度调用已安装的忏悔龙更新链，每个获准推进的游戏步只调用一次。LAN 从游戏实际导入的状态创建、栈操作及关闭函数识别 Lua 5.3 或 5.4，所有绑定使用同一个运行库。[启动绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance/bootstrap.cpp) · [运行库识别](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/game_lua.h)
+
 `LuaEngine::Init` 为 `thiscall void(LuaEngine*, bool)`，入口和签名位于 [entrypoints.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance/entrypoints.h) 与 [signatures.inc](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance/signatures.inc)。初始化完成后的 Lua 状态指针位于 `LuaEngine + 0x18`，只可借用；状态的创建、重置和销毁仍由游戏持有。初始化可能在同一进程内重复发生，不能将先前状态的引用、注册表键或回调复用于新状态。该入口资料不授权其他布局读写，也不代表完整 ABI 验收。
 
 原生文件打开观察使用游戏自己的 `fopen` 导入，成功的写入打开只通知日志组件，不借用、关闭或替换游戏 CRT 的 FILE 对象。忏悔不导入 MSVC `_Fiopen`；共享组件仅在该导入存在时安装 C++ 流观察，存在但不可写的 IAT 槽仍使启动失败。安装失败恢复已替换的 stdio 槽，观察异常不改变原生返回值或 LastError。

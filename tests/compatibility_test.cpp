@@ -31,6 +31,31 @@ void contract() {
             CompatibilityIssue::protocol,
         "Same build bypassed protocol check");
 }
+void runtimes() {
+    using isaac::lua::Version;
+    require(runtimeFingerprint({}, Version::v54).empty(), "Runtime label accepted an empty build");
+    const std::string hash(64, 'a');
+    const BuildIdentity original{"0.11.1", runtimeFingerprint(hash, Version::v53)};
+    const BuildIdentity alternate{"0.11.1", runtimeFingerprint(hash, Version::v54)};
+    require(original.fingerprint == hash, "Original runtime changed the saved build identity");
+    require(original.fingerprint != alternate.fingerprint,
+            "Cross-runtime archive identity collided");
+    for (const auto& build : {original, alternate})
+        require(!checkCompatibility(build, readCompatibility(compatibilityPacket(build))),
+                "Peers sharing a Lua runtime could not join");
+    for (const auto& peers : {std::pair{original, alternate}, std::pair{alternate, original}}) {
+        const auto failure =
+            checkCompatibility(peers.first, readCompatibility(compatibilityPacket(peers.second)));
+        require(failure && failure->issue == CompatibilityIssue::luaRuntime &&
+                    failure->localVersion == (peers.first == original ? "5.3" : "5.4") &&
+                    failure->remoteVersion == (peers.second == original ? "5.3" : "5.4"),
+                "Mixed Lua runtimes were admitted or misreported");
+    }
+    require(checkCompatibility(alternate,
+                               {alternate.version, runtimeFingerprint("other", Version::v54)})
+                    ->issue == CompatibilityIssue::fingerprint,
+            "Equal Lua versions bypassed the build comparison");
+}
 void malformed() {
     const auto packet = compatibilityPacket({"0.6.0", "dll-fingerprint"});
     for (std::size_t size = 0; size < packet.size(); ++size)
@@ -64,5 +89,6 @@ void malformed() {
 }
 } // namespace
 int main(int argc, char** argv) {
-    return runTests(argc, argv, {{"contract", contract}, {"malformed", malformed}});
+    return runTests(argc, argv,
+                    {{"contract", contract}, {"runtimes", runtimes}, {"malformed", malformed}});
 }

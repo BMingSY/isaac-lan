@@ -18,5 +18,5 @@ void configureConnection(const std::filesystem::path& path);
 void configureChat(const chat::Appearance& appearance,
                    const presentation::ChatBackground& background);
 bool install(std::uintptr_t image, const std::wstring& root, void (*log)(const std::string&),
-             int(__cdecl* bind)(lua_State*), bool installed = false);
+             int(__cdecl* bind)(lua_State*), HMODULE luaModule, bool installed = false);
 } // namespace isaac::frontend

@@ -56,6 +56,7 @@ core::InputLatency inputLatency;
 SavedRun saves;
 constexpr char saveFailureMessage[] = "联机存档保存失败";
 std::string sessionFingerprint;
+isaac::lua::Version luaVersion;
 bool requestRestart(bool held) {
     if (!view.gated || !session || session->phase() != lan::Phase::running)
         return false;
@@ -896,9 +897,9 @@ int host(lua_State* L) {
     session = std::make_unique<lan::Session>(ISAAC_LAN_VERSION, logger,
                                              diagnostics::enabled() ? diagnostics::sample : nullptr,
                                              logging::enabled(logging::Level::debug));
-    sessionFingerprint = fingerprint;
-    lua.pushBoolean(
-        L, session->host(static_cast<std::uint16_t>(port), fingerprint, mods, personalAccess()));
+    sessionFingerprint = lan::runtimeFingerprint(fingerprint, luaVersion);
+    lua.pushBoolean(L, session->host(static_cast<std::uint16_t>(port), sessionFingerprint, mods,
+                                     personalAccess()));
     return 1;
 }
 int join(lua_State* L) {
@@ -914,14 +915,14 @@ int join(lua_State* L) {
     session = std::make_unique<lan::Session>(ISAAC_LAN_VERSION, logger,
                                              diagnostics::enabled() ? diagnostics::sample : nullptr,
                                              logging::enabled(logging::Level::debug));
-    sessionFingerprint = fingerprint;
+    sessionFingerprint = lan::runtimeFingerprint(fingerprint, luaVersion);
     try {
         const auto path = archivePath().parent_path() / L"player-id.txt";
         std::string identity;
         std::ifstream file(path);
         if (file)
             file >> identity;
-        const bool joined = session->join(ip, static_cast<std::uint16_t>(port), fingerprint,
+        const bool joined = session->join(ip, static_cast<std::uint16_t>(port), sessionFingerprint,
                                           identity, mods, personalAccess());
         if (joined && identity.empty()) {
             std::filesystem::create_directories(path.parent_path());
@@ -2269,7 +2270,7 @@ void halfCompleted() {
     } else if (rooms::stateReady())
         publishState();
 }
-bool bind(lua_State* L, HMODULE module) {
+bool bind(lua_State* L, HMODULE module, isaac::lua::Version version) {
     if (!lua.load(module, {isaac::lua::Symbol::pushClosure, isaac::lua::Symbol::setField,
                            isaac::lua::Symbol::createTable, isaac::lua::Symbol::pushInteger,
                            isaac::lua::Symbol::pushBoolean, isaac::lua::Symbol::pushString,
@@ -2282,6 +2283,7 @@ bool bind(lua_State* L, HMODULE module) {
                            isaac::lua::Symbol::rawSetI,     isaac::lua::Symbol::pcall,
                            isaac::lua::Symbol::toBoolean}))
         return false;
+    luaVersion = version;
     auto function = [&](const char* name, LuaFunction fn) {
         lua.pushClosure(L, fn, 0);
         lua.setField(L, -2, name);

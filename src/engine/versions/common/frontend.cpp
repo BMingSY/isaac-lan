@@ -58,6 +58,7 @@ std::wstring labRoot;
 void (*logger)(const std::string&);
 int(__cdecl* bindNative)(lua_State*);
 lua_State* state = nullptr;
+HMODULE gameLuaModule;
 constexpr int luaTable = 5, luaFunction = 6;
 isaac::lua::API lua;
 bool bridgeFailed = false, visible = false, guiReady = false;
@@ -781,7 +782,7 @@ void __attribute__((fastcall)) init(void* engine, void*, bool debug) {
     engine::native_minimap::setPlayers(false, 0, {});
     state = *reinterpret_cast<lua_State**>(reinterpret_cast<std::uintptr_t>(engine) +
                                            bindings.luaState);
-    const auto module = GetModuleHandleA(isaac::engine::profile().luaModule);
+    const auto module = gameLuaModule;
     using Symbol = isaac::lua::Symbol;
     if (!lua.load(module,
                   {Symbol::createTable, Symbol::getTop, Symbol::setTop, Symbol::getGlobal,
@@ -923,7 +924,8 @@ void returnToLobby() {
     lobbyRequested = true;
 }
 bool install(std::uintptr_t base, const std::wstring& root, void (*log)(const std::string&),
-             int(__cdecl* bind)(lua_State*), bool installed) {
+             int(__cdecl* bind)(lua_State*), HMODULE luaModule, bool installed) {
+    gameLuaModule = luaModule;
     image = base;
     labRoot = root;
     logger = log;

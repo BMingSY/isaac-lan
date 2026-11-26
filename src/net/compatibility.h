@@ -1,5 +1,6 @@
 #pragma once
 #include "net/datagram_protocol.h"
+#include "core/lua_version.h"
 #include "net/protocol.h"
 
 namespace isaac::lan {
@@ -10,6 +11,22 @@ inline constexpr std::uint16_t compatibilityRevision = 1;
 inline constexpr std::size_t maxVersionLength = 32, maxFingerprintLength = 128;
 inline constexpr std::size_t maxCompatibilitySize =
     1 + 2 + 2 + 2 + maxVersionLength + 2 + maxFingerprintLength;
+// Unqualified game build hashes belong to the original Lua runtime. Qualify
+// the alternate runtime inside the existing fingerprint field so older peers
+// can still read the preflight and report a version or build mismatch.
+inline constexpr std::string_view lua54Prefix = "lua5.4/";
+inline std::string runtimeFingerprint(std::string_view build, lua::Version runtime) {
+    if (build.empty())
+        return {};
+    std::string result;
+    if (runtime == lua::Version::v54)
+        result = lua54Prefix;
+    result += build;
+    return result;
+}
+inline lua::Version fingerprintRuntime(std::string_view fingerprint) {
+    return fingerprint.starts_with(lua54Prefix) ? lua::Version::v54 : lua::Version::v53;
+}
 struct BuildIdentity {
     std::string version, fingerprint;
     std::uint16_t protocol = protocolVersion;
@@ -26,13 +43,15 @@ struct BuildIdentity {
     }
     bool operator==(const BuildIdentity&) const = default;
 };
-enum class CompatibilityIssue { version, fingerprint, protocol, unavailable };
+enum class CompatibilityIssue { version, fingerprint, protocol, luaRuntime, unavailable };
 inline const char* compatibilityName(CompatibilityIssue issue) {
     switch (issue) {
     case CompatibilityIssue::version:
         return "version";
     case CompatibilityIssue::fingerprint:
         return "fingerprint";
+    case CompatibilityIssue::luaRuntime:
+        return "luaRuntime";
     case CompatibilityIssue::protocol:
         return "protocol";
     case CompatibilityIssue::unavailable:
@@ -55,6 +74,11 @@ inline std::optional<CompatibilityFailure> checkCompatibility(const BuildIdentit
         return CompatibilityFailure{CompatibilityIssue::unavailable, local.version, {}};
     if (local.version != remote.version)
         return CompatibilityFailure{CompatibilityIssue::version, local.version, remote.version};
+    const auto localLua = fingerprintRuntime(local.fingerprint);
+    const auto remoteLua = fingerprintRuntime(remote.fingerprint);
+    if (localLua != remoteLua)
+        return CompatibilityFailure{CompatibilityIssue::luaRuntime, lua::versionName(localLua),
+                                    lua::versionName(remoteLua)};
     if (local.fingerprint != remote.fingerprint)
         return CompatibilityFailure{CompatibilityIssue::fingerprint, local.version, remote.version};
     if (local.protocol != remote.protocol)
