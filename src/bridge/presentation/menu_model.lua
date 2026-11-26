@@ -365,7 +365,7 @@ return function(Phase, Command, endpoint, characters, text)
                         local settings = (ui.seed == "" and "RANDOM" or ui.seed)
                             .. ":"
                             .. (challenge and challenge.difficulty or ui.difficulty)
-                        for i = 0, 3 do
+                        for i = 0, math.max(4, count) - 1 do
                             settings = settings .. ":" .. (status["choice" .. i] or 0)
                         end
                         if command("start", settings) then

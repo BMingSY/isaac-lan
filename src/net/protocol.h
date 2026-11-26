@@ -1,5 +1,6 @@
 #pragma once
 #include "core/run_rules.h"
+#include "core/party.h"
 #include "core/input_actions.h"
 #include <algorithm>
 #include <array>
@@ -16,13 +17,13 @@
 
 namespace isaac::lan {
 using RunRules = isaac::RunRules;
-constexpr std::uint16_t protocolVersion = 60;
-constexpr std::size_t maxPlayers = 4;
+constexpr std::uint16_t protocolVersion = 61;
+using party::maxPlayers;
 constexpr std::size_t actionCount = 16;
 constexpr std::uint16_t maxInputValue = 65535;
-constexpr unsigned allPlayersMask = (1u << maxPlayers) - 1;
+using party::allPlayersMask;
 constexpr std::size_t maxMessageSize = 4096;
-constexpr std::size_t maxLobbyMessageSize = 8192;
+constexpr std::size_t maxLobbyMessageSize = 16384;
 constexpr std::size_t maxSnapshotSize = 8 * 1024 * 1024;
 constexpr std::size_t maxWorldSize = 2 * 1024 * 1024;
 constexpr std::size_t maxWorldDetail = 64 * 1024;
@@ -154,7 +155,7 @@ struct Frame {
     std::array<InputFrame, maxPlayers> inputs{};
     std::array<std::optional<InputRoom>, maxPlayers> inputRooms{};
     std::array<Command, maxPlayers> commands{};
-    std::uint8_t connected = 15;
+    std::uint8_t connected = allPlayersMask;
     bool operator==(const Frame&) const = default;
 };
 struct ProgressValues {

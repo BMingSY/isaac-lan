@@ -31,7 +31,10 @@ return function(root)
         env._G = env
         env.EffectVariant = dofile(root .. "/tests/fixtures/game_enums.lua").EffectVariant
         p.env = env
-        local native = {}
+        local native = { max_players = dofile(root .. "/src/bridge/core/party.lua").capacity }
+        function native.player_owner(player)
+            return player.ControllerIndex
+        end
         env._IsaacLan = native
         env._IsaacLanModules = {}
         env.GetPtrHash = function(actor)

@@ -350,7 +350,7 @@ void luaWireAndAudience() {
     f.lua.wrapper[1] = target + spriteOffset;
     f.lua.functions.at("combat_identity")(&f.lua);
     require(f.lua.integer == 1, "Combat Sprite identity differs from damage event identity");
-    f.lua.argument = 4;
+    f.lua.argument = isaac::lan::maxPlayers;
     f.lua.functions.at("combat_events")(&f.lua);
     require(!f.lua.boolean && isaac::runtime::errors.size() == 1,
             "Invalid event audience escaped its Lua failure boundary");

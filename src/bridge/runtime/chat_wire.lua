@@ -31,7 +31,7 @@ end
 function wire.encodeEmote(value)
     return string.pack(emoteFormat, wire.emote, value.sequence, value.owner, value.id, value.nonce)
 end
-function wire.decode(bytes)
+function wire.decode(bytes, capacity)
     assert(type(bytes) == "string" and #bytes <= 3072, "invalid_chat_packet")
     local kind = bytes:byte()
     local value, tail
@@ -51,7 +51,7 @@ function wire.decode(bytes)
         tail = ending
     elseif kind == wire.output then
         local _, sequence, owner, flags, nonce, text, ending = string.unpack(outputFormat, bytes)
-        assert(owner < 4 and flags <= 3 and #nonce == 32)
+        assert(owner < capacity and flags <= 3 and #nonce == 32)
         value = {
             sequence = sequence,
             owner = owner,
@@ -63,7 +63,7 @@ function wire.decode(bytes)
         tail = ending
     elseif kind == wire.emote then
         local _, sequence, owner, id, nonce, ending = string.unpack(emoteFormat, bytes)
-        assert((owner < 4 or owner == 255) and id > 0 and #nonce == 32)
+        assert((owner < capacity or owner == 255) and id > 0 and #nonce == 32)
         value = { sequence = sequence, owner = owner, id = id, nonce = nonce }
         tail = ending
     else

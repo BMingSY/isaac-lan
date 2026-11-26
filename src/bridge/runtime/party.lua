@@ -23,7 +23,7 @@ return function(native, player)
             assert(not seen[index], "联机角色重复")
             seen[index] = true
             local p = assert(player(index))
-            assert(p.ControllerIndex == slot + 1, "联机角色控制器归属不一致")
+            assert(native.player_owner(p) == slot + 1, "联机角色控制器归属不一致")
         end
     end
 end

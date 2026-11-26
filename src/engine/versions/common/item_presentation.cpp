@@ -1,3 +1,4 @@
+#include "engine/versions/common/player_seats.h"
 #include "engine/moving_box.h"
 #include "engine/versions/common/room_hooks.h"
 #include "engine/versions/common/scene_update.h"
@@ -116,7 +117,7 @@ struct Overlay {
         return reinterpret_cast<Address>(storage.data());
     }
 };
-std::array<std::unique_ptr<Overlay>, 4> owned;
+std::array<std::unique_ptr<Overlay>, party::maxPlayers> owned;
 Address displayOverlay(unsigned slot) {
     if (!game())
         return 0;
@@ -141,7 +142,7 @@ struct Actor {
     Address player = 0;
 };
 void* actionPlayer = nullptr;
-std::array<ItemScreen, 4> screens;
+std::array<ItemScreen, party::maxPlayers> screens;
 int screenSlot = -1;
 unsigned screenGeneration = 0;
 Actor owner(void* explicitPlayer) {
@@ -153,8 +154,10 @@ Actor owner(void* explicitPlayer) {
     result.player = rooms::presentationPlayer(explicitPlayer);
     if (!result.player)
         return result;
-    const auto controller = at<int>(result.player, layout.player.controller);
-    if (controller < 1 || controller > 4 || !(rooms::connected() & (1u << (controller - 1))))
+    const auto controller = isaac::engine::player_seats::owner(
+        result.player, at<int>(result.player, layout.player.controller));
+    if (controller < 1 || controller > static_cast<int>(party::maxPlayers) ||
+        !(rooms::connected() & (1u << (controller - 1))))
         return {};
     result.slot = controller - 1;
     for (auto entry = at<Address>(game(), layout.game.players);
@@ -162,7 +165,8 @@ Actor owner(void* explicitPlayer) {
         const auto player = at<Address>(entry, 0);
         if (player == result.player)
             return result;
-        if (at<int>(player, layout.player.controller) == controller)
+        if (isaac::engine::player_seats::owner(player, at<int>(player, layout.player.controller)) ==
+            controller)
             ++result.role;
     }
     return {};
@@ -173,7 +177,9 @@ Address player(unsigned slot, unsigned role) {
     for (auto entry = at<Address>(game(), layout.game.players);
          entry < at<Address>(game(), layout.game.players + sizeof(Address)); entry += 4) {
         const auto p = at<Address>(entry, 0);
-        if (at<int>(p, layout.player.controller) == static_cast<int>(slot + 1) && role-- == 0)
+        if (isaac::engine::player_seats::owner(p, at<int>(p, layout.player.controller)) ==
+                static_cast<int>(slot + 1) &&
+            role-- == 0)
             return p;
     }
     return 0;
@@ -327,7 +333,7 @@ void __attribute__((fastcall)) show(void* overlay, void*, int id, int delay, voi
         !runtime::replica()) {
         // Sleep belongs to the whole run, including when a guest finds the bed.
         if (rooms::gatherForTransition([=] {
-                for (unsigned slot = 0; slot < 4; ++slot)
+                for (unsigned slot = 0; slot < party::maxPlayers; ++slot)
                     if (rooms::connected() & (1u << slot)) {
                         auto e = event({slot, 0, player(slot, 0)}, Kind::overlay);
                         e.id = id;
@@ -389,7 +395,7 @@ void __attribute__((fastcall)) show(void* overlay, void*, int id, int delay, voi
 void __attribute__((fastcall)) render(void* overlay, void*) {
     originalRender(overlay);
     const int slot = runtime::localViewSlot();
-    if (!runtime::replica() && rooms::virtualized() && slot >= 0 && slot < 4 && owned[slot] &&
+    if (!runtime::replica() && rooms::virtualized() && party::validSlot(slot) && owned[slot] &&
         reinterpret_cast<Address>(overlay) == game() + layout.game.overlay)
         originalRender(owned[slot]->data());
 }
@@ -543,7 +549,7 @@ int overlaySprite(lua_State* L) {
     const auto part = lua.getTop(L) >= 3 ? lua.checkInteger(L, 3) : 1;
     auto sample = static_cast<Address*>(lua.toUserdata(L, 2));
     Address overlay = game() + layout.game.overlay;
-    if (slot < 0 || slot >= 4 || part < 0 || part > 1 || !sample || lua.rawLength(L, 2) != 8) {
+    if (!party::validSlot(slot) || part < 0 || part > 1 || !sample || lua.rawLength(L, 2) != 8) {
         lua.pushBoolean(L, false);
         return 1;
     }
@@ -571,7 +577,7 @@ int pose(lua_State* L) {
         if (!game())
             throw std::runtime_error("Item presentation requires an active game");
         const auto slot = lua.checkInteger(L, 1);
-        if (slot < 0 || slot >= 4)
+        if (!party::validSlot(slot))
             throw std::runtime_error("Invalid item overlay slot");
         Address overlay = game() + layout.game.overlay;
         if (lua.getTop(L) == 1) {
@@ -762,7 +768,7 @@ int synchronize(lua_State* L) {
             e.slot = r.u8();
             e.role = r.u8();
             e.kind = static_cast<Kind>(r.u8());
-            if (e.slot >= 4 || e.role >= maxBodyRoles || batch.size() >= maxEvents)
+            if (e.slot >= party::maxPlayers || e.role >= maxBodyRoles || batch.size() >= maxEvents)
                 throw std::runtime_error("Invalid item presentation owner");
             if (textEvent(e.kind)) {
                 e.title = r.string();
@@ -859,7 +865,7 @@ int status(lua_State* L) {
     Address overlay = game() + layout.game.overlay;
     if (!runtime::replica()) {
         const auto slot = lua.getTop(L) ? lua.checkInteger(L, 1) : runtime::localViewSlot();
-        if (slot >= 0 && slot < 4 && owned[slot])
+        if (party::validSlot(slot) && owned[slot])
             overlay = owned[slot]->address();
     }
     lua.createTable(L, 0, 6);
@@ -1026,7 +1032,7 @@ void withActor(void* player, const std::function<void()>& action) {
 }
 void withScreen(const std::function<void()>& draw) {
     const auto slot = runtime::localViewSlot();
-    if (!game() || !rooms::virtualized() || slot < 0 || slot >= 4) {
+    if (!game() || !rooms::virtualized() || !party::validSlot(slot)) {
         draw();
         return;
     }

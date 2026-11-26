@@ -28,11 +28,7 @@ def validate_startup(labs):
 
 def validate_labs(values, output=None, *, count=2):
     labs = [Path(value).resolve() for value in values]
-    if (
-        (count is not None and len(labs) != count)
-        or not 2 <= len(labs) <= 4
-        or len(set(labs)) != len(labs)
-    ):
+    if (count is not None and len(labs) != count) or len(labs) < 2 or len(set(labs)) != len(labs):
         raise ValueError("Distinct owned labs are required for every selected peer")
     output = Path(output).resolve() if output is not None else None
     for lab in labs:

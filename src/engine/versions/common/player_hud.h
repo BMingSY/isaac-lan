@@ -1,10 +1,23 @@
 #pragma once
+#include "engine/versions/common/player_seats.h"
+#include <bit>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <optional>
 
 namespace isaac::engine::native_player_hud {
+// The game allocates four main panels followed by four companion panels.
+// Their native strides and offsets are independent of the LAN roster size.
+inline constexpr unsigned primaryPanels = 4;
+inline constexpr unsigned totalPanels = primaryPanels * 2;
+inline bool localOnly(unsigned connectedMask) {
+    return static_cast<unsigned>(std::popcount(connectedMask)) > primaryPanels;
+}
+inline unsigned seatBit(int slot) {
+    return slot >= 0 && slot < std::numeric_limits<unsigned>::digits ? 1u << slot : 0u;
+}
 struct Layout {
     unsigned visible, stride, player, controller;
 };
@@ -22,15 +35,17 @@ template <class T> T read(std::uintptr_t address, unsigned offset) {
 // Return scalar copies, never a player/HUD pointer or an owned native object.
 template <class SelectLayout, class Position>
 std::optional<Anchor> anchor(std::uintptr_t hud, unsigned index, float width, float height,
-                             const Layout& fields, SelectLayout layout, Position position) {
-    if (!hud || index >= 4 || !std::isfinite(width) || !std::isfinite(height) || width <= 0 ||
-        height <= 0 || !read<bool>(hud, fields.visible))
+                             unsigned audience, const Layout& fields, SelectLayout layout,
+                             Position position) {
+    if (!hud || index >= primaryPanels || !std::isfinite(width) || !std::isfinite(height) ||
+        width <= 0 || height <= 0 || !read<bool>(hud, fields.visible))
         return {};
     const auto player = read<std::uintptr_t>(hud + index * fields.stride, fields.player);
     if (!player)
         return {};
-    const auto controller = read<int>(player, fields.controller);
-    if (controller < 1 || controller > 4)
+    const auto controller =
+        isaac::engine::player_seats::owner(player, read<int>(player, fields.controller));
+    if (controller < 1 || !(audience & seatBit(controller - 1)))
         return {};
     const int mode = layout(hud, index, player);
     if (mode < 0 || mode > 3)

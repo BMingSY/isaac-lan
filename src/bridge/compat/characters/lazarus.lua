@@ -11,7 +11,7 @@ return function(fields)
         return {
             resolve = function(index, inventory, controller)
                 local p = player(index)
-                if not p or (controller and p.ControllerIndex ~= controller) then
+                if not p or (controller and native.player_owner(p) ~= controller) then
                     assert(
                         lazarus(inventory[Inventory.type]),
                         "Replica actor owner differs: index="
@@ -19,7 +19,7 @@ return function(fields)
                             .. " expectedController="
                             .. tostring(controller)
                             .. " actualController="
-                            .. (p and p.ControllerIndex or -1)
+                            .. (p and native.player_owner(p) or -1)
                             .. " expectedType="
                             .. inventory[Inventory.type]
                             .. " actualType="
@@ -34,7 +34,10 @@ return function(fields)
                         p:GetPlayerType() == inventory[Inventory.type],
                         "Listed backup actor form differs"
                     )
-                    assert(p.ControllerIndex == controller, "Listed backup actor owner differs")
+                    assert(
+                        native.player_owner(p) == controller,
+                        "Listed backup actor owner differs"
+                    )
                 end
                 local current, desired = p:GetPlayerType(), inventory[Inventory.type]
                 if inventory[Inventory.ghost] and lazarus(current) and p:GetOtherTwin() then

@@ -1,6 +1,7 @@
 -- Embedded in the native extension. No Workshop registration or mod directory.
 local native = assert(_IsaacLan)
 local endpoint = _IsaacLanModules["core/endpoint"]
+local party = _IsaacLanModules["core/party"]
 local Phase = native.net_phases()
 local integration = assert(_IsaacLanModules)["api/public"]
 local registry = _IsaacLanModules["compat/mods/registry"]
@@ -369,11 +370,13 @@ local bot = _IsaacLanModules["lanbot"]({
 local chatLimits = native.chat_limits()
 local emotes = native.emote_count and native.emote_count() or 0
 local playerOpacity = _IsaacLanModules["presentation/player_opacity"]({
+    party = party,
     default = native.player_opacity(),
     info = native.api_info,
     apply = native.player_opacity,
 })
 chat = _IsaacLanModules["runtime/chat"]({
+    party = party,
     limits = chatLimits,
     nonce = native.api_nonce,
     clock = Isaac.GetTime,
@@ -384,6 +387,7 @@ chat = _IsaacLanModules["runtime/chat"]({
     roll = native.chat_roll,
     dice = _IsaacLanModules["runtime/chat_dice"],
     teleport = _IsaacLanModules["runtime/teleport"]({
+        party = party,
         roomDefinitions = _IsaacLanModules["core/room_types"],
         native = native,
         game = Game,
@@ -430,7 +434,8 @@ local chatUI = _IsaacLanModules["presentation/chat"]({
     clock = Isaac.GetTime,
     completion = _IsaacLanModules["presentation/chat_completion"](
         _IsaacLanModules["core/room_types"],
-        chatLimits.commandBytes
+        chatLimits.commandBytes,
+        party
     ),
 }, _IsaacLanModules["presentation/chat_layout"])
 function _IsaacLanChatRender()
@@ -630,7 +635,13 @@ function _IsaacLanCommand(action, value)
             "规则已应用，但本机保存失败"
         )
     elseif action == "start" then
-        local seed, difficulty, a, b, c, d = value:match("^([%w]+):(%d+):(%d+):(%d+):(%d+):(%d+)$")
+        local seed, difficulty, roster = value:match("^([%w]+):(%d+):(%d[%d:]*)$")
+        local characters = {}
+        if roster and not roster:find("::", 1, true) and roster:sub(-1) ~= ":" then
+            for entry in roster:gmatch("%d+") do
+                characters[#characters + 1] = tonumber(entry)
+            end
+        end
         if seed == "RANDOM" then
             seed = Seeds.Seed2String(Random()):gsub("%s", "")
         end
@@ -639,14 +650,8 @@ function _IsaacLanCommand(action, value)
             "种子无效，请输入八位有效种子或留空随机生成"
         )
         assert(
-            native.net_start(
-                seed,
-                tonumber(difficulty),
-                tonumber(a),
-                tonumber(b),
-                tonumber(c),
-                tonumber(d)
-            )
+            #characters >= 2
+                and native.net_start(seed, tonumber(difficulty), table.unpack(characters))
         )
     elseif action == "retry_save" then
         assert(native.net_retry_save(), "联机存档保存失败")

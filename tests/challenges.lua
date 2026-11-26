@@ -113,6 +113,10 @@ local function chest()
     }
 end
 local native = {
+    max_players = 8,
+    player_owner = function(p)
+        return p.ControllerIndex
+    end,
     net_challenges = function()
         return { ["1001"] = { version = 2, id = 1001, route = "lamb" } }
     end,

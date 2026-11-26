@@ -1,8 +1,9 @@
+#include "engine/versions/common/player_seats.h"
 #include "engine/versions/common/frontend_hud.h"
 #include "engine/versions/common/frontend_hud_bindings.h"
+#include "engine/versions/common/player_hud.h"
 #include "engine/rooms.h"
 #include "runtime/session.h"
-#include "net/protocol.h"
 #include "compat/game_ids.h"
 #include <MinHook.h>
 #include <array>
@@ -29,14 +30,16 @@ int __attribute__((fastcall)) statPlayerId(void* hud, void*, void* player) {
     for (unsigned i = 0; i < bindings.stats.cacheCount; ++i) {
         const auto cached = *reinterpret_cast<std::uintptr_t*>(address + bindings.stats.player +
                                                                i * bindings.stats.cacheStride);
-        if (cached && *reinterpret_cast<int*>(cached + bindings.player.controller) != slot + 1) {
+        if (cached && player_seats::owner(cached, read<int>(cached, bindings.player.controller)) !=
+                          slot + 1) {
             using Reset = void(__attribute__((thiscall))*)(void*);
             reinterpret_cast<Reset>(image + bindings.entry.frontendStatHUDReset)(hud);
             break;
         }
     }
-    if (*reinterpret_cast<int*>(reinterpret_cast<std::uintptr_t>(player) +
-                                bindings.player.controller) != slot + 1)
+    if (player_seats::owner(
+            reinterpret_cast<Address>(player),
+            read<int>(reinterpret_cast<Address>(player), bindings.player.controller)) != slot + 1)
         return -1;
     return originalStatPlayerId(hud, player);
 }
@@ -49,7 +52,9 @@ int __attribute__((fastcall)) historyPlayerId(void* history, void*, void* player
         return originalHistoryPlayerId(history, player);
     if (!history || !player)
         return -1;
-    if (read<int>(reinterpret_cast<std::uintptr_t>(player), bindings.player.controller) != slot + 1)
+    if (player_seats::owner(
+            reinterpret_cast<Address>(player),
+            read<int>(reinterpret_cast<Address>(player), bindings.player.controller)) != slot + 1)
         return -1;
     int result = -1;
     rooms::withView([&] { result = originalHistoryPlayerId(history, player); }, true);
@@ -63,11 +68,11 @@ void bindTeamHud(void* hud) {
                address = reinterpret_cast<std::uintptr_t>(hud);
     if (!game || !hud)
         return;
-    std::array<std::uintptr_t, lan::maxPlayers * 2> desired{};
+    std::array<std::uintptr_t, native_player_hud::totalPanels> desired{};
     unsigned ordinal = 0;
     for (auto entry = read<std::uintptr_t>(game, bindings.players);
          entry < read<std::uintptr_t>(game, bindings.players + sizeof(Address)) &&
-         ordinal < lan::maxPlayers;
+         ordinal < native_player_hud::primaryPanels;
          entry += sizeof(std::uintptr_t)) {
         const auto p = read<std::uintptr_t>(entry, 0);
         if (!p)
@@ -81,7 +86,7 @@ void bindTeamHud(void* hud) {
         desired[ordinal] = p;
         if (twin && twin != p && read<bool>(twin, bindings.entity.active) &&
             read<int>(twin, bindings.player.type) != compat::ids::player::soulB)
-            desired[ordinal + lan::maxPlayers] = twin;
+            desired[ordinal + native_player_hud::primaryPanels] = twin;
         ++ordinal;
     }
     bool changed = false;
@@ -104,19 +109,30 @@ void bindTeamHud(void* hud) {
     }
 }
 void __attribute__((fastcall)) hudUpdate(void* hud, void*) {
-    rooms::withView([&] { originalHudUpdate(hud); });
+    const bool personal = native_player_hud::localOnly(rooms::connected());
+    rooms::withView(
+        [&] {
+            if (personal)
+                bindTeamHud(hud);
+            originalHudUpdate(hud);
+        },
+        personal);
 }
 void __attribute__((fastcall)) hudPostUpdate(void* hud, void*) {
-    rooms::withView([&] {
-        bindTeamHud(hud);
-        originalHudPostUpdate(hud);
-    });
+    rooms::withView(
+        [&] {
+            bindTeamHud(hud);
+            originalHudPostUpdate(hud);
+        },
+        native_player_hud::localOnly(rooms::connected()));
 }
 void __attribute__((fastcall)) hudRender(void* hud, void*) {
-    rooms::withView([&] {
-        bindTeamHud(hud);
-        originalHudRender(hud);
-    });
+    rooms::withView(
+        [&] {
+            bindTeamHud(hud);
+            originalHudRender(hud);
+        },
+        native_player_hud::localOnly(rooms::connected()));
 }
 
 } // namespace

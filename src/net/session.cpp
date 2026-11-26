@@ -77,7 +77,12 @@ struct Session::Impl {
     std::array<InputFrame, maxPlayers> latest{};
     std::array<std::optional<InputRoom>, maxPlayers> inputRooms{};
     std::array<std::uint32_t, maxPlayers> sequences{};
-    std::array<int, maxPlayers> latency{0, -1, -1, -1};
+    std::array<int, maxPlayers> latency = [] {
+        std::array<int, maxPlayers> result;
+        result.fill(-1);
+        result.front() = 0;
+        return result;
+    }();
     std::array<LatencySample, maxPlayers> networkLatency{}, syncLatency{};
     Clock::time_point latencyAt = Clock::now() - std::chrono::seconds(1);
     std::uint32_t nextInput = 0, nextConsume = 0, committed = 0;
@@ -833,7 +838,7 @@ struct Session::Impl {
             for (auto& character : startSettings.characters)
                 character = r.u16();
             failure = r.string();
-            if (playerCount < 2 || playerCount > 4 || localSlot >= playerCount)
+            if (playerCount < 2 || playerCount > maxPlayers || localSlot >= playerCount)
                 throw std::runtime_error("Invalid waiting roster");
             state = Phase::waiting;
             localReady = false;
@@ -1327,7 +1332,7 @@ void Session::poll() {
                 throw std::runtime_error("LAN accept failed");
             if (auto accepted = impl->listener->accepted.pop()) {
                 auto peer = std::make_unique<Peer>(impl->io, std::move(*accepted));
-                if (impl->state == Phase::running && impl->incoming.size() < 3)
+                if (impl->state == Phase::running && impl->incoming.size() < maxPlayers - 1)
                     impl->incoming.push_back(std::move(peer));
                 else {
                     unsigned slot = 1;

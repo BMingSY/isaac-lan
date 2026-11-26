@@ -1,4 +1,5 @@
 local root = assert(arg[1])
+local party = dofile(root .. "/src/bridge/core/party.lua")
 local function module(name)
     return dofile(root .. "/src/bridge/" .. name .. ".lua")
 end
@@ -6,7 +7,7 @@ local rules = module("compat/challenges/battle_royale_rules")
 local phase = rules.phase
 local plan = { 0, 14, 42, 56 }
 for _, count in ipairs({ 2, 3, 4 }) do
-    local round = rules.new()
+    local round = rules.new(party.capacity)
     round.start(plan)
     assert(not round.step(30, (1 << count) - 1, false))
     assert(not round.step(30, 1, true), "Pending original revival must delay victory")
@@ -28,7 +29,7 @@ for _, count in ipairs({ 2, 3, 4 }) do
     assert(round.step(1, 1, false) == "winner" and round.enter(0) and round.clear(0))
     assert(round.state.phase == phase.trophy and round.state.scores[1] == 2)
     assert(not round.leave(0), "Championship must finish through the trophy")
-    local copy = rules.read(round.snapshot())
+    local copy = rules.read(round.snapshot(), party.capacity)
     assert(copy.scores[1] == 2)
     copy.scores[1] = 0
     assert(round.state.scores[1] == 2, "Views must not mutate authority state")
@@ -53,9 +54,9 @@ math.randomseed(1003)
 local variations = {}
 for target = 0, rules.width * rules.width - 1 do
     local zones = rules.plan({ target }, math.random)
-    local round = rules.new()
+    local round = rules.new(party.capacity)
     round.start(zones)
-    local copy = rules.read(round.snapshot())
+    local copy = rules.read(round.snapshot(), party.capacity)
     assert(copy.zones[4] == target)
     for step = 1, #rules.zoneSizes do
         local elapsed = rules.shrinkFrames[step - 1] or 0
@@ -72,20 +73,20 @@ for _ in pairs(variations) do
 end
 assert(variationCount > 10, "Shrink locations must vary")
 for _, zones in ipairs({ { 0, 5, 42, 56 }, { 0, 14, 0, 56 }, { 0, 14, 42, 168 }, { 0, 14, 42 } }) do
-    local round = rules.new()
+    local round = rules.new(party.capacity)
     round.start(zones)
-    assert(not pcall(rules.read, round.snapshot()), "Invalid zone plan accepted")
+    assert(not pcall(rules.read, round.snapshot(), party.capacity), "Invalid zone plan accepted")
 end
-local invalid = rules.new().snapshot()
+local invalid = rules.new(party.capacity).snapshot()
 invalid[rules.fields.scores][1] = 3
-assert(not pcall(rules.read, invalid))
+assert(not pcall(rules.read, invalid, party.capacity))
 for _, field in ipairs({ rules.fields.zones, rules.fields.scores }) do
-    local round = rules.new()
+    local round = rules.new(party.capacity)
     round.start(plan)
     local sparse = round.snapshot()
     sparse[field][2] = nil
     assert(
-        not pcall(rules.read, sparse),
+        not pcall(rules.read, sparse, party.capacity),
         "A sparse progress array must be rejected before rendering"
     )
 end
@@ -246,6 +247,10 @@ local game = {
     end,
 }
 local native = {
+    max_players = party.capacity,
+    player_owner = function(p)
+        return p.ControllerIndex
+    end,
     api_info = function()
         return info
     end,
@@ -580,6 +585,7 @@ local map = module("compat/challenges/battle_royale_map")({
         )
     end,
     native = {
+        max_players = party.capacity,
         room_special_template = function(index, kind, variant, seed)
             assert(kind == 5 and variant == 1060 and seed > 0)
             assert(descriptors[index].Data.Type == 1)
@@ -596,7 +602,7 @@ local map = module("compat/challenges/battle_royale_map")({
         return spawnEntities
     end,
 })
-local built = map.build(generatedLevel)
+local built = map.build(generatedLevel, 4)
 assert(roomCount == 168 and built.boss == 85)
 local final = built.zones[#rules.zoneSizes]
 assert(final == 168 and descriptors[final].Data.Type == enums.room.ROOM_DEFAULT)
@@ -613,6 +619,13 @@ for _, index in ipairs(built.spawns) do
     occupied[index] = true
 end
 assert(built.spawns[1] == 1 and built.spawns[4] == 168, "Missing corner uses nearest native room")
+local expanded = map.build(generatedLevel, party.capacity)
+local occupied = {}
+assert(#expanded.spawns == party.capacity)
+for _, start in ipairs(expanded.spawns) do
+    assert(not occupied[start] and start ~= expanded.boss and start ~= expanded.finalBoss)
+    occupied[start] = true
+end
 -- Cover large/thin/L room boundaries, including GridIndex != SafeGridIndex.
 -- A rejected generation may not install an error door as a side effect.
 for _, case in ipairs({
@@ -656,7 +669,7 @@ for _, case in ipairs({
         slots[#slots + 1] = slot
         return false
     end
-    map.build(generatedLevel)
+    map.build(generatedLevel, 4)
     assert(
         table.concat(slots, ",") == case.slots,
         "Invalid red-door geometry for shape " .. case.shape

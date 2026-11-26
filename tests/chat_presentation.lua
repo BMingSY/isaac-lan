@@ -1,4 +1,5 @@
 local root = assert(arg[1])
+local party = dofile(root .. "/src/bridge/core/party.lua")
 local factory = dofile(root .. "/src/bridge/presentation/chat.lua")
 local layout = dofile(root .. "/src/bridge/presentation/chat_layout.lua")
 local fonts = dofile(root .. "/src/bridge/presentation/fonts.lua")
@@ -181,7 +182,7 @@ local function create(image, opacity, options, messages, service)
         end,
         limits = { characters = 60, commandBytes = 2048 },
         options = options or { FoundHUD = false, ExtraHUDStyle = 0, HUDOffset = 0 },
-        completion = completion(roomDefinitions, 2048),
+        completion = completion(roomDefinitions, 2048, party),
     }, layout)
     ui.input = input
     return ui
@@ -346,6 +347,7 @@ ui.render(status)
 assert(draws[5].position.X == resized.position.X, "Clicking the input line started a drag")
 -- Enter and controller confirmation use the real service without accepting an empty draft.
 local service = dofile(root .. "/src/bridge/runtime/chat.lua")({
+    party = party,
     limits = { characters = 60, commandBytes = 2048, history = 200, dice = 999 },
     nonce = function()
         return string.rep("0", 32)

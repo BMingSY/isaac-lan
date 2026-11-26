@@ -1,3 +1,4 @@
+#include "engine/versions/common/player_seats.h"
 #include "engine/item_effects.h"
 #include "engine/moving_box.h"
 #include "engine/rooms.h"
@@ -57,8 +58,9 @@ using ReviveTrinket = void(__attribute__((thiscall)) *)(void*, unsigned, unsigne
 ReviveCollectible originalReviveCollectible;
 ReviveTrinket originalReviveTrinket;
 void inRevivalRoom(void* player, const std::function<void()>& revive) {
+    const auto address = reinterpret_cast<Address>(player);
     const auto controller =
-        at<unsigned>(reinterpret_cast<Address>(player), layout.player.controller);
+        engine::player_seats::owner(address, at<int>(address, layout.player.controller));
     // PlayerManager resolves pending deaths outside Room::Update. Its current
     // viewport is not necessarily the revived actor's room. Existing scopes
     // and solo play already own the correct native context.
@@ -94,10 +96,10 @@ void queueAt(Address caller, void* player, void* config, int charge, unsigned ch
     // Lua grants, starting items, crafting and restoration retain the native queue.
     if (caller == image + binding.entry.pickupQueuedCollectible && item &&
         at<int>(item, layout.itemConfig.type) != layout.itemConfig.trinket &&
-        runtime::takeCollectiblePickup(at<int>(actor, layout.player.controller) - 1,
-                                       at<unsigned>(actor, layout.entity.initSeed),
-                                       at<int>(item, layout.itemConfig.id), charge, flags & 1, data,
-                                       pool))
+        runtime::takeCollectiblePickup(
+            isaac::engine::player_seats::owner(actor, at<int>(actor, layout.player.controller)) - 1,
+            at<unsigned>(actor, layout.entity.initSeed), at<int>(item, layout.itemConfig.id),
+            charge, flags & 1, data, pool))
         return;
     originalQueue(player, config, charge, flags, data, pool);
 }
@@ -131,8 +133,10 @@ Address playerArgument(lua_State* L, bool snapshot = false) {
     bool found = false;
     for (auto entry = first; entry < last; entry += sizeof(Address))
         found |= at<Address>(entry, 0) == actor;
-    const auto controller = found ? at<int>(actor, layout.player.controller) : 0;
-    return found && controller >= 1 && controller <= 4 &&
+    const auto controller =
+        found ? isaac::engine::player_seats::owner(actor, at<int>(actor, layout.player.controller))
+              : 0;
+    return found && controller >= 1 && controller <= static_cast<int>(party::maxPlayers) &&
                    (snapshot || (rooms::connected() & (1u << (controller - 1)))) &&
                    at<unsigned>(actor, layout.entity.type) == playerEntity &&
                    (snapshot || at<bool>(actor, layout.entity.active))

@@ -227,6 +227,9 @@ local replica = createReplica({
         end,
     },
     native = {
+        player_owner = function(p)
+            return p.ControllerIndex
+        end,
         room_backdrop = function(value)
             return value == 1
         end,

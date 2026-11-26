@@ -1,3 +1,4 @@
+#include "engine/versions/common/player_seats.h"
 #include "engine/player_opacity.h"
 #include "engine/versions/common/player_opacity_bindings.h"
 #include <array>
@@ -9,7 +10,11 @@ using Address = std::uintptr_t;
 using Factors = std::unordered_map<Address, float>;
 constexpr unsigned maximum = 100;
 unsigned defaultOthers = maximum;
-std::array<unsigned, 4> percentages{maximum, maximum, maximum, maximum};
+std::array<unsigned, party::maxPlayers> percentages = [] {
+    std::array<unsigned, party::maxPlayers> result;
+    result.fill(maximum);
+    return result;
+}();
 const Factors* activeSprites = nullptr;
 const Factors* activePlayers = nullptr;
 Address additionalSprite = 0;
@@ -24,8 +29,10 @@ int settings(lua_State* L) {
         return 1;
     }
     auto next = percentages;
-    bool valid = api.getTop(L) == static_cast<int>(next.size());
-    for (unsigned i = 0; valid && i < next.size(); ++i) {
+    const auto count = api.getTop(L);
+    bool valid =
+        count == engine::player_seats::nativeGamepads || count == static_cast<int>(next.size());
+    for (int i = 0; valid && i < count; ++i) {
         // Do not coerce strings, fractions, infinities or values outside 0..100.
         valid = api.isInteger(L, i + 1);
         if (valid) {
@@ -93,7 +100,8 @@ void withPlayers(std::span<const Address> players, unsigned connected,
     for (const auto player : players) {
         if (!player)
             continue;
-        const auto controller = read<int>(player, layoutFields.controller);
+        const auto controller =
+            isaac::engine::player_seats::owner(player, read<int>(player, layoutFields.controller));
         if (controller < 1 || controller > static_cast<int>(percentages.size()) ||
             !(connected & (1u << (controller - 1))))
             continue;

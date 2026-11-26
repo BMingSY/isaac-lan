@@ -1,3 +1,4 @@
+#include "core/party.h"
 #include "engine/versions/common/room_hooks.h"
 #include "engine/emotes.h"
 #include "engine/input.h"
@@ -71,7 +72,7 @@ int poll(lua_State* L) {
 int show(lua_State* L) {
     const auto owner = lua.checkInteger(L, 1), id = lua.checkInteger(L, 2);
     bool shown = false;
-    if (owner >= 0 && owner < 4 && id >= 1 && id <= layout::emote::lastId + 1 &&
+    if (party::validSlot(owner) && id >= 1 && id <= layout::emote::lastId + 1 &&
         (rooms::connected() & (1u << owner))) {
         shown = rooms::withPlayer(owner, [&] {
             const auto player = rooms::presentationPlayer();

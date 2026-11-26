@@ -159,7 +159,7 @@ for _, controllers in ipairs({ { 0, 1 }, { 0, -1 }, { 1, 1 } }) do
     dofile(root .. "/tests/fixtures/app_bridge.lua")(root, _IsaacLan, _IsaacLanModules)
     dofile(root .. "/src/bridge/app/main.lua")
     _IsaacLanFrame()
-    assert(table.concat(opacityValues, ",") == "100,50,50,50")
+    assert(table.concat(opacityValues, ",") == "100,50,50,50,50,50,50,50")
     assert(_IsaacLanChatSubmit("/opacity 2p 20"))
     phase = _IsaacLan.net_phases().waiting
     _IsaacLanFrame()
@@ -177,7 +177,10 @@ for _, controllers in ipairs({ { 0, 1 }, { 0, -1 }, { 1, 1 } }) do
     assert(opacityValues[2] == 20, "Preparing a run discarded local opacity")
     callbacks[ModCallbacks.MC_PRE_GAME_EXIT]()
     assert(closes[1] == 1 and not _IsaacLanFrame().prepared)
-    assert(table.concat(opacityValues, ",") == "100,50,50,50", "Session exit retained overrides")
+    assert(
+        table.concat(opacityValues, ",") == "100,50,50,50,50,50,50,50",
+        "Session exit retained overrides"
+    )
     -- An inline native exit during gate must retain the native save guard and
     -- cancel restore. Repeated updates must not resurrect the old preparation.
     phase, cancelGate = 3, true

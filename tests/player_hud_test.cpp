@@ -17,7 +17,10 @@ void require(bool condition, const char* message) {
         throw std::runtime_error(message);
 }
 void checkRepentance() {
-    using isaac::engine::repentance::player_hud::anchor;
+    const auto anchor = [](auto hud, unsigned index, float width, float height, float offset) {
+        return isaac::engine::repentance::player_hud::anchor(hud, index, width, height, offset,
+                                                             0xfu);
+    };
     std::vector<std::byte> bytes(0xc3eb7);
     std::array<std::array<std::byte, 0x1554>, 4> players{};
     const auto hud = reinterpret_cast<std::uintptr_t>(bytes.data());
@@ -99,7 +102,7 @@ int main() {
         point[1] = y;
     };
     auto get = [&](auto root, unsigned index) {
-        return anchor(root, index, 480, 270, layout, position);
+        return anchor(root, index, 480, 270, layout, position, 0xfu);
     };
     try {
         checkRepentance();
@@ -134,8 +137,8 @@ int main() {
         mode = 0;
         for (float invalid : {0.f, -1.f, std::numeric_limits<float>::infinity(),
                               std::numeric_limits<float>::quiet_NaN()})
-            require(!anchor(hud, 0, invalid, 270, layout, position) &&
-                        !anchor(hud, 0, 480, invalid, layout, position),
+            require(!anchor(hud, 0, invalid, 270, layout, position, 0xfu) &&
+                        !anchor(hud, 0, 480, invalid, layout, position, 0xfu),
                     "Repentance+ invalid viewport accepted");
         write(hud, 0x54cc, false);
         require(!get(hud, 0), "HUD hide retained a visible anchor");

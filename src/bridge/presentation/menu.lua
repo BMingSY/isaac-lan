@@ -20,7 +20,7 @@ local ui = {
 }
 local Phase = _IsaacLan.net_phases()
 local Command = _IsaacLan.net_commands()
-local drawVote = _IsaacLanModules["presentation/vote_progress"]()
+local drawVote = _IsaacLanModules["presentation/vote_progress"](_IsaacLan.max_players)
 local renderRestart = _IsaacLanModules["presentation/restart"](drawVote)
 local renderSkip = _IsaacLanModules["presentation/animation_skip"](drawVote)
 local renderPing = _IsaacLanModules["presentation/ping"](_IsaacLan, Phase)
@@ -503,46 +503,68 @@ function _IsaacLanMenuRender(
             renderRow(i, item, yStart + (i - 1) * gap, math.min(gap, 22))
         end
     end
-    for i = 0, ((modes or count == 0) and -1 or 3) do
-        local x, y = 198 + (i % 2) * 132, 17 + math.floor(i / 2) * 108
-        assets.seat(origin, x, y, i)
-        if i < count then
+    if not modes and count > 4 then
+        for i = 0, count - 1 do
+            local x, y = 198 + (i % 2) * 132, 30 + (i // 2) * 50
             local id = status[(phase == Phase.lobby and "choice" or "character") .. i] or 0
-            local marks = phase == Phase.lobby and status["marks" .. i] or nil
             if phase == Phase.lobby and status["random" .. i] then
-                id, marks = characters.random, nil
+                id = characters.random
             end
-            local portraitX = x + (marks and 34 or 63)
-            portrait(id):Render(pos(portraitX, y + 45))
-            if id ~= characters.random then
-                centered(character(id), portraitX, y + 66, 10, nil, marks and 60 or 110)
-            end
-            if marks then
-                assets.marks.Scale = Vector(0.65, 0.65)
-                for layerId, state in ipairs(marks) do
-                    assets.marks:SetLayerFrame(layerId - 1, state)
+            local label = phase == Phase.lobby
+                    and (status["ready" .. i] == 1 and "已准备" or "选择中")
+                or ((status.connected or 0) & (1 << i) ~= 0 and "在线" or "等待归队")
+            text(
+                "P" .. (i + 1) .. "  " .. character(id),
+                x,
+                y,
+                12,
+                i == localSlot and amber or ink,
+                122
+            )
+            text(message(label), x, y + 16, 10, faded)
+        end
+    else
+        for i = 0, ((modes or count == 0) and -1 or 3) do
+            local x, y = 198 + (i % 2) * 132, 17 + math.floor(i / 2) * 108
+            assets.seat(origin, x, y, i)
+            if i < count then
+                local id = status[(phase == Phase.lobby and "choice" or "character") .. i] or 0
+                local marks = phase == Phase.lobby and status["marks" .. i] or nil
+                if phase == Phase.lobby and status["random" .. i] then
+                    id, marks = characters.random, nil
                 end
-                assets.marks:Render(pos(x + 65, y + 26))
-            end
-            if phase == Phase.lobby and status["ready" .. i] == 1 then
-                assets.ready(origin, x, y)
-                centered(message("已准备"), x + 63, y + 78, 10, ink)
+                local portraitX = x + (marks and 34 or 63)
+                portrait(id):Render(pos(portraitX, y + 45))
+                if id ~= characters.random then
+                    centered(character(id), portraitX, y + 66, 10, nil, marks and 60 or 110)
+                end
+                if marks then
+                    assets.marks.Scale = Vector(0.65, 0.65)
+                    for layerId, state in ipairs(marks) do
+                        assets.marks:SetLayerFrame(layerId - 1, state)
+                    end
+                    assets.marks:Render(pos(x + 65, y + 26))
+                end
+                if phase == Phase.lobby and status["ready" .. i] == 1 then
+                    assets.ready(origin, x, y)
+                    centered(message("已准备"), x + 63, y + 78, 10, ink)
+                else
+                    centered(
+                        message(
+                            phase == Phase.lobby and "选择中"
+                                or (
+                                    (status.connected or 0) & (1 << i) ~= 0 and "在线"
+                                    or "等待归队"
+                                )
+                        ),
+                        x + 63,
+                        y + 78,
+                        10
+                    )
+                end
             else
-                centered(
-                    message(
-                        phase == Phase.lobby and "选择中"
-                            or (
-                                (status.connected or 0) & (1 << i) ~= 0 and "在线"
-                                or "等待归队"
-                            )
-                    ),
-                    x + 63,
-                    y + 78,
-                    10
-                )
+                centered(message("等待玩家"), x + 63, y + 52, 10, faded)
             end
-        else
-            centered(message("等待玩家"), x + 63, y + 52, 10, faded)
         end
     end
     local errorText = status.saveError and status.saveError ~= "" and status.saveError

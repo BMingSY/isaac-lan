@@ -1,4 +1,5 @@
 #pragma once
+#include "core/party.h"
 #include "compat/challenges/catalog.h"
 #include "core/run_rules.h"
 #include <map>
@@ -22,8 +23,9 @@ class ExternalCatalog {
                  unsigned players, std::uint64_t contract, bool lockRoomOptions = false) {
         if (!version || version > 65535 || name.empty() || name.size() > 96 ||
             name.find('\0') != std::string::npos || character > unrestrictedCharacter ||
-            difficulty > 3 || (players && (players < 2 || players > 4)) || !contract ||
-            contracts.contains(contract) || entries.size() + definitions.size() >= maxLobbyRules)
+            difficulty > 3 || (players && (players < 2 || players > party::maxPlayers)) ||
+            !contract || contracts.contains(contract) ||
+            entries.size() + definitions.size() >= maxLobbyRules)
             return 0;
         unsigned slot = externalRuleBase;
         while (entries.contains(slot))

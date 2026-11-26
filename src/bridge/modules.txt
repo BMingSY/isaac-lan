@@ -1,3 +1,4 @@
+core/party
 sync/fields
 sync/entity_schema
 sync/pills

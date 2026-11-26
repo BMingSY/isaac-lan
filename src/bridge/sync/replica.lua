@@ -69,7 +69,7 @@ return function(fields)
             local m = prior or {}
             m.target, m.display, m.velocity, m.at, m.tick =
                 position, m.display or position, velocity, now, tick
-            m.actor, m.controller = actor, actor and e:ToPlayer().ControllerIndex or -1
+            m.actor, m.controller = actor, actor and native.player_owner(e:ToPlayer()) or -1
             m.prediction = actor and prediction and (m.prediction or prediction.new(position))
             m.attachment = deps.attachments and deps.attachments.capture(e, v)
             m.held = v[Entity.held]
@@ -126,13 +126,13 @@ return function(fields)
                     actor[Actor.controller]
                 )
                 assert(
-                    p and p.ControllerIndex == actor[Actor.controller],
+                    p and native.player_owner(p) == actor[Actor.controller],
                     "Replica actor roster differs: index="
                         .. actor[Actor.index]
                         .. " expectedController="
                         .. actor[Actor.controller]
                         .. " actualController="
-                        .. (p and p.ControllerIndex or -1)
+                        .. (p and native.player_owner(p) or -1)
                         .. " expectedType="
                         .. actor[Actor.inventory][Inventory.type]
                         .. " actualType="
@@ -442,7 +442,7 @@ return function(fields)
                 local id = actor[Actor.entity][Entity.id]
                 local current = ref(id)
                 if current and deps.hash(current) == hash then
-                    return deps.pose(motion, id, player.ControllerIndex, deps.now())
+                    return deps.pose(motion, id, native.player_owner(player), deps.now())
                 end
             end
         end

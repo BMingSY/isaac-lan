@@ -1,4 +1,5 @@
 return function(deps, wire)
+    local party = deps.party
     local limits = deps.limits
     local dice = deps.dice
     local chat = { messages = {}, bubbles = {}, emotes = {}, revision = 0 }
@@ -115,12 +116,12 @@ return function(deps, wire)
         if target == "" or target == "self" then
             return { kind = "rebirth", target = "self" }
         end
-        local number = target:match("^([1-4])p?$") or target:match("^p([1-4])$")
+        local number = party.number(target:match("^(%d+)p?$") or target:match("^p(%d+)$"))
         if number then
-            return { kind = "rebirth", target = tonumber(number) - 1 }
+            return { kind = "rebirth", target = number - 1 }
         end
         return nil,
-            "用 /rebirth 让自己重生，或用 /rebirth 2p 让队友重生（1p 至 4p）"
+            "用 /rebirth 让自己重生，或用 /rebirth 2p 让队友重生（1p 至 8p）"
     end
     local function revive(owner, target)
         local slot = target == "self" and owner or target
@@ -353,7 +354,7 @@ return function(deps, wire)
                 "聊天／掷骰末尾加 --room：仅当前房间共享",
                 "/c /console 命令：原版控制台",
                 "/tp help：传送命令",
-                "/rebirth [1p-4p]：让自己或队友重生",
+                "/rebirth [1p-8p]：让自己或队友重生",
                 "/lanbot help：托管命令",
                 "/opacity help：玩家不透明度",
                 "/feedback /fb 描述：上传日志并反馈问题",
@@ -418,7 +419,7 @@ return function(deps, wire)
             if sender == nil then
                 break
             end
-            local ok, value = pcall(wire.decode, bytes)
+            local ok, value = pcall(wire.decode, bytes, party.capacity)
             if ok then
                 if
                     info.hosting == 1
@@ -439,7 +440,7 @@ return function(deps, wire)
                         )
                         or (
                             value.packet == wire.emote
-                            and value.owner < 4
+                            and value.owner < party.capacity
                             and value.id >= 1
                             and value.id <= deps.emotes
                         )

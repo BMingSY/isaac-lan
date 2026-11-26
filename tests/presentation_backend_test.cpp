@@ -41,9 +41,9 @@ using Has = bool(__attribute__((thiscall)) *)(void*, int, bool);
 unsigned char* image;
 std::vector<unsigned char> game(0x290000), room(0x2000);
 std::vector<unsigned char> manager(0x2b000);
-std::array<std::array<unsigned char, 0x1700>, 4> players{};
-std::array<Address, 4> roster{};
-std::array<int, 4> playerRooms{10, 20, 10, 20};
+std::array<std::array<unsigned char, 0x1700>, 5> players{};
+std::array<Address, 5> roster{};
+std::array<int, 5> playerRooms{10, 20, 10, 20, 10};
 unsigned tick = 100, audience = 1, connected = 3;
 int localSlot = 0;
 bool replica = false, ending = false, ready = true, virtualized = true, finalCombat = false;
@@ -652,6 +652,25 @@ int main() {
                     second.at("layout") == 1 && second.at("x") == 110 && second.at("y") == 55,
                 "Repentance+ HUD binding changed native coordinates or controller identity");
 #endif
+        connected = 0x1f;
+        localSlot = 1;
+        lua_State personalHud;
+        require(presentation::playerHuds(&personalHud) == 1 && localOnly &&
+                    personalHud.tables[0].children.size() == 1 &&
+                    personalHud.tables[0].children.contains("1") && game == beforeHud,
+                "A cached teammate HUD leaked its ping in a five-seat view");
+        localSlot = 4;
+        field<Address>(hud, 0) = reinterpret_cast<Address>(players[4].data());
+        lua_State fifthHud;
+        require(presentation::playerHuds(&fifthHud) == 1 && localOnly &&
+                    fifthHud.tables[0].children.size() == 1 &&
+                    fifthHud.tables[0].children.contains("4"),
+                "The fifth seat lost its ping on a physical primary panel");
+        connected &= ~(1u << 2);
+        lua_State teamHud;
+        require(presentation::playerHuds(&teamHud) == 1 && !localOnly &&
+                    teamHud.tables[0].children.size() == 2,
+                "A sparse four-seat team lost its ping anchors");
         field<bool>(hud, hudVisibleOffset) = false;
         lua_State hiddenHud;
         require(presentation::playerHuds(&hiddenHud) == 1 && hiddenHud.tables[0].children.empty(),

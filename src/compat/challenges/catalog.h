@@ -2,6 +2,7 @@
 #include "compat/game_ids.h"
 #include <array>
 #include <cstdint>
+#include <limits>
 #include <span>
 #include <string_view>
 
@@ -67,7 +68,7 @@ inline constexpr std::array definitions{
     },
     Definition{
         1003,
-        3,
+        4,
         ids::player::isaac,
         0,
         true,
@@ -172,7 +173,10 @@ inline const Definition* find(unsigned id) {
     return nullptr;
 }
 inline int nextSeat(unsigned slot, unsigned players) {
-    return players >= 2 && players <= 4 && slot < players ? (slot + 1) % players : -1;
+    if (players < 2 || players > static_cast<unsigned>(std::numeric_limits<int>::max()) ||
+        slot >= players)
+        return -1;
+    return static_cast<int>((slot + 1) % players);
 }
 inline bool available(const Definition& definition, std::span<const std::uint8_t> achievements) {
     for (const auto id : definition.requiredAchievements)

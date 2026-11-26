@@ -2,7 +2,17 @@
 return function(deps)
     local rules, enums = deps.rules, deps.enums
     local width, cells = rules.width, rules.width * rules.width
-    local corners = { 0, width - 1, cells - width, cells - 1 }
+    local middle = width // 2
+    local edges = {
+        0,
+        width - 1,
+        cells - width,
+        cells - 1,
+        middle,
+        cells - width + middle,
+        middle * width,
+        middle * width + width - 1,
+    }
     local function descriptor(level, index)
         local room = level:GetRoomByIdx(index, 0)
         return room and room.Data and room.SafeGridIndex >= 0 and room or nil
@@ -72,7 +82,7 @@ return function(deps)
         end
         return true
     end
-    local function build(level)
+    local function build(level, players)
         -- Native generation can add lower-index rooms while scanning. Stop at
         -- its fixed point; failed doors (large rooms, secrets, edges) stay native.
         for _ = 1, cells do
@@ -105,9 +115,14 @@ return function(deps)
                 end
             end
         end
-        assert(boss and #available >= 4, "Battle royale floor is missing playable rooms")
+        local starts = math.max(4, players)
+        assert(
+            starts <= #edges and boss and #available >= starts,
+            "Battle royale floor is missing playable rooms"
+        )
         local spawns, used = {}, {}
-        for _, corner in ipairs(corners) do
+        for seat = 1, starts do
+            local corner = edges[seat]
             local closest, distance
             for _, index in ipairs(available) do
                 local d = math.abs(index % width - corner % width)

@@ -1,5 +1,9 @@
 -- Main-bridge fixtures use real UI/lifecycle components with no local requests.
 return function(root, native, modules)
+    native.max_players = 8
+    native.player_owner = function(p)
+        return p.ControllerIndex
+    end
     local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
     RoomType = RoomType or enums.RoomType
     TrinketType = TrinketType or enums.TrinketType
@@ -53,6 +57,7 @@ return function(root, native, modules)
             return select("#", ...) == 0 and 100 or true
         end
     for _, name in ipairs({
+        "core/party",
         "core/contacts",
         "core/endpoint",
         "core/room_types",

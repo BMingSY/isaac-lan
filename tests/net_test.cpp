@@ -45,7 +45,7 @@ void until(F f, const std::source_location location = std::source_location::curr
     }
 }
 struct Group {
-    std::array<std::unique_ptr<TestSession>, 4> peers;
+    std::array<std::unique_ptr<TestSession>, maxPlayers> peers;
     std::unique_ptr<UdpRelay> relay;
     unsigned count;
     explicit Group(unsigned n, std::uint8_t difficulty = 0, const char* address = "127.0.0.1",
@@ -571,20 +571,33 @@ void inputsAndStates(unsigned n, const char* address = "127.0.0.1",
     press.triggered = 1u << 12;
     require(g.peers[1]->submit(0, press), "Guest press failed");
     require(g.peers[1]->submit(1, {}), "Guest release failed");
+    if (n == maxPlayers) {
+        InputFrame last;
+        last.values[2] = 54000;
+        last.triggered = 1u << 10;
+        require(g.peers[n - 1]->submit(0, last) && g.peers[n - 1]->submit(1, last),
+                "Last seat could not publish its input");
+    }
     until([&] {
         g.poll();
-        return g.peers[0]->inputSequences()[1] == 1;
+        return g.peers[0]->inputSequences()[1] == 1 &&
+               (n != maxPlayers || g.peers[0]->inputSequences()[n - 1] == 1);
     });
     const auto frame = g.step(1);
     require(frame.inputs[1].values[0] == 0 && frame.inputs[1].triggered == (1u << 12),
             "Latest input lost short button edge or retained stale movement");
+    if (n == maxPlayers)
+        require(frame.inputs[n - 1].values[2] == 54000 &&
+                    frame.inputs[n - 1].triggered == (1u << 10) && frame.inputs[3].values[2] == 0 &&
+                    frame.inputs[3].triggered == 0,
+                "Upper seat input crossed owners");
     require(g.step(2).inputs[1].triggered == 0, "Button edge repeated");
     for (unsigned t = 3; t < 180; ++t) {
         require(g.step(t).tick == t, "Host stalled waiting for a guest input");
         g.publish(t);
         g.poll();
     }
-    std::array<std::uint32_t, 4> last{};
+    std::array<std::uint32_t, maxPlayers> last{};
     until([&] {
         g.poll();
         bool done = true;
@@ -1242,7 +1255,7 @@ void cinematicEvents() {
     require(g.peers[3]->cinematicReady(), "Last player readiness failed");
     until([&] {
         g.poll();
-        return std::all_of(g.peers.begin(), g.peers.end(),
+        return std::all_of(g.peers.begin(), g.peers.begin() + g.count,
                            [](const auto& p) { return !p->cinematicActive(); });
     });
     require(!g.peers[0]->cinematicReady(), "Readiness accepted outside a cinematic");
@@ -3693,6 +3706,7 @@ int main(int argc, char** argv) {
          {"inputs-2", [] { inputsAndStates(2); }},
          {"inputs-3", [] { inputsAndStates(3); }},
          {"inputs-4", [] { inputsAndStates(4); }},
+         {"inputs-8", [] { inputsAndStates(maxPlayers); }},
          {"floor-rejoin", floorRejoin},
          {"stage-events", stageEvents},
          {"ending-events", endingEvents},

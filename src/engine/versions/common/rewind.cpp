@@ -1,3 +1,4 @@
+#include "engine/versions/common/player_seats.h"
 #include "engine/lua_api.h"
 #include "engine/rewind.h"
 #include "compat/items/rewind_targets.h"
@@ -103,7 +104,10 @@ Address actor(unsigned slot) {
         return 0;
     for (auto p = first; p < last; p += sizeof(Address)) {
         const auto player = at<Address>(p, 0);
-        if (player && at<int>(player, bindings.player.controller) == static_cast<int>(slot + 1) &&
+        if (player &&
+            isaac::engine::player_seats::owner(player,
+                                               at<int>(player, bindings.player.controller)) ==
+                static_cast<int>(slot + 1) &&
             at<unsigned>(player, bindings.player.variant) == 0)
             return player;
     }
@@ -270,8 +274,8 @@ int resetLua(lua_State*) {
 }
 } // namespace
 void remember(unsigned slot, int door, const std::vector<rooms::SavedLocation>& locations) {
-    if (runtime::replica() || slot >= lan::maxPlayers || locations.empty() || !game() ||
-        !originalStore)
+    if (runtime::replica() || locations.size() > lan::maxPlayers || slot >= locations.size() ||
+        !game() || !originalStore)
         return;
     at<int>(game(), bindings.gameLayout.selectedBuffer) = -1;
     storeCheckpoint(door);

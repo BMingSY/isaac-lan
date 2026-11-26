@@ -1,4 +1,5 @@
 local root = assert(arg[1])
+local party = dofile(root .. "/src/bridge/core/party.lua")
 local runtime = dofile(root .. "/tests/fixtures/api_runtime.lua")(root)
 local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
 local factory = dofile(root .. "/src/bridge/runtime/teleport.lua")
@@ -105,6 +106,7 @@ for _, peer in ipairs({ host, guest }) do
         peer.queuedMove = nil
     end
     peer.teleport = factory({
+        party = party,
         roomDefinitions = dofile(root .. "/src/bridge/core/room_types.lua"),
         native = native,
         enums = {
@@ -127,6 +129,7 @@ for _, peer in ipairs({ host, guest }) do
         end,
     })
     peer.chat = chatFactory({
+        party = party,
         teleport = peer.teleport,
         limits = { characters = 60, commandBytes = 2048, history = 200, dice = 999 },
         nonce = native.api_nonce,
@@ -210,7 +213,7 @@ for _, text in ipairs({
     "/tp r 0 13",
     "/tp r 99999999999999999999 0",
     "/tp 0p",
-    "/tp 5p",
+    "/tp 9p",
     "/tp r 0x1 0",
     "/tp us extra",
 }) do

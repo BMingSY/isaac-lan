@@ -66,6 +66,7 @@ local function environment(difficulty)
     local position, ready, epoch = 84, true, 1
     local chances, appliedChances = { 1, 0.5 }, nil
     local native = {
+        max_players = dofile(root .. "/src/bridge/core/party.lua").capacity,
         actor_companions = function(bytes)
             assert(bytes == "\0")
             return true

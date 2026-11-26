@@ -66,7 +66,7 @@ return function(fields)
                 if not base then
                     base = {
                         [Actor.index] = index,
-                        [Actor.controller] = p.ControllerIndex,
+                        [Actor.controller] = native.player_owner(p),
                         [Actor.inventory] = inventory(
                             p,
                             inventoryCatalog,
@@ -85,7 +85,7 @@ return function(fields)
                         captureEncoded[items] = previousEncoded[items] or false
                     end
                 end
-                local position = locations[tostring(p.ControllerIndex - 1)]
+                local position = locations[tostring(base[Actor.controller] - 1)]
                 if
                     position
                     and position.index == view.index
@@ -96,7 +96,7 @@ return function(fields)
                         local actorEntity
                         -- Held entities and minecarts use room-local indices.
                         -- Resolve them in the actor's room, including remote views.
-                        assert(native.rooms_with_player(p.ControllerIndex - 1, function()
+                        assert(native.rooms_with_player(base[Actor.controller] - 1, function()
                             actorEntity = entity(p)
                         end))
                         local visuals = {}
@@ -112,7 +112,7 @@ return function(fields)
                         end
                         full = {
                             [Actor.index] = index,
-                            [Actor.controller] = p.ControllerIndex,
+                            [Actor.controller] = base[Actor.controller],
                             [Actor.entity] = actorEntity,
                             [Actor.inventory] = base[Actor.inventory],
                             [Actor.visuals] = visuals,
@@ -139,7 +139,7 @@ return function(fields)
             if not shared then
                 local loc = {}
                 local heads = native.rooms_heads()
-                for player = 0, 3 do
+                for player = 0, native.max_players - 1 do
                     local at = locations[tostring(player)]
                     if at then
                         local position = deps.player(heads[tostring(player)]).Position

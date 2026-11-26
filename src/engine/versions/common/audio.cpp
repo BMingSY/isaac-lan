@@ -1,3 +1,4 @@
+#include "core/party.h"
 #include "engine/lua_api.h"
 #include "engine/audio.h"
 #include "core/audio_ownership.h"
@@ -311,7 +312,7 @@ int capture(lua_State* L) {
     const auto tick = runtime::tick();
     lan::Writer bytes(lan::Message::world);
     constexpr unsigned historyTicks = 30;
-    if (slot >= 0 && slot < 4)
+    if (party::validSlot(slot))
         for (const auto& event : events) {
             const bool audible = key && !event.loop && event.id == roomWarning
                                      ? event.room == *key
@@ -333,7 +334,7 @@ int capture(lua_State* L) {
         return 1;
     lan::Writer levels(lan::Message::world);
     const auto mix = mixes.find(*key);
-    if (slot >= 0 && slot < 4 && mix != mixes.end() && (mix->second.audience & (1u << slot))) {
+    if (party::validSlot(slot) && mix != mixes.end() && (mix->second.audience & (1u << slot))) {
         for (const auto& value : mix->second.levels) {
             levels.u32(value.id);
             levels.u32(std::bit_cast<unsigned>(value.volume));

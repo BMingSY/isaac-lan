@@ -1,3 +1,4 @@
+#include "core/party.h"
 #include "engine/versions/common/death_certificate_return.h"
 #include "engine/versions/common/death_certificate_bindings.h"
 #include "engine/versions/common/branch_frame.h"
@@ -27,7 +28,7 @@ bool finishReturn() {
     // the native return; never run the whole update in that player's context.
     at<int>(game, bindings.timer) = 0;
     const auto locations = rooms::captureLocations();
-    std::array<int, 4> dimensions{};
+    std::array<int, party::maxPlayers> dimensions{};
     for (unsigned slot = 0; slot < locations.size() && slot < dimensions.size(); ++slot)
         dimensions[slot] = locations[slot].dimension;
     const auto slot = compat::items::deathCertificateReturnSlot(dimensions, rooms::connected());

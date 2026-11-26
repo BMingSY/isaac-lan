@@ -15,5 +15,9 @@ const Bindings bindings{repentance::globals::game,
                         repentance::layout::entity::positionX,
                         repentance::layout::entity::positionY,
                         repentance::layout::entity::previousX,
-                        repentance::layout::entity::previousY};
+                        repentance::layout::entity::previousY,
+                        repentance::layout::entity::initSeed,
+                        repentance::layout::entity::parent,
+                        repentance::layout::player::twin,
+                        repentance::layout::player::lazarusBackup};
 } // namespace isaac::engine::native_players

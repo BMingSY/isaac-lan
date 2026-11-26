@@ -141,6 +141,10 @@ local deps = {
         end
     end,
     native = {
+        max_players = dofile(root .. "/src/bridge/core/party.lua").capacity,
+        player_owner = function(p)
+            return p.ControllerIndex
+        end,
         rooms_with_player = function(slot, callback)
             local previous = currentRoom
             currentRoom = assert(positions[tostring(slot)])

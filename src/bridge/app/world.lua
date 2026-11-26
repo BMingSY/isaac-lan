@@ -1,6 +1,10 @@
 -- Host-owned gameplay, explicit portable state, and client-only presentation.
 -- No Lua source, native pointers or Mod tables are transferred over the wire.
 local native = assert(_IsaacLan)
+function native.player_owner(player)
+    return native.actor_owner(player:GetSprite(), player.ControllerIndex)
+end
+assert(_IsaacLanModules["core/party"].capacity == native.max_players)
 local prediction = assert(_IsaacLanPrediction)
 local state = {}
 local challenges

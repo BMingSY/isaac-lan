@@ -1,7 +1,8 @@
 return function(deps)
-    local slots, maximum = 4, 100
+    local party = deps.party
+    local slots, maximum = party.capacity, 100
     local overrides, others, applied = {}, deps.default, nil
-    local help = "/opacity 1p～4p 0～100：玩家不透明度\n"
+    local help = "/opacity 1p～8p 0～100：玩家不透明度\n"
         .. "/opacity others 0～100：其他玩家不透明度\n"
         .. "/opacity reset：恢复配置默认值"
     local function step()
@@ -55,11 +56,11 @@ return function(deps)
                     end
                 end
             else
-                local owner = target:match("^([1-4])p$")
+                local owner = party.number(target:match("^(%d+)p$"))
                 if not owner then
                     return help
                 end
-                overrides[tonumber(owner) - 1] = value
+                overrides[owner - 1] = value
             end
             step()
             return (target == "others" and "其他玩家" or target:upper())

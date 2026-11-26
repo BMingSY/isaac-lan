@@ -7,7 +7,8 @@ namespace isaac::engine::native_players {
 // operations borrow them synchronously and never allocate/free native storage.
 struct Bindings {
     std::uint32_t game, spawn, assign, initialize, getHUD, assignHUDs;
-    unsigned manager, players, controller, positionX, positionY, previousX, previousY;
+    unsigned manager, players, controller, positionX, positionY, previousX, previousY, initSeed,
+        parent, twin, lazarusBackup;
 };
 extern const Bindings bindings;
 bool assign(std::uintptr_t image, unsigned slot, int controller);

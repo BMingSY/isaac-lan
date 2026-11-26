@@ -70,7 +70,7 @@ return function(deps)
         if info.authority ~= 1 or info.ready ~= 1 then
             return true
         end
-        local slot = player.ControllerIndex - 1
+        local slot = native.player_owner(player) - 1
         if slot < 0 or slot >= info.players or (info.connected & (1 << slot)) == 0 then
             return true
         end

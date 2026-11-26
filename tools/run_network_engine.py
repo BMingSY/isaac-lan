@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Own and close two isolated game processes; never touches a live installation."""
+"""Run a host and its clients in distinct owned game directories."""
 
 import argparse
 import hashlib
@@ -15,7 +15,7 @@ from testing.lua import bundle_input, literal
 from game_profiles import build_profile, installer_payload, lab_profile
 from build_package import build as build_installer
 from game_logs import freeze_probe_logs, probe_text, log_path
-from lab_profile import windows
+from lab_profile import validate_labs, windows
 from check_performance import summarize_tree
 from progress_fixture import LAYOUTS, prepare as prepare_progress_fixture
 
@@ -33,6 +33,17 @@ def read_log(lab):
     text = path.read_text(errors="replace") if path.exists() else ""
     check_runtime_log(text, lab.name)
     return text
+
+
+def hud_controllers(log):
+    samples = re.findall(r"LAN_NETWORK HUD_AUDIENCE slot=(\d+) connected=(\d+)", log)
+    if not samples:
+        raise ValueError("Missing online player list for the HUD check")
+    local, connected = map(int, samples[-1])
+    players = {slot + 1 for slot in range(connected.bit_length()) if connected & (1 << slot)}
+    if local + 1 not in players:
+        raise ValueError("Local player is absent from the HUD check")
+    return local + 1, {local + 1} if len(players) > 4 else players
 
 
 def main():
@@ -181,13 +192,11 @@ def main():
     parser.add_argument(
         "--record-view",
         type=int,
-        choices=range(4),
         help="Record an owned peer's pixels after the scenario emits VISUAL_READY",
     )
     parser.add_argument(
         "--native-record-view",
         type=int,
-        choices=range(4),
         help="Archive native back-buffer frames for one owned peer throughout the run",
     )
     parser.add_argument(
@@ -305,14 +314,11 @@ def main():
         parser.error("Latency fixture requires delay 1..1000 and an available following port")
     if args.relay_control and not args.latency_ms:
         parser.error("--relay-control requires the isolated latency relay")
-    labs = [args.host.resolve(), args.client.resolve(), *(p.resolve() for p in args.extra_client)]
-    roles = ["host", "client", "client2", "client3"][: len(labs)]
-    if (
-        len(labs) > 4
-        or len(set(labs)) != len(labs)
-        or any(not (lab / ".isaac-lan-lab").is_file() for lab in labs)
-    ):
-        raise SystemExit("Two to four distinct marked lab directories are required")
+    labs = validate_labs([args.host, args.client, *args.extra_client], args.output, count=None)
+    roles = ["host", "client", *(f"client{i}" for i in range(2, len(labs)))]
+    for selected in (args.record_view, args.native_record_view):
+        if selected is not None and not 0 <= selected < len(labs):
+            parser.error("Requested recording peer does not exist")
     live = json.loads(
         execute(
             "powershell.exe",
@@ -324,8 +330,6 @@ def main():
     targets = {windows(lab / "game/isaac-ng.exe").casefold() for lab in labs}
     if any((process.get("Path") or "").casefold() in targets for process in live):
         raise SystemExit("An owned lab is still running; close it before reusing its files")
-    if args.native_record_view is not None and args.native_record_view >= len(labs):
-        parser.error("Requested recording peer does not exist")
     source = Path(__file__).resolve().parent.parent
     script = args.script
     source_script = script.read_bytes()
@@ -334,6 +338,10 @@ def main():
     if args.exercise_official and not has_official_lobby:
         parser.error("The selected game has no official Online entry")
     body = source_script.decode("utf-8")
+    if args.check_local_stats:
+        body = (
+            (source / "tests/fixtures/hud_audience.lua").read_text(encoding="utf-8") + "\n" + body
+        )
     if args.progress_fixture:
         # Wait for the selected save slot before the scenario can connect.
         # This reads through the game's own progression API on its render thread.
@@ -667,6 +675,7 @@ def main():
                 (internal / "disable.it").touch()
                 scenario_config = {
                     "host": role == "host",
+                    "peerIndex": roles.index(role),
                     "players": len(labs),
                     "exerciseMenu": args.exercise_menu,
                     "movementPrediction": role == "host" or not args.no_client_movement_prediction,
@@ -882,7 +891,7 @@ def main():
                     if has_official_lobby:
                         menu_control(pid, "{DOWN}")  # LAN in the Online mode chooser.
                         menu_control(pid, "{ENTER}")
-                    if role == "client":
+                    if role != "host":
                         menu_control(pid, "{DOWN}")
                         menu_control(pid, "{ENTER}")
                         # These are also the original mute/fullscreen shortcuts.
@@ -928,7 +937,7 @@ def main():
                         if role == "host":
                             menu_control(pid, "{UP}")
                             menu_control(pid, "{UP}")
-                    if role == "client":
+                    if role != "host":
                         menu_control(pid, "{DOWN}")  # join, after port row
                     menu_control(pid, "{ENTER}")
                 else:
@@ -1162,7 +1171,8 @@ def main():
                     result["floor_hud"] = floor_hud.finish()
                 result["pass"] = True
                 if args.check_local_stats:
-                    for slot, (role, pid) in enumerate(zip(roles, processes)):
+                    for role, pid, log in zip(roles, processes, logs):
+                        local, visible = hud_controllers(log)
                         hud = json.loads(
                             execute(
                                 "powershell.exe",
@@ -1176,22 +1186,22 @@ def main():
                             )
                         )
                         result.setdefault("local_stats", {})[role] = hud
-                        assert hud["primary_controller"] == slot + 1, (
+                        assert hud["primary_controller"] == local, (
                             f"{role}: main pocket/HUD bound to another player"
                         )
                         assert hud["entries"] and all(
-                            p["controller"] == slot + 1 for p in hud["entries"]
+                            p["controller"] == local for p in hud["entries"]
                         ), f"{role}: teammate in native StatHUD"
                         assert hud["entries"][0]["column"] == 0, (
                             f"{role}: local stats were left in a teammate column"
                         )
-                        assert {p["controller"] for p in hud["players"]} == set(
-                            range(1, len(roles) + 1)
-                        ), f"{role}: original multiplayer player HUD omitted a participant"
+                        assert {p["controller"] for p in hud["players"]} == visible, (
+                            f"{role}: native HUD showed the wrong players"
+                        )
                         assert all(
                             p["hearts"] > 0 for p in hud["players"] if p["max_hearts"] > 0
                         ), f"{role}: local red heart HUD disappeared"
-                        assert all(p["controller"] == slot + 1 for p in hud["history"]), (
+                        assert all(p["controller"] == local for p in hud["history"]), (
                             f"{role}: teammate in item history"
                         )
                 if args.capture_ui:
@@ -1202,7 +1212,7 @@ def main():
                 break
             time.sleep(0.25)
         if not result["pass"]:
-            raise RuntimeError("Two-process engine synchronization test timed out")
+            raise RuntimeError("Network engine synchronization test timed out")
     except Exception as error:
         result["pass"] = False
         result["error"] = str(error)

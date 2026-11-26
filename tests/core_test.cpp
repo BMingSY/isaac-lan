@@ -1573,6 +1573,8 @@ Archive sample(unsigned players = 4) {
     value.settings.seed = "YV039KQF";
     value.settings.difficulty = 3;
     value.settings.characters = {0, 1, 37, 65535};
+    for (unsigned i = Archive::legacyCharacters; i < std::min(players, maxPlayers); ++i)
+        value.settings.characters[i] = static_cast<std::uint16_t>(i + 5);
     value.settings.progress = Progress{};
     value.settings.progress->achievements[42] = 1;
     value.settings.progress->counters[17] = 1234;
@@ -1586,7 +1588,7 @@ Archive sample(unsigned players = 4) {
 }
 
 void archiveRoundTrip() {
-    for (unsigned players = 2; players <= 4; ++players) {
+    for (unsigned players = 2; players <= maxPlayers; ++players) {
         for (unsigned difficulty = 0; difficulty <= 3; ++difficulty) {
             auto value = sample(players);
             value.settings.difficulty = static_cast<std::uint8_t>(difficulty);
@@ -1723,7 +1725,7 @@ void challengeRules() {
     require(battle && battle->character == isaac::compat::ids::player::isaac &&
                 battle->difficulty == 0 && battle->friendlyFire && battle->transient &&
                 battle->route == "battle_royale" && battle->roomOptionsLocked &&
-                battle->version == 3 && isaac::compat::challenges::available(*battle, {}),
+                battle->version == 4 && isaac::compat::challenges::available(*battle, {}),
             "Battle royale lobby contract mismatch");
     require(!definition->roomOptionsLocked && !luck->roomOptionsLocked,
             "Other challenges lost their independent room options");
@@ -1814,6 +1816,9 @@ void challengeRules() {
         rejects([&] { Archive::decode(archive.encode()); },
                 "Normal run carried challenge constraints");
     }
+    require(isaac::compat::challenges::nextSeat(3, 5) == 4 &&
+                isaac::compat::challenges::nextSeat(4, 5) == 0,
+            "Fifth seat lost its crafting-bag challenge target");
     require(isaac::compat::challenges::nextSeat(0, 1) == -1 &&
                 isaac::compat::challenges::nextSeat(4, 4) == -1,
             "Invalid ring accepted");
@@ -1866,8 +1871,8 @@ void roomOptionsAndMarks() {
             legacy.u8(0);
             if (format != 3)
                 legacy.u32(legacyOptions);
-            for (auto c : archive.settings.characters)
-                legacy.u16(c);
+            for (unsigned i = 0; i < Archive::legacyCharacters; ++i)
+                legacy.u16(archive.settings.characters[i]);
             legacy.progress(archive.settings.progress, format == 5);
             legacy.u8(archive.locations.size());
             for (const auto& p : archive.locations) {
@@ -1926,7 +1931,7 @@ void archiveIntegrity() {
 }
 
 void archiveSettings() {
-    for (unsigned players : {0, 1, 5}) {
+    for (unsigned players : {0u, 1u, maxPlayers + 1}) {
         const auto value = sample(players);
         rejects([&] { Archive::decode(value.encode()); }, "Invalid saved roster accepted");
     }

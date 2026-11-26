@@ -1,6 +1,8 @@
+#include "engine/versions/common/player_seats.h"
 #include "engine/lua_api.h"
 #include "engine/versions/common/victory_prompt.h"
 #include "engine/versions/common/presentation_bindings.h"
+#include "engine/versions/common/player_hud.h"
 #include "compat/game_ids.h"
 #include "engine/presentation.h"
 #include "engine/animation_skip.h"
@@ -159,7 +161,8 @@ int minimap(lua_State* L) {
     return 1;
 }
 int playerHuds(lua_State* L) {
-    lua.createTable(L, 0, 4);
+    namespace panels = engine::native_player_hud;
+    lua.createTable(L, 0, panels::primaryPanels);
     const auto manager = at<std::uintptr_t>(image, bindings.manager);
     const auto game = currentGame();
     if (!manager || at<int>(manager, bindings.layout.managerScene) != 2 || !game ||
@@ -167,21 +170,27 @@ int playerHuds(lua_State* L) {
         return 1;
     const auto width = at<float>(image, bindings.logicalWidth);
     const auto height = at<float>(image, bindings.logicalHeight);
-    rooms::withView([&] {
-        for (unsigned i = 0; i < 4; ++i) {
-            const auto anchor = bindings.hudAnchor(image, game, i, width, height);
-            if (!anchor)
-                continue;
-            lua.createTable(L, 0, 3);
-            lua.pushInteger(L, anchor->layout);
-            lua.setField(L, -2, "layout");
-            lua.pushNumber(L, anchor->x);
-            lua.setField(L, -2, "x");
-            lua.pushNumber(L, anchor->y);
-            lua.setField(L, -2, "y");
-            lua.setField(L, -2, std::to_string(anchor->slot).c_str());
-        }
-    });
+    const int local = runtime::localViewSlot();
+    const auto connected = rooms::connected();
+    const bool personal = local >= 0 && panels::localOnly(connected);
+    const auto audience = personal ? connected & panels::seatBit(local) : connected;
+    rooms::withView(
+        [&] {
+            for (unsigned i = 0; i < panels::primaryPanels; ++i) {
+                const auto anchor = bindings.hudAnchor(image, game, i, width, height, audience);
+                if (!anchor)
+                    continue;
+                lua.createTable(L, 0, 3);
+                lua.pushInteger(L, anchor->layout);
+                lua.setField(L, -2, "layout");
+                lua.pushNumber(L, anchor->x);
+                lua.setField(L, -2, "x");
+                lua.pushNumber(L, anchor->y);
+                lua.setField(L, -2, "y");
+                lua.setField(L, -2, std::to_string(anchor->slot).c_str());
+            }
+        },
+        personal);
     return 1;
 }
 int events(lua_State* L) {
@@ -189,7 +198,7 @@ int events(lua_State* L) {
         if (lua.getTop(L) == 1 && !runtime::replica()) {
             const auto slot = lua.checkInteger(L, 1);
             lan::Writer w(lan::Message::world);
-            if (slot >= 0 && slot < 4)
+            if (party::validSlot(slot))
                 for (const auto& e : intros) {
                     if (!(e.audience & (1u << slot)) ||
                         !waiting.pending(slot, e.serial, runtime::tick()))

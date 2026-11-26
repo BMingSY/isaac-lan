@@ -11,11 +11,11 @@ inline constexpr native_player_hud::Layout fields{layout::hud::visible, layout::
 // four heart anchors inline before its RenderHearts call at 0x505965. Primary
 // corners follow the HUD array; network identity comes from its bound player.
 inline std::optional<Anchor> anchor(std::uintptr_t hud, unsigned index, float width, float height,
-                                    float hudOffset) {
+                                    float hudOffset, unsigned audience) {
     if (!std::isfinite(hudOffset))
         return {};
     return native_player_hud::anchor(
-        hud, index, width, height, fields,
+        hud, index, width, height, audience, fields,
         [](auto, auto corner, auto) { return static_cast<int>(corner); },
         [hudOffset, width, height](auto, float* point, auto corner, auto) {
             const float margin = 1 - hudOffset;

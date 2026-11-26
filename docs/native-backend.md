@@ -326,6 +326,8 @@ Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；�
 
 物理采集、虚拟 XInput、权威输入分发、按键沿消费和退出恢复位于[共享输入组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/input.cpp)。[忏悔＋输入绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance_plus/input.cpp) 提供原生查询／鼠标入口、布局、动作映射与菜单提示重置。查询通过输入管理器虚表 `+0x74` 安装，失败撤销本组件创建的 Hook；鼠标旁路保留原生 thiscall 参数。采集按 `Manager+0x4ae8c` 的渲染帧编号去重；重复采集消费按键沿但保留按住值，不更改网络字段与编码顺序。
 
+[角色席位映射](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/player_seats.h)让 P5–P8 复用设备 1–4。房主根据当前更新的角色选择联机输入。映射记录角色的创建种子，伴生身体继承所有者，启动和退出时清空。桥接通过 `player_owner(player)` 读取逻辑席位。
+
 `input_ready()` 根据同一份受锁保护的设备 ID 快照，检查虚拟设备是否已启用、输入查询是否已安装及 ID 1–4 是否全部存在。[公共设备组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/input_devices.cpp) 串行化原生扫描 `0x68da90` 与轮询 `0x68de40` 的完整事务，允许同线程回调重入。虚拟手柄接入和断开时，组件在设备锁内各执行一次原生扫描，即使关闭 `ControllerHotplug` 也能更新设备列表。断开清理继续受同一把锁保护。忏悔＋输入管理器 RVA `0x880068` 的列表首尾为 `+8/+12`，元素八字节，设备 ID 位于 `+12`。输入采集与表情轮盘共用逻辑槽到物理设备的映射。逻辑键盘槽 0 查询原生设备 ID −2，联机期间把四个手柄（含原生编号 0）分配到 1–4；组件不修改元素中的原生所有权字段。退出只恢复仍存在且编号未被独立更改的设备，设备对象仍由游戏分配和释放。运行协调器在就绪后请求开局；角色槽位绑定仍由 `input_assign` 与角色生命周期组件负责。
 
 `players_spawn` 和 `input_assign` 通过[共享玩家组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/player_input.cpp) 使用 [忏悔＋绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance_plus/player_input.cpp)。忏悔＋ `PlayerManager` 与其玩家向量起点均为 `Game+0x1baa8`；创建 `0x5d1830` 接收管理器和角色类型，分配 `0x3aee10` 接收角色、控制器和伴生传播标志，初始化 `0x3c52c0` 接收角色，均为 thiscall。初始化和开局奖励后重新读取向量，为新增身体设置控制器与当前／上一位置，然后由 `0x18de0` 取得 HUD 并调用 `0x5bfde0` 分配显示槽位。已有角色保持原样；对象和向量由游戏持有，部分原生创建失败不提供回滚。
@@ -338,7 +340,7 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 
 | 能力 | 布局／入口 | 约束 |
 | --- | --- | --- |
-| `presentation_player_huds` | 四个主 PlayerHUD，步长 `0x6dc`，调用原生布局与位置函数 | 在本机视图内返回控制器、布局和坐标；过滤隐藏、空槽、无效值和屏幕外坐标，不持有原生对象 |
+| `presentation_player_huds` | 四个主 PlayerHUD，步长 `0x6dc`，调用原生布局与位置函数 | 在 HUD 使用的同一视图内返回可见玩家、布局和坐标。仅显示本机玩家时过滤其他席位的缓存坐标。过滤隐藏、空槽、无效值和屏幕外坐标，不持有原生对象 |
 | `presentation_minimap` | 复用 `Minimap::Render` 内的纹理绘制观察，读取 `layout::mapConfig` 的纹理、格距和锚点及绘制 quad | 返回本帧实际绘制的小／大地图视图：网格原点中心、横纵格距、屏幕裁剪矩形、透明度和维度，均为普通值。只接受有限数值、正尺寸和轴对齐绘制；不绘制时返回空表；`_IsaacLanMinimapRender` 在本机原生地图绘制后调用，上层可使用当帧坐标追加提示。每次游戏绘制前清空，不保留原生指针、不改写地图或探索状态 |
 | 副手绘制 | RVA `0x44fc60`，`ECX=PlayerHUD*`、`XMM3=scale`、栈参数 12 字节 | 仅绘制本机 HUD，保留 receiver、透明度与其他口袋内容；挑战使用完整布局和缩放 1 |
 | 完整副手位置 | 调用点 RVA `0x5beb41`；逻辑宽高 RVA `0x89ee7c/0x89f0d0`，HUD 偏移 `+0x594c/+0x5950` | 使用 `(width-28+offsetX, height-18+offsetY)`，临时栈 Vector 不改写调用方数据 |

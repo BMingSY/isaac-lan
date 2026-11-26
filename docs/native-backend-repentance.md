@@ -234,7 +234,7 @@ StatHUD／HistoryHUD 玩家查询入口为 `0x508370/0x508000`，以 ECX 接收�
 
 ## 玩家 HUD 坐标
 
-[坐标组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance/player_hud.h) 复用[借用与范围检查](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/player_hud.h)，只返回控制器栏位、布局和坐标。原生可见位为 `HUD+0xc3eb6`；仅查看前四个主 HUD，不保留指针或写入缓存。空槽、隐藏、无效控制器、非有限或非正视口尺寸及屏幕外位置均不返回坐标。
+[坐标组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance/player_hud.h) 复用[借用与范围检查](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/player_hud.h)，只返回玩家席位、布局和坐标。原生可见位为 `HUD+0xc3eb6`。组件检查四个主面板，以本次视图可见的在线席位筛选绑定玩家，不保留指针或写入缓存。空槽、隐藏、无效归属、非有限或非正视口尺寸及屏幕外位置均不返回坐标。
 
 忏悔没有独立的布局／坐标查询方法；`HUD::Render` 在心形绘制调用 `0x505965` 前按 HUD 数组顺序构造四个位置。令 `m=1-HUDOffset`，其坐标分别为 `(68-20*m, 24-12*m)`、`(width-135+24*m, 24-12*m)`、`(80-22*m, height-33+6*m)`、`(width-135+16*m, height-33+6*m)`。组件按原生规则先计算相对坐标，再为负坐标加上视口尺寸；布局编号为对应的 0–3 角位，联机身份独立取自绑定玩家的控制器。调用方须处于与 HUD 绘制一致的本机名单作用域。
 
@@ -356,6 +356,8 @@ Seeds 含游戏管理的容器；传值调用由原生入口消费一次，扩�
 [玩家绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance/player_input.cpp) 连接[共享创建组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/player_input.cpp)。`PlayerManager` 位于 `Game+0x1ba40`，玩家向量位于 `Game+0x1ba50`，两者不能混用。创建 `0x518810` 为 `thiscall Player*(PlayerManager*, int type)`；分配 `0x36b140` 为 `thiscall void(Player*, int controller, bool companions)`，控制器字段为 `+0x154c`。LAN 控制器范围为 `1..4`。
 
 创建后先分配控制器，再调用无栈参数的原生初始化 `0x380810`，随后通知所属开局奖励组件。初始化或奖励可能追加伴生角色并扩容向量，因此必须重新取得列表，为所有新增身体分配相同控制器和邻近主玩家的出生位置。位置为 `Entity+0x294/+0x298`，上一位置为 `+0x29c/+0x2a0`；两者同步设置。最后通过 `Game::GetHUD` 的 `0x127c0` 取得 `Game+0x3da4c`，调用 `0x506f10` 分配原生 HUD，两者都以 ECX 接收对象，无栈参数。
+
+[角色席位映射](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/player_seats.h)将 P5–P8 分别绑定到设备 1–4，角色的逻辑席位与伴生身体一同恢复。超过四人时由个人 HUD 绑定本机面板。
 
 组件校验图像、当前 Game、槽位、类型范围和向量边界；游戏对象、角色及列表仍由游戏持有，不保留迭代器、不自行分配或释放。原生创建失败时不继续初始化；初始化期间 Game 失效时停止后续访问。失败不提供原生对象回滚，调用方不能将部分创建视为加入成功。开局奖励使用下述道具组件；完整使用仍依赖房间与启动装配。
 

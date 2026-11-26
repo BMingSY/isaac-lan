@@ -18,8 +18,33 @@ from testing.endings import build as build_endings
 from testing import gameplay as build_gameplay_suite
 from testing import discovery
 from run_mouse_input import ready_peers
-from run_network_engine import read_log
+from run_network_engine import hud_controllers, read_log
+from lab_profile import validate_labs
 from game_logs import log_path
+
+
+def test_hud_observer_follows_online_membership_and_the_local_seat():
+    full = "LAN_NETWORK HUD_AUDIENCE slot=4 connected=31"
+    sparse = "LAN_NETWORK HUD_AUDIENCE slot=4 connected=27"
+    assert hud_controllers(full) == (5, {5})
+    assert hud_controllers(full + "\n" + sparse) == (5, {1, 2, 4, 5})
+    assert hud_controllers(sparse + "\n" + full) == (5, {5})
+    with pytest.raises(ValueError):
+        hud_controllers("LAN_NETWORK HUD_AUDIENCE slot=4 connected=15")
+
+
+def test_five_peer_run_requires_five_distinct_owned_labs(tmp_path):
+    labs = [tmp_path / f"peer-{i}" for i in range(5)]
+    for lab in labs:
+        (lab / "game").mkdir(parents=True)
+        (lab / "game/isaac-ng.exe").touch()
+        (lab / ".isaac-lan-lab").touch()
+    assert validate_labs(labs, tmp_path / "evidence", count=None) == labs
+    with pytest.raises(ValueError):
+        validate_labs([*labs, labs[-1]], count=None)
+    (labs[-1] / ".isaac-lan-lab").unlink()
+    with pytest.raises(ValueError):
+        validate_labs(labs, count=None)
 
 
 @pytest.mark.parametrize(

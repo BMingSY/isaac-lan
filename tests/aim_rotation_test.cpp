@@ -11,7 +11,7 @@ int main() {
     for (unsigned seat = 0; seat < physical.size(); ++seat) {
         for (unsigned action = 0; action < lan::actionCount; ++action)
             physical[seat].values[action] = 1000 * (seat + 1) + action;
-        physical[seat].triggered = (1u << (shootLeft + seat)) | (1u << bomb) | (1u << moveUp);
+        physical[seat].triggered = (1u << (shootLeft + seat % 4)) | (1u << bomb) | (1u << moveUp);
         physical[seat].pointer = {true, 50.0f * seat, 100.0f + seat};
     }
     for (unsigned players = 2; players <= maximumAimSeats; ++players)
@@ -33,7 +33,7 @@ int main() {
             for (unsigned seat = players; seat < physical.size(); ++seat)
                 require(actual[seat] == physical[seat], "Rotation touched an unused seat");
         }
-    for (unsigned players : {0u, 1u, 5u}) {
+    for (unsigned players : {0u, 1u, maximumAimSeats + 1}) {
         auto actual = physical;
         rotateShooting(actual, players, 15);
         require(actual == physical, "Invalid party changed input");
@@ -56,5 +56,5 @@ int main() {
                 preview.values[item] == physical[0].values[item] && preview.values[shootLeft] == 0,
             "Local movement preview retained shooting owned by another player");
     std::puts(
-        "PASS two-to-four opening seats, disconnect masks, hold/release, pointer and owner input");
+        "PASS two-to-eight opening seats, disconnect masks, hold/release, pointer and owner input");
 }

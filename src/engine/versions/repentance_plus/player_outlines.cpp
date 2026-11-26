@@ -1,3 +1,4 @@
+#include "engine/versions/common/player_seats.h"
 #include "engine/player_outlines.h"
 #include "engine/versions/common/player_outlines.h"
 #include "engine/versions/repentance_plus/entrypoints.h"
@@ -32,7 +33,8 @@ template <class T> T read(Address address, std::ptrdiff_t offset) {
 std::optional<unsigned> slot(Address player) {
     if (!participants || !player)
         return {};
-    const auto controller = read<int>(player, repentance_plus::layout::player::controller);
+    const auto controller = isaac::engine::player_seats::owner(
+        player, read<int>(player, repentance_plus::layout::player::controller));
     return controllerSlot(controller);
 }
 using PlayerColor = Color*(__attribute__((thiscall)) *)(void*, Color*, void*);

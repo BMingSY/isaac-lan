@@ -1,10 +1,10 @@
 -- Local suggestions only; command execution remains owned by the chat service.
-return function(roomDefinitions, maxBytes)
+return function(roomDefinitions, maxBytes, party)
     assert(maxBytes, "Chat command byte limit is required")
     local rebirth = {
         names = { "rebirth" },
         detail = "让自己或队友重生",
-        usage = "[1p-4p]",
+        usage = "[1p-8p]",
     }
     local commands = {
         { names = { "help", "h" }, detail = "查看命令" },
@@ -59,7 +59,7 @@ return function(roomDefinitions, maxBytes)
         { names = { "cautious" }, detail = "谨慎" },
     }
     local players = {}
-    for slot = 1, 4 do
+    for slot = 1, party.capacity do
         players[#players + 1] = { names = { slot .. "p" }, detail = slot .. "P 玩家" }
     end
     local targets = {
@@ -182,7 +182,9 @@ return function(roomDefinitions, maxBytes)
         elseif command.names[1] == "opacity" then
             if argument == 1 then
                 definitions = opacityTargets
-            elseif argument == 2 and (words[1] == "others" or words[1]:match("^[1-4]p$")) then
+            elseif
+                argument == 2 and (words[1] == "others" or party.number(words[1]:match("^(%d+)p$")))
+            then
                 usage = "/" .. name .. " " .. words[1] .. " <0～100>"
                 definitions = percentages
             end

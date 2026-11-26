@@ -1,4 +1,5 @@
 #pragma once
+#include "core/party.h"
 #include <array>
 #include <cstdint>
 
@@ -8,7 +9,7 @@ inline RoomKey audioRoomKey(unsigned epoch, int dimension, int room) {
     return {static_cast<std::int32_t>(epoch), dimension, room};
 }
 inline bool audible(unsigned audience, int localSlot) {
-    return !audience || (localSlot >= 0 && localSlot < 4 && (audience & (1u << localSlot)));
+    return !audience || (party::validSlot(localSlot) && (audience & (1u << localSlot)));
 }
 inline unsigned roomEntryTrack(std::array<unsigned, 2> request) {
     // A listener entering a room joins its ongoing track. Intro/outro requests
