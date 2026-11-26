@@ -13,7 +13,7 @@ struct RoomRequest;
 }
 namespace isaac::rooms {
 bool finalCombat();
-bool install(std::uintptr_t image, void (*logger)(const std::string&));
+bool install(std::uintptr_t image, void (*logger)(const std::string&), HMODULE luaModule);
 bool bind(lua_State*, HMODULE);
 bool backgroundLoading();
 void withView(const std::function<void()>& draw, bool localPlayersOnly = false);

@@ -383,10 +383,14 @@ assert(not enabled and enableCode == "authority_install_failed" and authorityAtt
 for _, build in ipairs({
     { "5.23", 5.24, "980bb0b", "8f2614a6a4cd58d60345dd0a33072a0bc7822ecf06ad9106234a6a9b2380b3fc" },
     { "5.24", 5.25, "d7aab88", "705a61422ffc09c683d4250dedf2a569b6d76d4eee884dec70b705eedfa898f5" },
+    { "5.25", 5.26, "50b2792", string.rep("b", 64), 1022 }, -- REPENTOGON HUD callback
     { "6.00", 6.01, "new-build", string.rep("a", 64) },
 }) do
     local p = peer(1)
+    local hudRender = build[5]
+    local renderId = hudRender or 2
     p.env.ModCallbacks = {
+        MC_HUD_RENDER = hudRender,
         MC_POST_RENDER = 2,
         MC_POST_UPDATE = 1,
         MC_POST_NEW_ROOM = 19,
@@ -439,7 +443,7 @@ for _, build in ipairs({
     -- view, native startup, continued games and drawing must still run.
     p.active, p.ready = 0, 0
     local soloCalls = {}
-    for _, id in ipairs({ 15, 18, 19, 1, 2 }) do
+    for _, id in ipairs({ 15, 18, 19, 1, renderId }) do
         eid:AddCallback(id, function(self, marker, gap, tail)
             assert(self == eid and marker == id and gap == nil and tail == "solo")
             assert(p.scope == nil, "Solo EID callback borrowed a LAN view")
@@ -532,8 +536,8 @@ for _, build in ipairs({
         return indexed and { near, foreign } or { foreign }
     end
     p.env.Isaac.FindInRadius = nativeFind
-    local originalRender = callbacks[2]
-    eid:AddCallback(2, function()
+    local originalRender = callbacks[renderId]
+    eid:AddCallback(renderId, function()
         local found = p.env.Isaac.FindInRadius({}, 80, 15)
         assert(#found == 1 and found[1] == roomEntities[1], "EID lost or duplicated a replica")
         if not indexed then
@@ -544,7 +548,7 @@ for _, build in ipairs({
     for frame = 1, 60 do
         indexed = frame % 2 == 0
         p.bridge.commit()
-        local value, gap, tail = callbacks[2](eid)
+        local value, gap, tail = callbacks[renderId](eid)
         assert(value == 7 and gap == nil and tail == "rendered")
         assert(p.env.Isaac.FindInRadius == nativeFind, "Radius override escaped EID rendering")
     end
@@ -555,22 +559,22 @@ for _, build in ipairs({
         return info
     end
     indexed = true
-    callbacks[2](eid)
+    callbacks[renderId](eid)
     assert(p.env.Isaac.FindInRadius == nativeFind, "Authority EID query leaked its override")
     p.env._IsaacLan.api_info = originalInfo
     indexed, roomEntities = false, { pickup(74, 80) }
     p.positions["1"].index = 70
     p.epoch = p.epoch + 1
     p.bridge.commit()
-    callbacks[2](eid)
-    eid:AddCallback(2, function()
+    callbacks[renderId](eid)
+    eid:AddCallback(renderId, function()
         error("EID render failure")
     end)
     rejects(function()
-        callbacks[2](eid)
+        callbacks[renderId](eid)
     end)
     assert(p.env.Isaac.FindInRadius == nativeFind, "Radius override survived a render error")
-    callbacks[2] = originalRender
+    callbacks[renderId] = originalRender
     p.positions["1"].index = 71
     p.bridge.commit()
     eid:setPlayer()
@@ -589,6 +593,7 @@ for _, build in ipairs({
     callbacks[19](eid, 11, nil, "old")
     callbacks[19](eid, 12, nil, "entry")
     callbacks[1](eid)
+    assert(callbacks[renderId](eid) == nil, "EID rendered before its local player was ready")
     p.bridge.commit()
     assert(entries == 0 and updates == 0 and previous == nil)
     p.ready = 1
@@ -610,7 +615,7 @@ for _, build in ipairs({
     p.bridge.poll()
     assert(not describable(replica), "EID replica override survived leaving LAN")
     assert(callbacks[15](eid, true) == "continued" and continuedGames == 1)
-    assert(callbacks[2](eid, 2, nil, "solo") == 2 and soloCalls[2] == 2)
+    assert(callbacks[renderId](eid, renderId, nil, "solo") == renderId and soloCalls[renderId] == 2)
     assert(p.api:SetAdapterEnabled(adapter.id, false))
     assert(eid.getEntityData == originalGetEntityData, "EID method was not restored on uninstall")
     eid.ModVersion = 0

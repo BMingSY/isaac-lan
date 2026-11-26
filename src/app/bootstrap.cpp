@@ -1,5 +1,6 @@
 #include "engine/item_effects.h"
 #include "engine/imports.h"
+#include "engine/game_lua.h"
 #include "engine/native_files.h"
 #include "engine/lua_api.h"
 #include "engine/state_codec.h"
@@ -55,6 +56,8 @@ std::string profile;
 std::uintptr_t image = 0;
 bool initialized = false;
 bool isolated = true;
+bool installed = false;
+isaac::engine::GameLua gameLua;
 isaac::configuration::Settings settings;
 // A lab focus driver can temporarily join Win32 input queues. GLFW must never
 // dereference a window property belonging to the other game process.
@@ -200,6 +203,68 @@ extern "C" __declspec(dllexport) unsigned __cdecl IsaacLanLoaderABI() {
 }
 
 namespace {
+DWORD installNative() {
+    gameLua = isaac::engine::resolveGameLua(image);
+    if (!gameLua.module)
+        return fail(StartupCode::importBinding, {}, {}, L"Lua runtime");
+    log(std::string("game_lua=") + isaac::lua::versionName(gameLua.version));
+    isaac::diagnostics::observeExceptions(image, isaac::engine::bootstrap::scopeActive);
+    if (const auto status = MH_Initialize(); status != MH_OK)
+        return fail(StartupCode::hookLibrary, {}, {}, wide(MH_StatusToString(status)));
+    if (const auto error = isaac::engine::bootstrap::installUpdates(image, log);
+        error != StartupCode::success)
+        return fail(error);
+    log(std::string("bootstrap=PASS version=") + isaac::build::version() +
+        " isolation=" + (isolated ? "profile_redirect" : "installed"));
+    log(std::string("installation_mode=") + (installed ? "installed" : "lab"));
+    if (!isaac::runtime::install(image, log, isaac::engine::bootstrap::halfUpdate,
+                                 isaac::engine::bootstrap::restorePositions))
+        return fail(StartupCode::session);
+    if (!isaac::engine::items::install(image))
+        return fail(StartupCode::items);
+    if (!isaac::generated_items::install(image))
+        return fail(StartupCode::generatedItems);
+    if (!isaac::rooms::install(image, log, gameLua.module))
+        return fail(StartupCode::rooms);
+    if (!isaac::combat_feedback::install(image))
+        return fail(StartupCode::combatFeedback);
+    if (!isaac::audio::install(image))
+        return fail(StartupCode::audio);
+    if (!isaac::presentation::install(image))
+        return fail(StartupCode::presentation);
+    if (!isaac::presentation::outlines::install(image))
+        return fail(StartupCode::playerOutlines);
+    if (!isaac::presentation::player_opacity::install(image))
+        return fail(StartupCode::playerOpacity);
+    if (!isaac::rewind::install(image))
+        return fail(StartupCode::rewind);
+    if (!isaac::frontend::install(image, root, log, luaopen_isaac_lan_probe, gameLua.module,
+                                  installed))
+        return fail(StartupCode::frontend);
+    if (const auto error = isaac::engine::bootstrap::installRendering();
+        error != StartupCode::success)
+        return fail(error);
+    initialized = true;
+    return isaac::startup::value(StartupCode::success);
+}
+DWORD guardStartup(DWORD (*start)()) noexcept {
+    try {
+        return start();
+    } catch (const std::filesystem::filesystem_error& error) {
+        return fail(StartupCode::unexpectedException, error.path1().wstring(), error.code());
+    } catch (const std::system_error& error) {
+        return fail(StartupCode::unexpectedException, {}, error.code());
+    } catch (...) {
+        return fail(StartupCode::unexpectedException);
+    }
+}
+void installDeferred() {
+    if (const auto code = guardStartup(installNative)) {
+        MessageBoxW(nullptr, isaac::diagnostics::startupFailureMessage(), L"Isaac LAN",
+                    MB_OK | MB_ICONERROR);
+        TerminateProcess(GetCurrentProcess(), code);
+    }
+}
 DWORD initialize() {
     wchar_t env[1024] = {}, executable[1024] = {};
     DWORD size = GetEnvironmentVariableW(L"ISAAC_LAN_LAB_ROOT", env, 1024);
@@ -213,7 +278,7 @@ DWORD initialize() {
     std::ifstream marker(directory / L".isaac-lan-install");
     std::string identity;
     std::getline(marker, identity);
-    const bool installed = identity == "IsaacLAN/1";
+    installed = identity == "IsaacLAN/1";
     if (size >= 1024 && !installed)
         return fail(StartupCode::labEnvironment);
     const std::wstring expected =
@@ -322,42 +387,17 @@ DWORD initialize() {
         replaceImport("SteamAPI_RestartAppIfNecessary", reinterpret_cast<void*>(noSteamRelaunch));
     if (!replaceImport("GetActiveWindow", reinterpret_cast<void*>(localActiveWindow)))
         return fail(StartupCode::windowFocus);
-    initialized = true;
-    isaac::diagnostics::observeExceptions(image, isaac::engine::bootstrap::scopeActive);
-    if (const auto status = MH_Initialize(); status != MH_OK)
-        return fail(StartupCode::hookLibrary, {}, {}, wide(MH_StatusToString(status)));
-    if (const auto error = isaac::engine::bootstrap::installUpdates(image, log);
-        error != StartupCode::success)
-        return fail(error);
-    log(std::string("bootstrap=PASS version=") + isaac::build::version() +
-        " isolation=" + (isolated ? "profile_redirect" : "installed"));
-    log(std::string("installation_mode=") + (installed ? "installed" : "lab"));
-    if (!isaac::runtime::install(image, log, isaac::engine::bootstrap::halfUpdate,
-                                 isaac::engine::bootstrap::restorePositions))
-        return fail(StartupCode::session);
-    if (!isaac::engine::items::install(image))
-        return fail(StartupCode::items);
-    if (!isaac::generated_items::install(image))
-        return fail(StartupCode::generatedItems);
-    if (!isaac::rooms::install(image, log))
-        return fail(StartupCode::rooms);
-    if (!isaac::combat_feedback::install(image))
-        return fail(StartupCode::combatFeedback);
-    if (!isaac::audio::install(image))
-        return fail(StartupCode::audio);
-    if (!isaac::presentation::install(image))
-        return fail(StartupCode::presentation);
-    if (!isaac::presentation::outlines::install(image))
-        return fail(StartupCode::playerOutlines);
-    if (!isaac::presentation::player_opacity::install(image))
-        return fail(StartupCode::playerOpacity);
-    if (!isaac::rewind::install(image))
-        return fail(StartupCode::rewind);
-    if (!isaac::frontend::install(image, root, log, luaopen_isaac_lan_probe, installed))
-        return fail(StartupCode::frontend);
-    if (const auto error = isaac::engine::bootstrap::installRendering();
-        error != StartupCode::success)
-        return fail(error);
+    using isaac::engine::bootstrap::HookTiming;
+    const auto timing =
+        isaac::engine::bootstrap::scheduleGameHooks(image, directory, installDeferred);
+    if (timing == HookTiming::missingImport)
+        return fail(StartupCode::importBinding, {}, {}, L"platform initialization");
+    if (timing == HookTiming::immediate) {
+        if (const auto code = installNative())
+            return code;
+    } else {
+        log("game_hooks=waiting_for_platform");
+    }
     if (isolated) {
         wchar_t eventName[128]{};
         if (GetEnvironmentVariableW(L"ISAAC_LAN_LAB_READY", eventName, 128)) {
@@ -372,15 +412,7 @@ DWORD initialize() {
 }
 } // namespace
 extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
-    try {
-        return initialize();
-    } catch (const std::filesystem::filesystem_error& error) {
-        return fail(StartupCode::unexpectedException, error.path1().wstring(), error.code());
-    } catch (const std::system_error& error) {
-        return fail(StartupCode::unexpectedException, {}, error.code());
-    } catch (...) {
-        return fail(StartupCode::unexpectedException);
-    }
+    return guardStartup(initialize);
 }
 extern "C" __declspec(dllexport) const wchar_t* __cdecl IsaacLanBootstrapError() {
     return isaac::diagnostics::startupFailureMessage();
@@ -389,9 +421,7 @@ extern "C" __declspec(dllexport) const wchar_t* __cdecl IsaacLanBootstrapError()
 extern "C" __declspec(dllexport) int __cdecl luaopen_isaac_lan_probe(lua_State* L) {
     if (!initialized)
         return 0;
-    HMODULE module = GetModuleHandleA(isaac::engine::profile().luaModule);
-    if (!module)
-        return 0;
+    const auto module = gameLua.module;
     if (!lua.load(module,
                   {isaac::lua::Symbol::createTable, isaac::lua::Symbol::pushClosure,
                    isaac::lua::Symbol::setField, isaac::lua::Symbol::pushString,
@@ -418,7 +448,7 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_isaac_lan_probe(lua_State* 
         return 0;
     if (!isaac::entity_fields::bind(L, module))
         return 0;
-    if (!isaac::runtime::bind(L, module))
+    if (!isaac::runtime::bind(L, module, gameLua.version))
         return 0;
     if (!isaac::engine::items::bind(L, module))
         return 0;

@@ -18,6 +18,12 @@ return function(Phase, Command, endpoint, characters, text)
         if status.phase ~= Phase.failed or not failure then
             return nil
         end
+        if failure.reason == "luaRuntime" then
+            return {
+                text("无法加入：游戏的 Lua 运行时不一致"),
+                text("房主：Lua %s　你：Lua %s", failure.remoteVersion, failure.localVersion),
+            }
+        end
         local reasons = {
             version = "无法加入：Isaac LAN 版本不一致",
             fingerprint = "无法加入：版本号相同，但构建不一致",
