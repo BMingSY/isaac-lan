@@ -162,6 +162,7 @@ _IsaacLanStatus = function()
     return status
 end
 _IsaacLan = {
+    max_players = dofile(root .. "/src/bridge/core/party.lua").capacity,
     presentation_assets = dofile(root .. "/tests/fixtures/presentation_assets.lua")(vanilla),
     menu_official = not vanilla and noop or nil,
     net_room_options = function()
@@ -566,6 +567,14 @@ for _, phase in ipairs({ 9, 7, 3, 9 }) do
         assert(n < 3 or labels[longName])
         assert(n < 4 or labels["无菜单画像"])
     end
+end
+status.players, status.phase, status.connected = 8, _IsaacLan.net_phases().running, 255
+for slot = 0, 7 do
+    status["character" .. slot] = 0
+end
+draw()
+for seat = 1, 8 do
+    assert(labels["P" .. seat .. "  以撒"], "Expanded menu omitted a run seat")
 end
 -- A new lobby returns to its own selections rather than retaining the run.
 status.phase, status.prepared = 10, false

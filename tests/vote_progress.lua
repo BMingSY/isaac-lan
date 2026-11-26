@@ -1,4 +1,5 @@
 local root = assert(arg[1])
+local party = dofile(root .. "/src/bridge/core/party.lua")
 local labels, rectangles = {}, 0
 Vector = function(x, y)
     return { X = x, Y = y }
@@ -33,7 +34,7 @@ local font = {
         labels[value] = true
     end,
 }
-local progress = dofile(root .. "/src/bridge/presentation/vote_progress.lua")()
+local progress = dofile(root .. "/src/bridge/presentation/vote_progress.lua")(party.capacity)
 local render = dofile(root .. "/src/bridge/presentation/animation_skip.lua")(progress)
 local function message(value)
     return value

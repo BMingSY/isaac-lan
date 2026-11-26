@@ -1123,7 +1123,7 @@ int sideChannelSend(lua_State* L, bool communication) {
     const auto bytes = lua.checkString(L, 2, &size);
     bool sent = false;
     try {
-        if (session && slot >= 0 && slot < 4)
+        if (session && party::validSlot(slot))
             sent = communication ? session->sendCommunication(slot, {bytes, size})
                                  : session->sendIntegration(slot, {bytes, size});
     } catch (const std::exception& error) {
@@ -1392,11 +1392,10 @@ int finishChallenge(lua_State* L) {
 int start(lua_State* L) {
     const char* seed = lua.checkString(L, 1, nullptr);
     const auto difficulty = lua.checkInteger(L, 2);
-    std::array<long long, lan::maxPlayers> characters;
-    for (unsigned i = 0; i < lan::maxPlayers; ++i)
-        characters[i] = lua.checkInteger(L, i + 3);
+    const int supplied = lua.getTop(L) - 2;
     if (!session || !session->isHost() || session->phase() != lan::Phase::lobby || difficulty < 0 ||
-        difficulty > 3) {
+        difficulty > 3 || supplied < static_cast<int>(session->players()) ||
+        supplied > static_cast<int>(lan::maxPlayers)) {
         lua.pushBoolean(L, false);
         return 1;
     }
@@ -1410,12 +1409,13 @@ int start(lua_State* L) {
     settings.seed = seed;
     settings.difficulty = static_cast<std::uint8_t>(difficulty);
     settings.progress = readProgress();
-    for (unsigned i = 0; i < lan::maxPlayers; ++i) {
-        if (characters[i] < 0 || characters[i] > 65535) {
+    for (int i = 0; i < supplied; ++i) {
+        const auto character = lua.checkInteger(L, i + 3);
+        if (character < 0 || character > 65535) {
             lua.pushBoolean(L, false);
             return 1;
         }
-        settings.characters[i] = static_cast<std::uint16_t>(characters[i]);
+        settings.characters[i] = static_cast<std::uint16_t>(character);
     }
     // Resolve only at the launch boundary. Lobby choices and previews remain
     // deferred on every peer, including after ready/unready and rule changes.
@@ -2298,6 +2298,8 @@ bool bind(lua_State* L, HMODULE module) {
     function("net_host", host);
     function("net_join", join);
     function("net_poll", poll);
+    lua.pushInteger(L, lan::maxPlayers);
+    lua.setField(L, -2, "max_players");
     function("net_phases", phaseValues);
     function("net_commands", commandValues);
     function("net_challenges", challengeList);

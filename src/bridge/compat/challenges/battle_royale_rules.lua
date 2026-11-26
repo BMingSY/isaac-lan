@@ -76,17 +76,20 @@ function rules.pressure(elapsed)
     -- Half-heart units, on a one-second cadence. Normal defenses and revivals apply.
     return step + overtime // (15 * rules.framesPerSecond)
 end
-function rules.new()
+function rules.new(capacity)
     local phase = rules.phase
     local state = {
         round = 0,
         phase = phase.loading,
         elapsed = 0,
         winner = -1,
-        scores = { 0, 0, 0, 0 },
+        scores = {},
         alive = 0,
         zones = false,
     }
+    for i = 1, capacity do
+        state.scores[i] = 0
+    end
     local function start(zones)
         state.round = state.round + 1
         state.phase, state.elapsed, state.winner, state.alive = phase.survival, 0, -1, 0
@@ -110,7 +113,7 @@ function rules.new()
         if state.phase == phase.survival then
             state.elapsed = state.elapsed + delta
             if (alive & (alive - 1)) == 0 then
-                for slot = 0, 3 do
+                for slot = 0, capacity - 1 do
                     if (alive & (1 << slot)) ~= 0 then
                         state.winner, state.phase = slot, phase.portal
                         return "winner"
@@ -165,7 +168,7 @@ function rules.new()
         snapshot = snapshot,
     }
 end
-function rules.read(value)
+function rules.read(value, capacity)
     local f = rules.fields
     assert(type(value) == "table" and #value == 7, "Invalid battle royale state")
     local function integer(v, low, high)
@@ -175,13 +178,13 @@ function rules.read(value)
         integer(value[f.round], 0, 1000000)
             and rules.phase[value[f.phase]] == value[f.phase]
             and integer(value[f.elapsed], 0, 2147483647)
-            and integer(value[f.winner], -1, 3)
-            and integer(value[f.alive], 0, 15)
+            and integer(value[f.winner], -1, capacity - 1)
+            and integer(value[f.alive], 0, (1 << capacity) - 1)
             and type(value[f.scores]) == "table"
-            and #value[f.scores] == 4,
+            and #value[f.scores] == capacity,
         "Invalid battle royale fields"
     )
-    for slot = 1, 4 do
+    for slot = 1, capacity do
         assert(integer(value[f.scores][slot], 0, 2), "Invalid battle royale score")
     end
     local zones = value[f.zones]

@@ -1,3 +1,4 @@
+#include "engine/versions/common/player_seats.h"
 #include "engine/crafting_hud.h"
 #include "engine/rooms.h"
 #include "compat/game_ids.h"
@@ -23,7 +24,8 @@ bool localHud(Address hud) {
     if (!hud || !panels::seatBit(slot))
         return false;
     const auto player = at<Address>(hud, bindings.playerHud.player);
-    return player && at<int>(player, bindings.controller) == slot + 1;
+    return player && isaac::engine::player_seats::owner(
+                         player, at<int>(player, bindings.controller)) == slot + 1;
 }
 } // namespace
 extern "C" {
@@ -52,7 +54,8 @@ Address __cdecl isaac_lan_crafting_hud_receiver(std::uintptr_t hud) {
     for (unsigned i = 0; i < panels::totalPanels; ++i) {
         const auto candidate = root + i * bindings.playerHud.stride;
         const auto player = at<Address>(candidate, bindings.playerHud.player);
-        if (!player || at<int>(player, bindings.controller) != target + 1)
+        if (!player || isaac::engine::player_seats::owner(
+                           player, at<int>(player, bindings.controller)) != target + 1)
             continue;
         if (at<bool>(player, bindings.coopGhost))
             return 0;

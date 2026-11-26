@@ -24,6 +24,10 @@ return function(deps, layout)
         { text = rgb(0x9dc8f0), bubble = rgb(0x244b70) },
         { text = rgb(0xe6ce85), bubble = rgb(0x665018) },
         { text = rgb(0xa8d3a3), bubble = rgb(0x305b35) },
+        { text = rgb(0xeeb996), bubble = rgb(0x734522) },
+        { text = rgb(0xdcb5ed), bubble = rgb(0x644076) },
+        { text = rgb(0x9fdbd9), bubble = rgb(0x225b59) },
+        { text = rgb(0xe9aaca), bubble = rgb(0x763755) },
     }
     local scale = 0.85
     local shownEmotes = {}

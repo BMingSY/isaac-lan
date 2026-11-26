@@ -1,3 +1,4 @@
+#include "engine/versions/common/player_seats.h"
 #include "engine/versions/common/frontend_hud.h"
 #include "engine/versions/common/frontend_hud_bindings.h"
 #include "engine/versions/common/player_hud.h"
@@ -29,14 +30,16 @@ int __attribute__((fastcall)) statPlayerId(void* hud, void*, void* player) {
     for (unsigned i = 0; i < bindings.stats.cacheCount; ++i) {
         const auto cached = *reinterpret_cast<std::uintptr_t*>(address + bindings.stats.player +
                                                                i * bindings.stats.cacheStride);
-        if (cached && *reinterpret_cast<int*>(cached + bindings.player.controller) != slot + 1) {
+        if (cached && player_seats::owner(cached, read<int>(cached, bindings.player.controller)) !=
+                          slot + 1) {
             using Reset = void(__attribute__((thiscall))*)(void*);
             reinterpret_cast<Reset>(image + bindings.entry.frontendStatHUDReset)(hud);
             break;
         }
     }
-    if (*reinterpret_cast<int*>(reinterpret_cast<std::uintptr_t>(player) +
-                                bindings.player.controller) != slot + 1)
+    if (player_seats::owner(
+            reinterpret_cast<Address>(player),
+            read<int>(reinterpret_cast<Address>(player), bindings.player.controller)) != slot + 1)
         return -1;
     return originalStatPlayerId(hud, player);
 }
@@ -49,7 +52,9 @@ int __attribute__((fastcall)) historyPlayerId(void* history, void*, void* player
         return originalHistoryPlayerId(history, player);
     if (!history || !player)
         return -1;
-    if (read<int>(reinterpret_cast<std::uintptr_t>(player), bindings.player.controller) != slot + 1)
+    if (player_seats::owner(
+            reinterpret_cast<Address>(player),
+            read<int>(reinterpret_cast<Address>(player), bindings.player.controller)) != slot + 1)
         return -1;
     int result = -1;
     rooms::withView([&] { result = originalHistoryPlayerId(history, player); }, true);

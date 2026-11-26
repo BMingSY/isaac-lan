@@ -99,6 +99,13 @@ local function environment()
         end,
     }
     local native = {
+        actor_owner = function(_, physical)
+            return physical
+        end,
+        max_players = 8,
+        player_owner = function(p)
+            return p.ControllerIndex
+        end,
         actor_companions = function(bytes)
             assert(bytes == "\0")
             return true
@@ -190,6 +197,7 @@ local function environment()
         rewind_reset = noop,
     }
     local modules = {
+        ["core/party"] = dofile(root .. "/src/bridge/core/party.lua"),
         ["api/public"] = {
             effects = {
                 forPeer = function()

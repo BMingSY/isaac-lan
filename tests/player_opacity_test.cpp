@@ -232,8 +232,8 @@ void projectiles() {
     });
 }
 int argumentCount = 0;
-std::array<long long, 4> arguments{};
-std::array<bool, 4> integers{};
+std::array<long long, isaac::party::maxPlayers> arguments{};
+std::array<bool, isaac::party::maxPlayers> integers{};
 bool accepted = false;
 long long returned = -1;
 void settings() {
@@ -249,8 +249,13 @@ void settings() {
     arguments = {0, 50, 100, 25};
     integers.fill(true);
     opacity::settings(nullptr);
-    require(accepted && opacity::percentages == std::array<unsigned, 4>{0, 50, 100, 25},
+    require(accepted &&
+                std::equal(arguments.begin(), arguments.begin() + 4, opacity::percentages.begin()),
             "Valid opacity values were rejected");
+    argumentCount = arguments.size();
+    arguments.back() = 85;
+    opacity::settings(nullptr);
+    require(accepted && opacity::percentages.back() == 85, "Upper seat opacity was not applied");
     const auto before = opacity::percentages;
     for (auto invalid : {-1LL, 101LL, LLONG_MAX}) {
         arguments[3] = invalid;

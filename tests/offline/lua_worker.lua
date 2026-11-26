@@ -22,10 +22,12 @@ local function hex(value)
     )
 end
 local function stateEnvironment()
+    local party = dofile(root .. "/src/bridge/core/party.lua")
     local env = setmetatable({
-        _IsaacLan = {},
+        _IsaacLan = { max_players = party.capacity },
         _IsaacLanPrediction = {},
         _IsaacLanModules = {
+            ["core/party"] = party,
             ["sync/codec"] = codec,
             ["presentation/hits"] = dofile(root .. "/src/bridge/presentation/hits.lua"),
             ["presentation/hit_candidates"] = dofile(

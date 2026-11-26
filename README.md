@@ -2,7 +2,7 @@
 
 简体中文 · [English](https://github.com/BMingSY/isaac-lan/blob/main/docs/i18n/README.en.md)
 
-《以撒的结合》的 2–4 人局域网联机扩展。一次安装即可在 Windows 版 **忏悔 v1.7.9b.J835** 和 **忏悔＋ v1.9.7.20.J514** 中使用。
+《以撒的结合》的 2–8 人局域网联机扩展。一次安装即可在 Windows 版 **忏悔 v1.7.9b.J835** 和 **忏悔＋ v1.9.7.20.J514** 中使用。
 
 ## 功能
 

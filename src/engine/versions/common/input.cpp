@@ -1,6 +1,8 @@
+#include "engine/versions/common/room_hooks.h"
 #include "engine/versions/common/input_bindings.h"
 #include "engine/versions/common/input_devices.h"
 #include "engine/versions/common/player_input.h"
+#include "engine/versions/common/player_seats.h"
 #include "engine/item_effects.h"
 #include "engine/lua_api.h"
 #include "engine/input.h"
@@ -155,8 +157,9 @@ engine::native_mouse::Result mouseAim(void* player, engine::native_mouse::Vector
         return engine::native_mouse::Result::inactive;
     if (!enabled)
         return engine::native_mouse::Result::passthrough;
+    const auto address = reinterpret_cast<std::uintptr_t>(player);
     const auto controller =
-        at<int>(reinterpret_cast<std::uintptr_t>(player), binding.mouse.controller);
+        engine::player_seats::owner(address, at<int>(address, binding.mouse.controller));
     if (controller < 1 || controller > accepted.players ||
         !(accepted.connected & (1u << (controller - 1))))
         return engine::native_mouse::Result::inactive;
@@ -187,7 +190,8 @@ lan::PointerInput captureMouse() {
         return {};
     for (auto entry = begin; entry != end; entry += sizeof(std::uintptr_t)) {
         const auto player = at<std::uintptr_t>(entry, 0);
-        if (player && at<int>(player, binding.mouse.controller) == slot + 1)
+        if (player && engine::player_seats::owner(
+                          player, at<int>(player, binding.mouse.controller)) == slot + 1)
             return engine::native_mouse::capture(reinterpret_cast<void*>(player), originalMouseAim,
                                                  shootingEntity(), binding.mouse,
                                                  binding.keyboardDeviceId);
@@ -228,7 +232,8 @@ bool __attribute__((fastcall)) query(void* manager, void*, int controller, void*
     }
     if (menuConfirm && kind == binding.triggered && action && *action == 14)
         return true;
-    if (enabled && presentationInput && controller == presentationController && action &&
+    if (enabled && presentationInput &&
+        controller == engine::player_seats::device(presentationController) && action &&
         ((*action >= input::action::moveLeft && *action <= input::action::shootDown) ||
          *action == input::action::drop) &&
         (kind == binding.value || kind == binding.pressed || kind == binding.triggered)) {
@@ -248,18 +253,30 @@ bool __attribute__((fastcall)) query(void* manager, void*, int controller, void*
     if (enabled && action && (*action == 13 || viewSlot >= 0) &&
         (kind == binding.value || kind == binding.pressed || kind == binding.triggered))
         return originalQuery(manager, -1, callback, action, result, source);
-    if (!enabled || controller > accepted.players || !action || *action < 0 ||
+    if (!enabled || controller > engine::player_seats::nativeGamepads ||
+        controller > accepted.players || !action || *action < 0 ||
         (kind != binding.value && kind != binding.pressed && kind != binding.triggered))
         return originalQuery(manager, controller, callback, action, result, source);
-    const auto& input = accepted.inputs[controller < 1 ? pauseOwner : controller - 1];
-    const auto g = at<std::uintptr_t>(image, binding.game);
-    if (controller > 0 && !(accepted.connected & (1u << (controller - 1)))) {
+    int owner = controller;
+    if (controller > 0 && !engine::player_seats::additional.empty()) {
+        if (const auto actor = rooms::presentationPlayer(nullptr);
+            actor && at<int>(actor, binding.mouse.controller) == controller)
+            owner = engine::player_seats::owner(actor, controller);
+    }
+    const auto slot = owner < 1 ? pauseOwner : static_cast<unsigned>(owner - 1);
+    if (slot >= accepted.players) {
         if (kind == binding.value && result)
             *static_cast<float*>(result) = 0;
         return false;
     }
-    if (g && at<int>(g, binding.pauseMenu) != 0 && controller > 0 &&
-        static_cast<unsigned>(controller - 1) != pauseOwner) {
+    const auto& input = accepted.inputs[slot];
+    const auto g = at<std::uintptr_t>(image, binding.game);
+    if (controller > 0 && !(accepted.connected & (1u << slot))) {
+        if (kind == binding.value && result)
+            *static_cast<float*>(result) = 0;
+        return false;
+    }
+    if (g && at<int>(g, binding.pauseMenu) != 0 && controller > 0 && slot != pauseOwner) {
         if (kind == binding.value && result)
             *static_cast<float*>(result) = 0;
         return false;
@@ -306,8 +323,9 @@ bool exists(int index) {
 int assign(lua_State* L) {
     const auto slot = lua.checkInteger(L, 1);
     const auto controller = lua.checkInteger(L, 2);
-    const bool assigned = originalQuery && slot >= 0 && controller >= 1 && controller <= 4 &&
-                          exists(static_cast<int>(controller)) &&
+    const bool assigned = originalQuery && slot >= 0 && controller >= 1 &&
+                          controller <= party::maxPlayers &&
+                          exists(engine::player_seats::device(static_cast<int>(controller))) &&
                           engine::native_players::assign(image, static_cast<unsigned>(slot),
                                                          static_cast<int>(controller));
     logger("input_assign slot=" + std::to_string(slot) +
@@ -340,8 +358,9 @@ int devices(lua_State* L) {
 }
 int spawn(lua_State* L) {
     const auto type = lua.checkInteger(L, 1), controller = lua.checkInteger(L, 2);
-    if (!originalQuery || type < 0 || type > 65535 || controller < 1 || controller > 4 ||
-        !exists(static_cast<int>(controller))) {
+    if (!originalQuery || type < 0 || type > 65535 || controller < 1 ||
+        controller > party::maxPlayers ||
+        !exists(engine::player_seats::device(static_cast<int>(controller)))) {
         lua.pushBoolean(L, false);
         return 1;
     }
@@ -578,6 +597,7 @@ void reset() {
     sampledFrame.reset();
 }
 void beginLaunch() {
+    engine::player_seats::additional.clear();
     reset();
     waitingForGameplay = true;
 }
@@ -629,6 +649,7 @@ void setMenuOwner(unsigned slot) {
     pauseOwner = slot;
 }
 void leaveLan() {
+    engine::player_seats::additional.clear();
     reset();
     engine::native_devices::restoreIds(image);
     setVirtualDevices(false);
@@ -650,7 +671,7 @@ bool menuTriggered(int action, bool controllersOnly) {
     if (action < 0 || !hookQuery())
         return false;
     const int first = controllersOnly ? binding.firstGamepadId : -1;
-    const int last = controllersOnly ? lan::maxPlayers : -1;
+    const int last = controllersOnly ? engine::player_seats::nativeGamepads : -1;
     for (int controller = first; controller <= last; ++controller)
         if (originalQuery(reinterpret_cast<void*>(image + binding.inputManager), controller,
                           reinterpret_cast<void*>(image + binding.triggered), &action, nullptr,

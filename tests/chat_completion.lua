@@ -1,7 +1,8 @@
 local root = assert(arg[1])
+local party = dofile(root .. "/src/bridge/core/party.lua")
 local factory = dofile(root .. "/src/bridge/presentation/chat_completion.lua")
 local rooms = dofile(root .. "/src/bridge/core/room_types.lua")
-local model = factory(rooms, 2048)
+local model = factory(rooms, 2048, party)
 local function input(text)
     return { open = true, text = text, cursor = #text, anchor = #text }
 end

@@ -1,8 +1,9 @@
 #pragma once
+#include "core/party.h"
 #include "core/input_actions.h"
 
 namespace isaac::compat::challenges {
-inline constexpr unsigned maximumAimSeats = 4;
+inline constexpr unsigned maximumAimSeats = party::maxPlayers;
 inline constexpr unsigned shootingMask =
     (1u << input::action::shootLeft) | (1u << input::action::shootRight) |
     (1u << input::action::shootUp) | (1u << input::action::shootDown);

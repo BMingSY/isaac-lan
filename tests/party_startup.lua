@@ -10,6 +10,9 @@ local bind = factory({
         end
         return heads
     end,
+    player_owner = function(p)
+        return p.ControllerIndex
+    end,
     input_assign = function(index, controller)
         assert(players[index + 1])
         players[index + 1].ControllerIndex = controller

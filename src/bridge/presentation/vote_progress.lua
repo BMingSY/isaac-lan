@@ -1,5 +1,5 @@
 -- A pixel ring split between the participants of one consent vote.
-return function()
+return function(capacity)
     local fill
     local rings = {}
     local radius, thickness = 17, 2
@@ -41,7 +41,7 @@ return function()
             fill:SetFrame("Fade", 15)
         end
         local agreed, accepted = {}, 0
-        for slot = 0, 3 do
+        for slot = 0, capacity - 1 do
             if (members & (1 << slot)) ~= 0 then
                 local voted = (votes & (1 << slot)) ~= 0
                 agreed[#agreed + 1] = voted

@@ -23,9 +23,15 @@ function vector:Dot(other)
     return self.X * other.X + self.Y * other.Y
 end
 local now, pause = 0, 0
-local makeMotion = dofile(root .. "/src/bridge/presentation/motion.lua")(
+local createMotion = dofile(root .. "/src/bridge/presentation/motion.lua")(
     dofile(root .. "/src/bridge/sync/fields.lua")
 )
+local function makeMotion(native, sprites, deps)
+    native.player_owner = function(p)
+        return p.ControllerIndex
+    end
+    return createMotion(native, sprites, deps)
+end
 local motion = makeMotion({
     rooms_with_player = function(_, fn)
         fn()

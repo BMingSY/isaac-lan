@@ -58,6 +58,7 @@
 #include "engine/versions/common/floor_source.h"
 #include "engine/versions/common/room_routing.h"
 #include "engine/versions/common/room_roster.h"
+#include "engine/versions/common/player_seats.h"
 #include "engine/versions/common/rooms_bindings.h"
 #include "core/room_options.h"
 #include "engine/versions/common/forgotten_form.h"
@@ -228,10 +229,16 @@ struct Dormant {
     SavedLocation saved;
 };
 std::map<unsigned, Dormant> dormant;
-unsigned connectedMask = 15;
+unsigned connectedMask = lan::allPlayersMask;
+int controllerOf(Address player) {
+    const int physical = at<int>(player, layout.player.controller);
+    return engine::player_seats::owner(player, physical);
+}
 unsigned slotOf(Address player, unsigned fallback = 0) {
-    const auto controller = at<int>(player, layout.player.controller);
-    return controller >= 1 && controller <= 4 ? static_cast<unsigned>(controller - 1) : fallback;
+    const auto controller = controllerOf(player);
+    return controller >= 1 && controller <= static_cast<int>(lan::maxPlayers)
+               ? static_cast<unsigned>(controller - 1)
+               : fallback;
 }
 Address participant(unsigned slot) {
     for (auto p : participants)
@@ -248,30 +255,27 @@ std::vector<Address> logicalPlayers(bool useControllers = true) {
         const auto twin = at<Address>(player, layout.player.twin);
         if (twin && at<int>(player, layout.player.index) > at<int>(twin, layout.player.index))
             continue;
-        const int controller = at<int>(player, layout.player.controller);
-        if (useControllers && controller >= 1 && controller <= 4 &&
-            std::any_of(result.begin(), result.end(), [controller](Address p) {
-                return at<int>(p, layout.player.controller) == controller;
-            }))
+        const int controller = controllerOf(player);
+        if (useControllers && controller >= 1 && controller <= static_cast<int>(lan::maxPlayers) &&
+            std::any_of(result.begin(), result.end(),
+                        [controller](Address p) { return controllerOf(p) == controller; }))
             continue;
         result.push_back(player);
     }
     if (useControllers && std::all_of(result.begin(), result.end(), [](Address p) {
-            return at<int>(p, layout.player.controller) >= 1 &&
-                   at<int>(p, layout.player.controller) <= 4;
+            return controllerOf(p) >= 1 && controllerOf(p) <= static_cast<int>(lan::maxPlayers);
         }))
-        std::sort(result.begin(), result.end(), [](Address a, Address b) {
-            return at<int>(a, layout.player.controller) < at<int>(b, layout.player.controller);
-        });
+        std::sort(result.begin(), result.end(),
+                  [](Address a, Address b) { return controllerOf(a) < controllerOf(b); });
     return result;
 }
 std::vector<Address> controlledActors(Address head) {
     std::vector<Address> result;
-    const int controller = at<int>(head, layout.player.controller);
+    const int controller = controllerOf(head);
     for (auto player : values(roster()))
         if (player == head ||
-            (controller >= 1 && controller <= 4 &&
-             at<int>(player, layout.player.controller) == controller) ||
+            (controller >= 1 && controller <= static_cast<int>(lan::maxPlayers) &&
+             controllerOf(player) == controller) ||
             at<Address>(head, layout.player.twin) == player ||
             at<Address>(player, layout.player.twin) == head)
             result.push_back(player);
@@ -370,7 +374,7 @@ struct Scope {
           previousRoom(at<Address>(game(), layout.game.room)), previousRoster(roster()),
           reconcilePlayers(reconcile), originalPlayers(players) {
         for (auto player : players)
-            originalControllers[player] = at<int>(player, layout.player.controller);
+            originalControllers[player] = controllerOf(player);
         for (unsigned i = 0; i < previous.size(); ++i)
             previous[i] = readContext(i);
         previousRefresh = at<bool>(game(), layout.game.graphicsRefresh);
@@ -404,11 +408,31 @@ struct Scope {
         // those changes into the full roster instead of writing into a slice of
         // the game's original allocation.
         if (reconcilePlayers) {
-            auto all = actors::reconcile(values(roster()), originalPlayers, current,
-                                         [&](Address old, Address candidate) {
-                                             return originalControllers.at(old) ==
-                                                    at<int>(candidate, layout.player.controller);
-                                         });
+            if (!engine::player_seats::additional.empty() && current != originalPlayers) {
+                for (auto player : current) {
+                    if (originalControllers.contains(player))
+                        continue;
+                    for (auto related : {at<Address>(player, layout.entity.parent),
+                                         at<Address>(player, layout.player.twin),
+                                         at<Address>(player, layout.player.lazarusBackup)}) {
+                        const auto old = originalControllers.find(related);
+                        const bool owned =
+                            old != originalControllers.end()
+                                ? old->second > engine::player_seats::nativeGamepads
+                                : (std::find(current.begin(), current.end(), related) !=
+                                       current.end() &&
+                                   controllerOf(related) > engine::player_seats::nativeGamepads);
+                        if (owned) {
+                            engine::player_seats::inherit(player, related);
+                            break;
+                        }
+                    }
+                }
+            }
+            auto all = actors::reconcile(
+                values(roster()), originalPlayers, current, [&](Address old, Address candidate) {
+                    return originalControllers.at(old) == controllerOf(candidate);
+                });
             for (auto player : originalPlayers)
                 if (std::find(current.begin(), current.end(), player) == current.end()) {
                     location.erase(player);
@@ -423,9 +447,9 @@ struct Scope {
                 if (std::find(originalPlayers.begin(), originalPlayers.end(), all[i]) ==
                         originalPlayers.end() &&
                     std::find(current.begin(), current.end(), all[i]) != current.end())
-                    logger("actor_replaced index=" + std::to_string(i) + " type=" +
-                           std::to_string(at<int>(all[i], layout.player.type)) + " controller=" +
-                           std::to_string(at<int>(all[i], layout.player.controller)) +
+                    logger("actor_replaced index=" + std::to_string(i) +
+                           " type=" + std::to_string(at<int>(all[i], layout.player.type)) +
+                           " controller=" + std::to_string(controllerOf(all[i])) +
                            " parent=" + std::to_string(at<Address>(all[i], layout.entity.parent)) +
                            " twin=" + std::to_string(at<Address>(all[i], layout.player.twin)));
             if (scopes.depth() == 1)
@@ -624,7 +648,7 @@ void __attribute__((fastcall)) playerRoomClear(void* player, void*) {
     // after the authoritative actor state has already been restored.
     if (enabled && runtime::replica())
         return;
-    const auto owner = at<int>(reinterpret_cast<Address>(player), layout.player.controller) - 1;
+    const auto owner = controllerOf(reinterpret_cast<Address>(player)) - 1;
     const auto dimension = at<int>(game(), layout.game.dimension);
     const auto index = at<int>(game(), layout.game.roomIndex);
     originalPlayerRoomClear(player);
@@ -1164,8 +1188,8 @@ void __attribute__((fastcall)) playerUpdate(void* player, void*) {
     }
     const auto before = actor;
     actor = reinterpret_cast<Address>(player);
-    const auto slot = slotOf(actor, 4);
-    const bool personalMap = enabled && slot < 4 && runtime::challengeActive();
+    const auto slot = slotOf(actor, lan::maxPlayers);
+    const bool personalMap = enabled && slot < lan::maxPlayers && runtime::challengeActive();
     if (personalMap)
         runtime::mapView(true, slot, true);
     presentation::items::withActor(player, [&] { originalPlayerUpdate(player); });
@@ -1686,7 +1710,7 @@ bool adopt() {
     if (enabled || scopes.depth())
         return false;
     participants = logicalPlayers();
-    if (participants.empty() || participants.size() > 4)
+    if (participants.empty() || participants.size() > lan::maxPlayers)
         return false;
     if (!originalPlayerUpdate) {
         auto update = reinterpret_cast<void*>(
@@ -1719,13 +1743,13 @@ int request(lua_State* L) {
     const int index = static_cast<int>(lua.checkInteger(L, 2));
     const int dimension = static_cast<int>(lua.checkInteger(L, 3));
     const int door = static_cast<int>(lua.checkInteger(L, 4));
-    lua.pushBoolean(L, slot >= 0 && slot < 4 && participant(slot) &&
+    lua.pushBoolean(L, party::validSlot(slot) && participant(slot) &&
                            queue(participant(slot), index, dimension, door));
     return 1;
 }
 int withPlayer(lua_State* L) {
     const auto slot = lua.checkInteger(L, 1);
-    Room* room = slot >= 0 && slot < 4 ? findRoom(participant(slot)) : nullptr;
+    Room* room = party::validSlot(slot) ? findRoom(participant(slot)) : nullptr;
     if (scopes.depth() || (!room && (enabled || slot < 0 ||
                                      static_cast<unsigned>(slot) >= values(roster()).size()))) {
         lua.pushBoolean(L, false);
@@ -1762,7 +1786,7 @@ int withLocalView(lua_State* L) {
 int moveParticipant(lua_State* L, RoomRouting routing, bool animateDeparture) {
     const auto slot = lua.checkInteger(L, 1), index = lua.checkInteger(L, 2),
                dimension = lua.checkInteger(L, 3);
-    lua.pushBoolean(L, !runtime::replica() && slot >= 0 && slot < 4 && participant(slot) &&
+    lua.pushBoolean(L, !runtime::replica() && party::validSlot(slot) && participant(slot) &&
                            (connectedMask & (1u << slot)) &&
                            index >= layout.roomDescriptor.minimumRoom && index < 169 &&
                            dimension >= 0 && dimension <= 2 &&
@@ -1780,7 +1804,7 @@ int teleportToRoom(lua_State* L) {
 int cancelIntegrationMove(lua_State* L) {
     const auto slot = lua.checkInteger(L, 1), index = lua.checkInteger(L, 2),
                dimension = lua.checkInteger(L, 3);
-    if (!runtime::replica() && slot >= 0 && slot < 4) {
+    if (!runtime::replica() && party::validSlot(slot)) {
         const auto head = participant(slot);
         std::erase_if(pending, [&](const auto& request) {
             return request.player == head && request.destination.index == index &&
@@ -1794,16 +1818,15 @@ int actorIdentities(lua_State* L) {
     const auto all = values(scopes.teamRoster() ? *scopes.teamRoster() : roster());
     lua.createTable(L, static_cast<int>(all.size()), 0);
     unsigned entry = 0;
-    for (unsigned owner = 0; owner < 4; ++owner) {
+    for (unsigned owner = 0; owner < lan::maxPlayers; ++owner) {
         const auto head = participant(owner);
         if (!head)
             continue;
         std::vector<Address> actors{head};
         for (auto actor : all)
-            if (actor != head &&
-                (at<int>(actor, layout.player.controller) == static_cast<int>(owner + 1) ||
-                 at<Address>(head, layout.player.twin) == actor ||
-                 at<Address>(actor, layout.player.twin) == head))
+            if (actor != head && (controllerOf(actor) == static_cast<int>(owner + 1) ||
+                                  at<Address>(head, layout.player.twin) == actor ||
+                                  at<Address>(actor, layout.player.twin) == head))
                 actors.push_back(actor);
         for (unsigned role = 0; role < actors.size(); ++role) {
             lua.createTable(L, 0, 3);
@@ -1820,7 +1843,7 @@ int actorIdentities(lua_State* L) {
 }
 int withOwner(lua_State* L) {
     const auto slot = lua.checkInteger(L, 1);
-    const auto head = slot >= 0 && slot < 4 ? participant(slot) : 0;
+    const auto head = party::validSlot(slot) ? participant(slot) : 0;
     const auto room = head ? findRoom(head) : nullptr;
     if (runtime::replica() || scopes.depth() || !room || !(connectedMask & (1u << slot))) {
         lua.pushBoolean(L, false);
@@ -1914,7 +1937,7 @@ int beginFloor(lua_State* L) {
 }
 int setConnections(lua_State* L) {
     const auto mask = lua.checkInteger(L, 1);
-    if (mask < 1 || mask > 15 || !(mask & 1)) {
+    if (mask < 1 || mask > lan::allPlayersMask || !(mask & 1)) {
         lua.pushBoolean(L, false);
         return 1;
     }
@@ -1924,6 +1947,26 @@ int setConnections(lua_State* L) {
 }
 int connections(lua_State* L) {
     lua.pushInteger(L, connectedMask);
+    return 1;
+}
+int playerOwner(lua_State* L) {
+    const auto physical = lua.checkInteger(L, 2);
+    const auto wrapper = static_cast<Address*>(lua.toUserdata(L, 1));
+    if (engine::player_seats::additional.empty() || !wrapper || lua.rawLength(L, 1) != 8 ||
+        wrapper[1] < layout.entity.sprite) {
+        lua.pushInteger(L, physical);
+        return 1;
+    }
+    const auto player = wrapper[1] - layout.entity.sprite;
+    int owner = physical;
+    if (engine::player_seats::additional.contains(player)) {
+        const auto& team = scopes.teamRoster() ? *scopes.teamRoster() : roster();
+        const auto begin = reinterpret_cast<const Address*>(team.begin);
+        const auto end = reinterpret_cast<const Address*>(team.end);
+        if (std::find(begin, end, player) != end)
+            owner = controllerOf(player);
+    }
+    lua.pushInteger(L, owner);
     return 1;
 }
 int heads(lua_State* L) {
@@ -1994,7 +2037,8 @@ int syncLocations(lua_State* L) {
     try {
         lan::Reader r({reinterpret_cast<const std::uint8_t*>(bytes), size});
         const auto mask = r.u8(), count = r.u8();
-        if (!runtime::replica() || count > 4 || !(mask & 1) || mask > 15)
+        if (!runtime::replica() || count > lan::maxPlayers || !(mask & 1) ||
+            mask > lan::allPlayersMask)
             throw std::runtime_error("Invalid replica roster");
         setConnected(mask);
         std::vector<std::pair<unsigned, SavedLocation>> values;
@@ -2002,8 +2046,8 @@ int syncLocations(lua_State* L) {
             const auto slot = r.u8();
             SavedLocation p{static_cast<int>(r.u32()), static_cast<int>(r.u32()),
                             std::bit_cast<float>(r.u32()), std::bit_cast<float>(r.u32())};
-            if (slot >= 4 || !(mask & (1u << slot)) || p.dimension < 0 || p.dimension > 2 ||
-                p.index < layout.roomDescriptor.minimumRoom || p.index >= 169 ||
+            if (slot >= lan::maxPlayers || !(mask & (1u << slot)) || p.dimension < 0 ||
+                p.dimension > 2 || p.index < layout.roomDescriptor.minimumRoom || p.index >= 169 ||
                 !std::isfinite(p.x) || !std::isfinite(p.y))
                 throw std::runtime_error("Invalid authoritative player location");
             const auto actor = participant(slot);
@@ -2100,7 +2144,7 @@ int actorCompanions(lua_State* L) {
                             reader.u16(),
                             static_cast<std::int16_t>(reader.u16())};
             if (!value.id || value.index >= 64 || value.parent >= value.index ||
-                value.controller < 1 || value.controller > 4 || value.variant > 1 ||
+                value.controller < 1 || value.controller > lan::maxPlayers || value.variant > 1 ||
                 value.babySkin < -1 || value.babySkin > layout.player.lastBabySkin ||
                 !ids.insert(value.id).second || !indices.insert(value.index).second)
                 throw std::runtime_error("Invalid companion actor identity");
@@ -2140,7 +2184,7 @@ int actorCompanions(lua_State* L) {
             if (value.parent >= all.size())
                 throw std::runtime_error("Companion owner is missing");
             const auto parent = all[value.parent];
-            if (at<unsigned>(parent, layout.player.controller) != value.controller)
+            if (static_cast<unsigned>(controllerOf(parent)) != value.controller)
                 throw std::runtime_error("Companion controller differs from its owner");
             const auto room = findRoom(parent);
             if (!room)
@@ -2154,7 +2198,7 @@ int actorCompanions(lua_State* L) {
             if (!body && value.index < all.size()) {
                 const auto candidate = all[value.index];
                 if (at<Address>(candidate, layout.entity.parent) == parent &&
-                    at<unsigned>(candidate, layout.player.controller) == value.controller &&
+                    static_cast<unsigned>(controllerOf(candidate)) == value.controller &&
                     at<unsigned>(candidate, layout.player.type) == value.kind)
                     body = candidate;
             }
@@ -2170,8 +2214,9 @@ int actorCompanions(lua_State* L) {
                     if (!body)
                         throw std::runtime_error("Cannot allocate companion actor");
                     using Assign = void(__attribute__((thiscall))*)(void*, int, bool);
-                    engine<Assign>(bindings.entry.engineRoomsAssign)(reinterpret_cast<void*>(body),
-                                                                     value.controller, false);
+                    engine<Assign>(bindings.entry.engineRoomsAssign)(
+                        reinterpret_cast<void*>(body),
+                        engine::player_seats::device(value.controller), false);
                     using AssignPtr = void*(__attribute__((thiscall))*)(void*, void*);
                     engine<AssignPtr>(bindings.entry.entityPtrAssignTwin)(
                         reinterpret_cast<void*>(body + layout.entity.parent),
@@ -2192,6 +2237,7 @@ int actorCompanions(lua_State* L) {
             // Inventory cache evaluation recognizes native baby companions by
             // both variant and skin. Establish that identity before any parent
             // inventory setter can decide to allocate a second companion.
+            engine::player_seats::inherit(body, parent);
             at<int>(body, layout.player.babySkin) = value.babySkin;
             replicaCompanions[value.id] = body;
             const auto existing = std::find(all.begin(), all.end(), body);
@@ -2228,9 +2274,8 @@ int actorForm(lua_State* L) {
             const auto kind = at<int>(owner, layout.player.type);
             const auto backup = at<Address>(owner, layout.player.lazarusBackup);
             auto room = findRoom(owner);
-            if ((!compat::characters::lazarus(kind)) ||
-                at<int>(owner, layout.player.controller) != controller || !room || !backup ||
-                at<unsigned>(backup, layout.entity.type) != 1 ||
+            if ((!compat::characters::lazarus(kind)) || controllerOf(owner) != controller ||
+                !room || !backup || at<unsigned>(backup, layout.entity.type) != 1 ||
                 at<int>(backup, layout.player.type) != desired ||
                 at<Address>(backup, layout.player.lazarusBackup) != owner ||
                 std::find(all.begin(), all.end(), backup) != all.end())
@@ -2247,7 +2292,9 @@ int actorForm(lua_State* L) {
                     reinterpret_cast<void*>(owner));
                 at<Address>(owner, layout.player.lazarusBackup) =
                     at<Address>(backup, layout.player.lazarusBackup) = 0;
-                at<int>(backup, layout.player.controller) = controller;
+                at<int>(backup, layout.player.controller) =
+                    engine::player_seats::device(controller);
+                engine::player_seats::inherit(backup, owner);
                 at<bool>(backup, layout.entity.registered) =
                     at<bool>(backup, layout.entity.active) = true;
                 at<Vec2>(backup, layout.entity.positionX) =
@@ -2266,7 +2313,7 @@ int actorForm(lua_State* L) {
         return 1;
     }
     const auto old = all[index];
-    if (controller >= 0 && at<int>(old, layout.player.controller) != controller) {
+    if (controller >= 0 && controllerOf(old) != controller) {
         lua.pushBoolean(L, false);
         return 1;
     }
@@ -2299,6 +2346,7 @@ int actorForm(lua_State* L) {
         // Birthright's two listed bodies use their global native roster indices.
         // Keep that complete roster while selecting only this actor's room.
         Scope scope(*room, all);
+        engine::player_seats::inherit(replacement, old);
         replaced = engine<Replace>(bindings.entry.playerManagerReplacePlayer)(
             reinterpret_cast<void*>(game() + layout.game.playerManager),
             reinterpret_cast<void*>(old), reinterpret_cast<void*>(replacement));
@@ -2333,8 +2381,7 @@ int actorLazarusUnpair(lua_State* L) {
         at<int>(twin, layout.player.type) != at<int>(owner, layout.player.type) &&
         !at<Address>(owner, layout.player.lazarusBackup) &&
         !at<Address>(twin, layout.player.lazarusBackup) &&
-        at<Address>(twin, layout.player.twin) == owner &&
-        at<int>(twin, layout.player.controller) == at<int>(owner, layout.player.controller);
+        at<Address>(twin, layout.player.twin) == owner && controllerOf(twin) == controllerOf(owner);
     if (valid) {
         // Birthright disappears into the ghost inventory. Native Update then
         // demotes the listed twin to an owned, inactive backup (Repentance+ 0x382f0e),
@@ -2413,7 +2460,7 @@ bool reviveGhost(Room& room, Address head) {
 }
 int revivePlayer(lua_State* L) {
     const auto slot = lua.checkInteger(L, 1);
-    const auto head = slot >= 0 && slot < 4 ? participant(slot) : 0;
+    const auto head = party::validSlot(slot) ? participant(slot) : 0;
     const auto room = head ? findRoom(head) : nullptr;
     const bool valid = enabled && !runtime::replica() && !scopes.depth() && room &&
                        at<bool>(head, layout.player.coopGhost) && runtime::challengeActive() &&
@@ -2687,7 +2734,7 @@ bool half(void (*original)()) {
     return true;
 }
 bool render(void* g, RoomCall original, int slot) {
-    if (!enabled || scopes.depth() || slot < 0 || slot >= 4)
+    if (!enabled || scopes.depth() || !party::validSlot(slot))
         return false;
     auto room = findRoom(participant(slot));
     if (!room)
@@ -2741,9 +2788,11 @@ void withView(const std::function<void()>& draw, bool localPlayersOnly) {
     const auto head = enabled && !transferring ? participant(slot) : 0;
     const auto room = head ? findRoom(head) : nullptr;
     auto players = values(scopes.teamRoster() ? *scopes.teamRoster() : roster());
-    actors::selectView(players, localPlayersOnly, [&](Address p) {
-        return p && at<int>(p, layout.player.controller) == slot + 1;
-    });
+    // While reconnecting, the checkpoint can still park the local seat. Native
+    // personal HUD callbacks need a live player before they can read their view.
+    if (!actors::selectView(players, localPlayersOnly,
+                            [&](Address p) { return p && controllerOf(p) == slot + 1; }))
+        return;
     if (!room) {
         ViewRoster view(players);
         pause_menu::ViewScope pauseView(image, slot);
@@ -2788,9 +2837,8 @@ bool withCheckpointRoster(const std::function<void()>& capture) {
         (void)slot;
         all.insert(all.end(), parked.actors.begin(), parked.actors.end());
     }
-    std::stable_sort(all.begin(), all.end(), [](Address a, Address b) {
-        return at<int>(a, layout.player.controller) < at<int>(b, layout.player.controller);
-    });
+    std::stable_sort(all.begin(), all.end(),
+                     [](Address a, Address b) { return controllerOf(a) < controllerOf(b); });
     ViewRoster saved(all);
     capture();
     return true;
@@ -2804,8 +2852,8 @@ int floorSourceRoom() {
     return floorSource.room(at<int>(game(), layout.game.roomIndex));
 }
 bool receiveRoomRequest(unsigned slot, const lan::RoomRequest& request) {
-    if (slot >= 4 || runtime::replica() || !stateReady() || !(connectedMask & (1u << slot)) ||
-        at<int>(game(), layout.game.stage) != request.stage ||
+    if (slot >= lan::maxPlayers || runtime::replica() || !stateReady() ||
+        !(connectedMask & (1u << slot)) || at<int>(game(), layout.game.stage) != request.stage ||
         at<int>(game(), layout.game.stageType) != request.type)
         return false;
     const auto head = participant(slot);
@@ -2845,7 +2893,7 @@ std::vector<SavedLocation> captureLocations() {
     std::vector<SavedLocation> result;
     if (!enabled || scopes.depth())
         return result;
-    for (unsigned slot = 0; slot < 4; ++slot) {
+    for (unsigned slot = 0; slot < lan::maxPlayers; ++slot) {
         if (auto parked = dormant.find(slot); parked != dormant.end()) {
             result.push_back(parked->second.saved);
             continue;
@@ -2867,7 +2915,7 @@ void setConnected(unsigned mask) {
     if (!enabled || scopes.depth())
         return;
     bool changed = false;
-    for (unsigned slot = 1; slot < 4; ++slot) {
+    for (unsigned slot = 1; slot < lan::maxPlayers; ++slot) {
         const auto head = participant(slot);
         if (!(connectedMask & (1u << slot)) && head) {
             auto from = findRoom(head);
@@ -2919,7 +2967,7 @@ void setConnected(unsigned mask) {
                 all.push_back(actor);
             }
             std::stable_sort(all.begin(), all.end(), [](Address a, Address b) {
-                return at<int>(a, layout.player.controller) < at<int>(b, layout.player.controller);
+                return controllerOf(a) < controllerOf(b);
             });
             assign(roster(), all);
             participants = logicalPlayers();
@@ -2932,7 +2980,7 @@ void setConnected(unsigned mask) {
     const auto all = values(roster());
     for (unsigned i = 0; i < all.size(); ++i)
         at<unsigned>(all[i], layout.player.index) = i;
-    if (changed) {
+    if (changed && engine::player_seats::additional.empty()) {
         using GetHUD = void*(__attribute__((thiscall))*)(void*);
         engine<RoomCall>(bindings.entry.hudAssignPlayers)(
             engine<GetHUD>(bindings.entry.engineRoomsGetHUD)(reinterpret_cast<void*>(game())));
@@ -2941,7 +2989,7 @@ void setConnected(unsigned mask) {
 }
 void protectArrivals(unsigned mask) {
     using Cooldown = void(__attribute__((thiscall))*)(void*, int);
-    for (unsigned slot = 0; slot < 4; ++slot)
+    for (unsigned slot = 0; slot < lan::maxPlayers; ++slot)
         if (mask & (1u << slot)) {
             const auto head = participant(slot);
             if (!head)
@@ -2980,7 +3028,7 @@ std::uintptr_t presentationPlayer(void* explicitPlayer) {
     return enabled ? currentActor(explicitPlayer) : 0;
 }
 bool withPlayer(unsigned slot, const std::function<void()>& call) {
-    const auto head = slot < 4 ? participant(slot) : 0;
+    const auto head = slot < lan::maxPlayers ? participant(slot) : 0;
     const auto room = head ? findRoom(head) : nullptr;
     if (!enabled || scopes.depth() || !room || !(connectedMask & (1u << slot)))
         return false;
@@ -2989,7 +3037,7 @@ bool withPlayer(unsigned slot, const std::function<void()>& call) {
     return true;
 }
 bool withRoomPlayers(unsigned slot, const std::function<void()>& call) {
-    const auto head = slot < 4 ? participant(slot) : 0;
+    const auto head = slot < lan::maxPlayers ? participant(slot) : 0;
     const auto room = head ? findRoom(head) : nullptr;
     if (!enabled || scopes.depth() || !room || !(connectedMask & (1u << slot)))
         return false;
@@ -3011,7 +3059,7 @@ bool restoreLocations(const std::vector<SavedLocation>& saved) {
     // offline actors. Otherwise their dormant position captures the native
     // Continue spawn point on one machine and the saved point on another.
     const auto mask = connectedMask;
-    setConnected(15);
+    setConnected(lan::allPlayersMask);
     for (unsigned slot = 0; slot < saved.size(); ++slot) {
         if (runtime::replica() && slot != static_cast<unsigned>(runtime::localViewSlot()))
             continue;
@@ -3719,7 +3767,7 @@ void beforeStart(bool preserveItemPixels) {
     const auto source = at<Address>(game(), layout.game.room);
     actors::forgetRemoved(location, values(roster()));
     const auto mask = connectedMask;
-    setConnected(15);
+    setConnected(lan::allPlayersMask);
     for (auto& [key, room] : loaded) {
         (void)key;
         if (room->pointer == source) {
@@ -3900,6 +3948,7 @@ bool bind(lua_State* L, HMODULE module) {
     function("rooms_chest_ending", chestEnding);
     function("rooms_ready", ready);
     function("rooms_heads", heads);
+    function("actor_owner", playerOwner);
     function("rooms_sync", syncLocations);
     function("room_special_template", specialRoomTemplate);
     function("room_ambush_wave", roomAmbushWave);

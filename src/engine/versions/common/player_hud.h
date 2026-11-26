@@ -1,4 +1,5 @@
 #pragma once
+#include "engine/versions/common/player_seats.h"
 #include <bit>
 #include <cmath>
 #include <cstdint>
@@ -42,7 +43,8 @@ std::optional<Anchor> anchor(std::uintptr_t hud, unsigned index, float width, fl
     const auto player = read<std::uintptr_t>(hud + index * fields.stride, fields.player);
     if (!player)
         return {};
-    const auto controller = read<int>(player, fields.controller);
+    const auto controller =
+        isaac::engine::player_seats::owner(player, read<int>(player, fields.controller));
     if (controller < 1 || !(audience & seatBit(controller - 1)))
         return {};
     const int mode = layout(hud, index, player);

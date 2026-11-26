@@ -148,7 +148,7 @@ return function(fields)
             local extraAnimationMovement, actorByID = {}, {}
             for _, actor in ipairs(actorVisuals) do
                 local p = view.player(actor[Actor.index])
-                if p and p.ControllerIndex == actor[Actor.controller] then
+                if p and native.player_owner(p) == actor[Actor.controller] then
                     actorsPresentation.apply(p, actor)
                     actorByID[actor[Actor.entity][Entity.id]] = actor
                     extraAnimationMovement[actor[Actor.entity][Entity.id]] =

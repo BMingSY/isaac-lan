@@ -1,4 +1,5 @@
 local root = assert(arg[1])
+local party = dofile(root .. "/src/bridge/core/party.lua")
 local wire = dofile(root .. "/src/bridge/runtime/chat_wire.lua")
 local factory = dofile(root .. "/src/bridge/runtime/chat.lua")
 local dice = dofile(root .. "/src/bridge/runtime/chat_dice.lua")
@@ -22,6 +23,7 @@ for slot = 0, 2 do
     }
     local context = { index = 84, dimension = 0 }
     local opacity = opacityFactory({
+        party = party,
         default = 50,
         info = function()
             return info
@@ -44,6 +46,7 @@ for slot = 0, 2 do
         return true
     end
     local chat = factory({
+        party = party,
         limits = limits,
         dice = dice,
         emotes = emoteCount,
@@ -202,6 +205,7 @@ for _, case in ipairs({
     assert(revivals[#revivals] == case[2] and guest.messages[#guest.messages].text == case[3])
 end
 assert(#host.messages == unchangedHost and #other.messages == unchangedOther and #revivals == 4)
+assert(guest.parse("/rebirth 8P").target == 7)
 assert(guest.parse("/c rebirth self").target == "self")
 assert(guest.parse("/c 复活 2p").kind == "native")
 for _, invalid in ipairs({
@@ -212,7 +216,7 @@ for _, invalid in ipairs({
     "/rebirth 自己",
     "/c rebirth 自己",
     "/rebirth 0",
-    "/rebirth 5P",
+    "/rebirth 9P",
     "/c rebirth 2p 3p",
     "/rebirth P2P",
 }) do
@@ -249,10 +253,10 @@ local encoded = wire.encodeRequest({
     text = "测试",
 })
 for i = 0, #encoded - 1 do
-    assert(not pcall(wire.decode, encoded:sub(1, i)))
+    assert(not pcall(wire.decode, encoded:sub(1, i), party.capacity))
 end
-assert(not pcall(wire.decode, encoded .. "trailing"))
-assert(wire.decode(encoded).text == "测试")
+assert(not pcall(wire.decode, encoded .. "trailing", party.capacity))
+assert(wire.decode(encoded, party.capacity).text == "测试")
 poll()
 -- A congested recipient must see shared output in sequence when it recovers.
 blocked["0:1"] = true
@@ -567,7 +571,7 @@ for _, text in ipairs({ "/opacity 1p 25", "/OPACITY others 0", "/opacity reset" 
     assert(reply.kind == "system" and not reply.bubble and reply.owner == 1)
     assert(reply.text:find("不透明度"))
 end
-assert(table.concat(opacityValues[1], ",") == "50,100,50,50")
+assert(table.concat(opacityValues[1], ",") == "50,100,50,50,50,50,50,50")
 assert(not opacityValues[0] and not opacityValues[2], "Opacity changed another peer's preferences")
 -- Feedback runs on the submitting machine only, including before readiness.
 for _, text in ipairs({ "/feedback 进房后卡住", "/FB 进房后卡住", "/feedback" }) do

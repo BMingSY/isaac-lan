@@ -2,7 +2,7 @@
 
 [简体中文](https://github.com/BMingSY/isaac-lan/blob/main/README.md) · English
 
-Play *The Binding of Isaac* with 2–4 players over a LAN. One installation supports both Windows game builds, **Repentance v1.7.9b.J835** and **Repentance+ v1.9.7.20.J514**. [Download Isaac LAN](https://github.com/BMingSY/isaac-lan/releases/latest)
+Play *The Binding of Isaac* with 2–8 players over a LAN. One installation supports both Windows game builds, **Repentance v1.7.9b.J835** and **Repentance+ v1.9.7.20.J514**. [Download Isaac LAN](https://github.com/BMingSY/isaac-lan/releases/latest)
 
 ## Features
 

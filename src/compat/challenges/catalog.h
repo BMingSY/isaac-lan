@@ -68,7 +68,7 @@ inline constexpr std::array definitions{
     },
     Definition{
         1003,
-        3,
+        4,
         ids::player::isaac,
         0,
         true,

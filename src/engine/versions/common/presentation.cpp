@@ -1,3 +1,4 @@
+#include "engine/versions/common/player_seats.h"
 #include "engine/lua_api.h"
 #include "engine/versions/common/victory_prompt.h"
 #include "engine/versions/common/presentation_bindings.h"
@@ -197,7 +198,7 @@ int events(lua_State* L) {
         if (lua.getTop(L) == 1 && !runtime::replica()) {
             const auto slot = lua.checkInteger(L, 1);
             lan::Writer w(lan::Message::world);
-            if (slot >= 0 && slot < 4)
+            if (party::validSlot(slot))
                 for (const auto& e : intros) {
                     if (!(e.audience & (1u << slot)) ||
                         !waiting.pending(slot, e.serial, runtime::tick()))

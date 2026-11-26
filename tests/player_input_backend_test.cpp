@@ -1,5 +1,6 @@
 #include "test_support.h"
 #include "engine/versions/common/player_input.h"
+#include "engine/versions/common/player_seats.h"
 #ifdef ISAAC_LAN_TEST_REPENTANCE
 #include "engine/versions/repentance/entrypoints.h"
 #else
@@ -46,6 +47,7 @@ std::array<Address, 8> roster, relocated, rewarded;
 std::vector<char> calls;
 unsigned count = 1, createdSlot;
 int desiredType = 19, desiredController = 3;
+unsigned rewardSlot = 2;
 bool failSpawn = false, expandInit = true, expandReward = true, replaceGame = false;
 template <class T> T& field(void* memory, unsigned offset = 0) {
     return *reinterpret_cast<T*>(static_cast<unsigned char*>(memory) + offset);
@@ -93,8 +95,7 @@ void __attribute__((thiscall)) initialize(void* player) {
     }
 }
 void rewards(void* player, unsigned slot) {
-    require(player == actors[createdSlot].data() && slot == unsigned(desiredController - 1) &&
-                calls.back() == 'I',
+    require(player == actors[createdSlot].data() && slot == rewardSlot && calls.back() == 'I',
             "Starting rewards must follow native initialization with the LAN slot");
     calls.push_back('R');
     if (expandReward) {
@@ -123,7 +124,9 @@ void __attribute__((thiscall)) assignHUDs(void* receiver) {
 }
 void reset() {
     calls.clear();
+    isaac::engine::player_seats::additional.clear();
     count = 1;
+    rewardSlot = 2;
     failSpawn = replaceGame = false;
     expandInit = expandReward = true;
     desiredController = 3;
@@ -162,7 +165,7 @@ void assignment() {
     require(actors[0] == expected, "Assignment wrote outside the audited controller field");
     calls.clear();
     require(!players::assign(0, 0, 1) && !players::assign(address(image), 1, 1) &&
-                !players::assign(address(image), 0, 0) && !players::assign(address(image), 0, 5),
+                !players::assign(address(image), 0, 0) && !players::assign(address(image), 0, 9),
             "Invalid assignment was accepted");
     roster[0] = 0;
     require(!players::assign(address(image), 0, 1) && calls.empty(),
@@ -195,6 +198,7 @@ void spawning() {
     publish(roster);
     expandInit = expandReward = false;
     desiredController = 4;
+    rewardSlot = 3;
     calls.clear();
     require(players::spawn(address(image), desiredType, desiredController, rewards) == 4 &&
                 calls == std::vector<char>({'S', 'A', 'I', 'R', 'A', 'G', 'H'}),
@@ -202,12 +206,34 @@ void spawning() {
     require(field<int>(actors[1].data(), controllerOffset) == 3,
             "Repeated joining reassigned an existing companion");
 }
+void sharedDevice() {
+    namespace seats = isaac::engine::player_seats;
+    reset();
+    desiredController = 1;
+    rewardSlot = 4;
+    require(players::spawn(address(image), desiredType, 5, rewards) == 1,
+            "Fifth seat did not spawn on the first native device");
+    require(calls == std::vector<char>({'S', 'A', 'I', 'R', 'A', 'A', 'A'}),
+            "Expanded party reached the four native team panels");
+    require(seats::owner(address(actors[0].data()), 1) == 1, "Original owner changed");
+    for (unsigned i = 1; i < count; ++i)
+        require(seats::owner(address(actors[i].data()), 1) == 5, "Companion lost logical owner");
+    ++field<unsigned>(actors[2].data(), players::bindings.initSeed);
+    require(seats::owner(address(actors[2].data()), 1) == 1,
+            "Reused allocation kept a stale owner");
+    seats::additional.clear();
+    field<Address>(actors[2].data(), players::bindings.parent) = address(actors[1].data());
+    require(players::assign(address(image), 1, 5) &&
+                seats::owner(address(actors[2].data()), 1) == 5 &&
+                seats::owner(address(actors[0].data()), 1) == 1,
+            "Continue failed to bind a saved companion independently of a shared device");
+}
 void failures() {
     reset();
     require(!players::spawn(0, 0, 1, rewards) && !players::spawn(address(image), -1, 1, rewards) &&
                 !players::spawn(address(image), 65536, 1, rewards) &&
                 !players::spawn(address(image), 0, 0, rewards) &&
-                !players::spawn(address(image), 0, 5, rewards) && calls.empty(),
+                !players::spawn(address(image), 0, 9, rewards) && calls.empty(),
             "Invalid spawn parameters reached native code");
     for (auto end :
          {address(roster.data()) - 4, address(roster.data()) + 1, address(roster.data()) + 36}) {
@@ -236,6 +262,7 @@ int main() {
     setup();
     assignment();
     spawning();
+    sharedDevice();
     failures();
     require(VirtualFree(image, 0, MEM_RELEASE), "Release independent native-player image");
 }

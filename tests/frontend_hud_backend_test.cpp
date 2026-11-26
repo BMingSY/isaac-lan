@@ -148,10 +148,11 @@ void withView(const std::function<void()>& render, bool localOnly) {
             auto* first = reinterpret_cast<Address*>(begin);
             auto* last = reinterpret_cast<Address*>(end);
             std::vector<Address> selected(first, last);
-            actors::selectView(selected, true, [&](Address p) {
-                return p &&
-                       field<int>(reinterpret_cast<void*>(p), controllerOffset) == localSlot + 1;
-            });
+            if (!actors::selectView(selected, true, [&](Address p) {
+                    return p && field<int>(reinterpret_cast<void*>(p), controllerOffset) ==
+                                    localSlot + 1;
+                }))
+                return;
             struct RestoreRoster {
                 Address& begin;
                 Address& end;
@@ -293,6 +294,10 @@ int main() {
             require(field<Address>(game.data(), playersOffset) == address(roster.data()),
                     "Personal HUD changed the gameplay roster");
         }
+        localSlot = 7;
+        const auto before = renders;
+        callHud(7);
+        require(renders == before, "Personal HUD rendered a missing returning player");
         localSlot = 1;
         connectedMask &= ~(1u << 2);
         expectPersonalHud = false;

@@ -1,3 +1,4 @@
+#include "engine/versions/common/player_seats.h"
 #include "engine/pause_menu.h"
 #include "engine/versions/common/pause_bindings.h"
 #include "core/input_actions.h"
@@ -56,7 +57,8 @@ State state(Address image) {
     if (index >= 0 && roster(game(image), begin, end) &&
         static_cast<unsigned>(index) < (end - begin) / 4)
         if (const auto player = at<Address>(begin, index * 4))
-            result.controller = at<int>(player, binding.playerController);
+            result.controller = isaac::engine::player_seats::owner(
+                player, at<int>(player, binding.playerController));
     return result;
 }
 void show(Address image) {
@@ -124,11 +126,13 @@ bool changesController(Address image, int action) {
 void selectPlayer(Address image, unsigned slot) {
     Address begin, end;
     const auto g = game(image);
-    if (!binding.playerIndex || slot >= 4 || !roster(g, begin, end))
+    if (!binding.playerIndex || slot >= party::maxPlayers || !roster(g, begin, end))
         return;
     for (auto entry = begin; entry != end; entry += 4)
         if (const auto player = at<Address>(entry);
-            player && at<int>(player, binding.playerController) == static_cast<int>(slot + 1)) {
+            player &&
+            isaac::engine::player_seats::owner(player, at<int>(player, binding.playerController)) ==
+                static_cast<int>(slot + 1)) {
             at<int>(g + binding.pauseMenu, *binding.playerIndex) = (entry - begin) / 4;
             return;
         }
@@ -136,10 +140,12 @@ void selectPlayer(Address image, unsigned slot) {
 ViewScope::ViewScope(Address image, unsigned slot) {
     Address begin, end;
     const auto g = game(image);
-    if (!binding.playerIndex || slot >= 4 || !roster(g, begin, end) || begin == end)
+    if (!binding.playerIndex || slot >= party::maxPlayers || !roster(g, begin, end) || begin == end)
         return;
     const auto player = at<Address>(begin);
-    if (!player || at<int>(player, binding.playerController) != static_cast<int>(slot + 1))
+    if (!player ||
+        isaac::engine::player_seats::owner(player, at<int>(player, binding.playerController)) !=
+            static_cast<int>(slot + 1))
         return;
     menu = g + binding.pauseMenu;
     previous = at<int>(menu, *binding.playerIndex);

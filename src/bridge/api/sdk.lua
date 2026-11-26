@@ -50,7 +50,7 @@
 ---@field id string|integer Stable key within the attached Mod's namespace.
 ---@field name string Localized lobby name.
 ---@field version? integer Defaults to 1.
----@field players? integer Required party size (2–4).
+---@field players? integer Required party size (2–8).
 ---@field character? integer Fixed player type; otherwise selected in the lobby.
 ---@field difficulty? integer Defaults to normal.
 ---@field roomOptionsLocked? boolean Defaults to false. True disables the lobby's optional room rules during this challenge.

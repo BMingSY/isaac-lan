@@ -729,6 +729,7 @@ if(BUILD_TESTING)
         input-backpressure
         inputs-3
         inputs-4
+        inputs-8
         floor-rejoin
         stage-events
         ending-events

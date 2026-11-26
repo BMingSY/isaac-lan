@@ -5,11 +5,12 @@
 
 namespace isaac::actors {
 template <class Actor, class IsLocal>
-void selectView(std::vector<Actor>& players, bool localOnly, IsLocal isLocal) {
+bool selectView(std::vector<Actor>& players, bool localOnly, IsLocal isLocal) {
     if (localOnly)
         std::erase_if(players, [&](const auto& actor) { return !isLocal(actor); });
     else
         std::stable_partition(players.begin(), players.end(), isLocal);
+    return !localOnly || !players.empty();
 }
 template <class Locations, class Actor>
 void forgetRemoved(Locations& locations, const std::vector<Actor>& listed) {

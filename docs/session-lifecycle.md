@@ -100,7 +100,9 @@ sequenceDiagram
 
 ## 联机存档与续玩
 
-[`session_archive.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/session_archive.h) 定义存档封装：扩展指纹、开局设置、运行规则、全队位置、原生 GameState 和完整性哈希。`IsaacLAN/save/6` 保存 64 位房间选项及本局奖励账本，恢复时将独立房间类型选择归并为所属的自动传送组并清除未使用类型；读取 `save/4`、`save/5` 时将 32 位的集合选项转换为自动传送的房间类型集合。`save/3` 没有房间选项，`save/3`、`save/4` 没有奖励账本，缺失字段默认清空。读取须匹配格式与指纹，完整文件上限 8 MiB。
+[`session_archive.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/session_archive.h) 定义存档封装：扩展指纹、开局设置、运行规则、全队位置、原生 GameState 和完整性哈希。五至八人使用 `save/8`，按开局顺序写入实际人数、每人的角色和位置，以及挑战契约。二至四人保留四个角色字段，有外部挑战契约时使用 `save/7`。
+
+`IsaacLAN/save/6` 保存 64 位房间选项及本局奖励账本，恢复时将独立房间类型选择归并为所属的自动传送组并清除未使用类型；读取 `save/4`、`save/5` 时将 32 位的集合选项转换为自动传送的房间类型集合。`save/3` 没有房间选项，`save/3`、`save/4` 没有奖励账本，缺失字段默认清空。读取须匹配格式与指纹，完整文件上限 8 MiB。
 
 普通联机由房主在开局首层和每次新楼层加载完成、房间与队伍就绪后自动保存一次。普通换房和同层沙漏回退不写楼层存档。每个存档栏的楼层检查点保存在 `session-1.floor.bin`、`session-2.floor.bin` 或 `session-3.floor.bin`。异常退出后，原队伍可以从大厅“继续”最近一次写入成功的楼层。客机断线重连仍使用运行中的房主状态。
 

@@ -17,6 +17,7 @@ struct lua_State {
 };
 namespace {
 int viewer = 1;
+std::uintptr_t updatingPlayer = 0;
 bool modal = false, replica = false;
 std::vector<isaac::rooms::SavedLocation> locations;
 } // namespace
@@ -36,6 +37,9 @@ bool capturesInput() {
 }
 } // namespace isaac::frontend
 namespace isaac::rooms {
+std::uintptr_t presentationPlayer(void*) {
+    return updatingPlayer;
+}
 std::vector<SavedLocation> captureLocations() {
     return locations;
 }
@@ -321,6 +325,28 @@ lan::InputFrame capture() {
             "Shared capture changed the compact input wire encoding");
     return result;
 }
+void sharedDeviceInput() {
+    namespace seats = isaac::engine::player_seats;
+    lan::Frame frame;
+    frame.players = 8;
+    frame.connected = 255;
+    frame.inputs[4].values[input::action::moveRight] = 65535;
+    frame.inputs[4].triggered = 1u << input::action::item;
+    input::apply(frame);
+    updatingPlayer = reinterpret_cast<std::uintptr_t>(players[0].data());
+    field<int>(players[0].data(), controllerOffset) = 1;
+    seats::bind(updatingPlayer, 5, isaac::engine::native_players::bindings.initSeed);
+    int source = -1;
+    require(read(1, input::action::moveRight, backend::entry::inputValue, &source) == 1 &&
+                source == 1 && read(1, input::action::item, backend::entry::inputTriggered) == 1,
+            "Shared native device lost the fifth player's action or source");
+    updatingPlayer = 0;
+    require(read(1, input::action::moveRight, backend::entry::inputValue) == 0 &&
+                read(1, input::action::item, backend::entry::inputTriggered) == 0,
+            "Fifth player's actions leaked to the first player");
+    seats::additional.clear();
+    input::reset();
+}
 void physicalCapture() {
     input::reset();
     require(input::physicalDeviceId(0) == keyboardDevice, "LAN keyboard must use its native ID");
@@ -465,6 +491,7 @@ int main() {
     setup();
     mouseRouting();
     routing();
+    sharedDeviceInput();
     physicalCapture();
     launchInput();
     versionActionsAndCleanup();

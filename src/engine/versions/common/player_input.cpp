@@ -1,5 +1,5 @@
 #include "engine/versions/common/player_input.h"
-#include "net/protocol.h"
+#include "engine/versions/common/player_seats.h"
 
 namespace isaac::engine::native_players {
 namespace {
@@ -14,7 +14,7 @@ Address game(Address image) {
     return image ? at<Address>(image, bindings.game) : 0;
 }
 bool validController(int controller) {
-    return controller >= 1 && controller <= static_cast<int>(lan::maxPlayers);
+    return player_seats::device(controller) != 0;
 }
 struct Roster {
     Address begin;
@@ -47,8 +47,25 @@ bool assign(Address image, unsigned slot, int controller) {
     const auto player = players ? players->player(slot) : 0;
     if (!player)
         return false;
-    assignPlayer(image, player, controller);
-    return at<int>(player, bindings.controller) == controller;
+    const auto device = player_seats::device(controller);
+    assignPlayer(image, player, device);
+    if (at<int>(player, bindings.controller) != device)
+        return false;
+    player_seats::bind(player, controller, bindings.initSeed);
+    if (controller > player_seats::nativeGamepads) {
+        // Continue restores a native roster before assigning its LAN seats.
+        // A companion may precede its owner and share a device with another head.
+        for (unsigned i = 0; i < players->count; ++i) {
+            const auto body = players->player(i);
+            if (body && body != player &&
+                (at<Address>(body, bindings.parent) == player ||
+                 at<Address>(body, bindings.twin) == player ||
+                 at<Address>(player, bindings.twin) == body ||
+                 at<Address>(player, bindings.lazarusBackup) == body))
+                player_seats::bind(body, controller, bindings.initSeed);
+        }
+    }
+    return true;
 }
 std::optional<unsigned> spawn(Address image, int type, int controller,
                               void (*onInitialized)(void*, unsigned)) {
@@ -66,7 +83,9 @@ std::optional<unsigned> spawn(Address image, int type, int controller,
     const auto created = roster(g);
     if (!created || created->player(before->count) != reinterpret_cast<Address>(result))
         return {};
-    assignPlayer(image, reinterpret_cast<Address>(result), controller);
+    const auto device = player_seats::device(controller);
+    assignPlayer(image, reinterpret_cast<Address>(result), device);
+    player_seats::bind(reinterpret_cast<Address>(result), controller, bindings.initSeed);
     using Call = void(__attribute__((thiscall))*)(void*);
     reinterpret_cast<Call>(image + bindings.initialize)(result);
     if (game(image) != g)
@@ -86,12 +105,17 @@ std::optional<unsigned> spawn(Address image, int type, int controller,
     const auto first = after->player(0);
     for (auto slot = before->count; slot < after->count; ++slot) {
         const auto player = after->player(slot);
-        assignPlayer(image, player, controller);
+        assignPlayer(image, player, device);
+        player_seats::bind(player, controller, bindings.initSeed);
         at<float>(player, bindings.positionX) = at<float>(player, bindings.previousX) =
             at<float>(first, bindings.positionX) + spawnSpacing * controller;
         at<float>(player, bindings.positionY) = at<float>(player, bindings.previousY) =
             at<float>(first, bindings.positionY);
     }
+    // The personal HUD binds its own panels on update. Never assign the
+    // full expanded party to the game's four primary HUD panels.
+    if (!player_seats::additional.empty())
+        return before->count;
     using GetHUD = void*(__attribute__((thiscall))*)(void*);
     const auto hud = reinterpret_cast<GetHUD>(image + bindings.getHUD)(reinterpret_cast<void*>(g));
     if (!hud)

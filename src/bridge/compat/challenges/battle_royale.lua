@@ -3,7 +3,7 @@
 return function(deps)
     local native, rules, enums = deps.native, deps.rules, deps.enums
     local phase = rules.phase
-    local model = rules.new()
+    local model = rules.new(native.max_players)
     local layout, portal, clientView, encounterRoom
     local lastFrame, pressureFrame, bossFrame = nil, nil, nil
     local initialized, deadSince, eliminated, dogma = {}, {}, {}, {}
@@ -80,7 +80,7 @@ return function(deps)
             generated = true
             return
         end
-        layout = deps.map.build(level)
+        layout = deps.map.build(level, info.players)
         deps.visibility.reset()
         observed = {}
         deadSince, eliminated = {}, {}
@@ -350,7 +350,7 @@ return function(deps)
     end
     local function apply(value)
         assert(type(value) == "table" and #value == 2, "Invalid battle royale view")
-        clientView = rules.read(value[1])
+        clientView = rules.read(value[1], native.max_players)
         local p = value[2]
         assert(
             p == false
@@ -380,7 +380,7 @@ return function(deps)
         if native.api_info().authority ~= 1 then
             return clientView
         end
-        local result = rules.read(model.snapshot())
+        local result = rules.read(model.snapshot(), native.max_players)
         result.portal = portal
         return result
     end
@@ -452,7 +452,7 @@ return function(deps)
             if
                 pickup.Variant == enums.pickup.PICKUP_TROPHY
                 and model.state.phase == phase.trophy
-                and player.ControllerIndex - 1 == model.state.winner
+                and native.player_owner(player) - 1 == model.state.winner
                 and not player:IsDead()
                 and not player:IsCoopGhost()
                 and pickup.Wait <= 0
@@ -464,7 +464,7 @@ return function(deps)
             return true
         end,
         reset = function()
-            model = rules.new()
+            model = rules.new(native.max_players)
             layout, portal, clientView, encounterRoom = nil, nil, nil, nil
             initialized, deadSince, eliminated, dogma = {}, {}, {}, {}
             observed, pendingSpawns = {}, {}

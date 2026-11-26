@@ -1,6 +1,7 @@
 -- Chat travel owns target selection and the short-lived arrival transaction.
 -- Room allocation, follower migration and native entry remain in the backend.
 return function(deps)
+    local party = deps.party
     local native, rooms, shapes = deps.native, deps.enums.room, deps.enums.shape
     local mapWidth, arrivalTimeout, listingColumns = 13, 3000, 4
     local pending = {}
@@ -51,7 +52,7 @@ return function(deps)
         if #args ~= 1 then
             return nil, usage
         end
-        local player = args[1]:match("^([1-4])p$")
+        local player = party.number(args[1]:match("^(%d+)p$"))
         if player then
             return { kind = "player", slot = tonumber(player) - 1 }
         end

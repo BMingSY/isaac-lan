@@ -1,3 +1,4 @@
+#include "engine/versions/common/player_seats.h"
 #include "engine/player_outlines.h"
 #include "engine/versions/common/player_outlines.h"
 #include "engine/versions/repentance/entrypoints.h"
@@ -28,7 +29,9 @@ template <class T> T& at(Address object, std::ptrdiff_t offset) {
     return *reinterpret_cast<T*>(object + offset);
 }
 std::optional<unsigned> slot(Address player) {
-    return player ? controllerSlot(at<int>(player, layout::player::controller)) : std::nullopt;
+    return player ? controllerSlot(isaac::engine::player_seats::owner(
+                        player, at<int>(player, layout::player::controller)))
+                  : std::nullopt;
 }
 void drawGhost(Address player, Address offset, const Color& color) {
     if (!offset)

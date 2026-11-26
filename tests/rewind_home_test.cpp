@@ -52,8 +52,8 @@ void __attribute__((thiscall)) stageFixture(void*, bool, int, void*);
 struct Fixture {
     std::uint8_t* image = nullptr;
     std::vector<std::uint8_t> game = std::vector<std::uint8_t>(0x290000, 0);
-    std::array<std::array<std::uint8_t, 0x2200>, 4> players{};
-    std::array<Address, 4> roster{};
+    std::array<std::array<std::uint8_t, 0x2200>, isaac::party::maxPlayers> players{};
+    std::array<Address, isaac::party::maxPlayers> roster{};
     std::vector<std::uint8_t> savedBytes{0x31, 0x72, 0x25, 0x19};
     std::vector<Location> locations{{0, 84, 160.5f, 280.25f}, {2, 97, 400.25f, 150.5f}};
     std::vector<std::vector<Location>> resumed;
@@ -79,7 +79,7 @@ struct Fixture {
     unsigned capturedHomes = 0, stageEvents = 0, nativeStages = 0;
     std::string abiError;
 
-    Fixture() {
+    explicit Fixture(unsigned seats = 4) {
         image = static_cast<std::uint8_t*>(
             VirtualAlloc(nullptr, imageSize, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
         require(image != nullptr, "Cannot allocate the private rewind image");
@@ -96,15 +96,18 @@ struct Fixture {
         require(FlushInstructionCache(GetCurrentProcess(), image, imageSize) != 0,
                 "Cannot publish private rewind ABI trampolines");
         field<Address>(image, native::globals::game) = reinterpret_cast<Address>(game.data());
-        for (unsigned slot = 0; slot < 4; ++slot) {
-            field<int>(players[slot].data(), controllerOffset) = static_cast<int>(slot + 1);
+        for (unsigned slot = 0; slot < seats; ++slot) {
+            field<int>(players[slot].data(), controllerOffset) =
+                isaac::engine::player_seats::device(slot + 1);
+            isaac::engine::player_seats::bind(reinterpret_cast<Address>(players[slot].data()),
+                                              slot + 1, native::layout::entity::initSeed);
             field<unsigned>(players[slot].data(), usesOffset) = 31 + slot;
             field<unsigned>(players[slot].data(), floorUsesOffset) = 7 + slot;
             roster[slot] = reinterpret_cast<Address>(players[slot].data());
         }
         field<Address>(game.data(), playersOffset) = reinterpret_cast<Address>(roster.data());
         field<Address>(game.data(), playersOffset + 4) =
-            reinterpret_cast<Address>(roster.data() + 4);
+            reinterpret_cast<Address>(roster.data() + seats);
         field<int>(game.data(), tailCounterOffset) = 0x12345678;
         field<bool>(game.data(), tailFlagOffset) = true;
         rewind::reset();
@@ -113,6 +116,7 @@ struct Fixture {
         rewind::nativeHome = nullptr;
     }
     ~Fixture() {
+        isaac::engine::player_seats::additional.clear();
         rewind::reset();
         rewind::nativeHome = nullptr;
         rewind::originalStore = nullptr;
@@ -435,8 +439,8 @@ void replicaHomeFallback() {
             }
 }
 void replicaNormalAndPartySizes() {
-    for (unsigned count = 2; count <= 4; ++count) {
-        Fixture f;
+    for (unsigned count = 2; count <= isaac::party::maxPlayers; ++count) {
+        Fixture f(count);
         f.replica = true;
         while (f.locations.size() < count)
             f.locations.push_back({1, static_cast<int>(100 + f.locations.size()), 200.f, 300.f});
@@ -447,7 +451,7 @@ void replicaNormalAndPartySizes() {
         require(f.wrappers == 0 && f.lowerCalls == 1 && f.capturedHomes == 0 &&
                     f.stageEvents == 0 && f.nativeStages == 0 && f.rewindEvents.empty() &&
                     f.resumed.size() == 1 && sameLocations(f.resumed[0], f.locations),
-                "Replica repeated a normal native transition or changed its 2/3/4-player roster");
+                "Replica repeated a normal native transition or changed its restored roster");
     }
 }
 void greedReplaysAuthoritySelection() {
@@ -968,8 +972,13 @@ void malformedPayloads() {
     bytes.back() ^= 1;
     reject(bytes);
     constexpr unsigned countOffset = 2 + 4 * 4 + wireCounterCount * 4;
-    for (const auto& change : std::array<std::pair<unsigned, unsigned>, 6>{
-             {{0, 255}, {1, 4}, {countOffset, 0}, {countOffset, 1}, {countOffset, 5}, {1, 2}}}) {
+    for (const auto& change :
+         std::array<std::pair<unsigned, unsigned>, 6>{{{0, 255},
+                                                       {1, isaac::party::maxPlayers},
+                                                       {countOffset, 0},
+                                                       {countOffset, 1},
+                                                       {countOffset, isaac::party::maxPlayers + 1},
+                                                       {1, 2}}}) {
         bytes = good;
         bytes[change.first] = change.second;
         rehash(bytes);

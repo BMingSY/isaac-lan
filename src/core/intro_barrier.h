@@ -1,4 +1,5 @@
 #pragma once
+#include "core/party.h"
 #include <array>
 #include <cstdint>
 #include <map>
@@ -26,7 +27,7 @@ class IntroBarrier {
         return added;
     }
     std::optional<Room> observe(unsigned slot, unsigned serial, bool active) {
-        if (slot >= 4)
+        if (slot >= party::maxPlayers)
             return std::nullopt;
         for (auto& [room, value] : waiting) {
             if (value.serial == serial && (value.audience & (1u << slot))) {
@@ -46,7 +47,7 @@ class IntroBarrier {
                 value.blocking = 0;
     }
     bool pending(unsigned slot, unsigned serial, unsigned tick) const {
-        if (slot >= 4)
+        if (slot >= party::maxPlayers)
             return false;
         for (const auto& [room, value] : waiting)
             if (value.serial == serial && (value.audience & (1u << slot)) &&

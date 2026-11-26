@@ -25,6 +25,9 @@ void pollLocalConsole() {}
 void refreshAutomation(std::uint32_t) {}
 } // namespace isaac::runtime
 namespace isaac::rooms {
+std::uintptr_t presentationPlayer(void*) {
+    return 0;
+}
 std::vector<SavedLocation> captureLocations() {
     return playerLocations;
 }
