@@ -417,6 +417,7 @@ if(BUILD_TESTING)
         isaac_add_lua_test(bridge.room-gather room_gather.lua)
         isaac_add_lua_test(bridge.friendly-fire friendly_fire.lua)
         isaac_add_lua_test(bridge.pvp-items pvp_items.lua)
+        isaac_add_lua_test(bridge.steam-menu steam_menu.lua)
         isaac_add_lua_test(bridge.challenge_menu challenge_menu.lua)
         isaac_add_lua_test(bridge.menu-repentance challenge_menu.lua vanilla)
         isaac_add_lua_test(presentation.menu-characters menu_characters.lua)
@@ -652,12 +653,16 @@ add_library(
     src/net/session.cpp
     src/net/network_io.cpp
     src/net/udp_io.cpp
+    src/net/steam_api.cpp
+    src/net/steam_rooms.cpp
+    src/net/steam_transport.cpp
     src/net/byte_worker.cpp
     src/net/compression.cpp
     src/net/host_resolution.cpp)
 target_include_directories(isaac_lan_net PUBLIC src)
+target_include_directories(isaac_lan_net SYSTEM PRIVATE vendor/steamnet)
 target_compile_definitions(isaac_lan_net PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
-target_link_libraries(isaac_lan_net PUBLIC ws2_32 bcrypt isaac_lan_deflate isaac_lan_zstd
+target_link_libraries(isaac_lan_net PUBLIC ws2_32 shell32 bcrypt isaac_lan_deflate isaac_lan_zstd
                                            isaac_lan_enet)
 if(BUILD_TESTING)
     add_executable(isaac_lan_manifest_test tests/bridge_manifest_test.cpp
@@ -671,6 +676,12 @@ if(BUILD_TESTING)
     add_test(NAME app.build-identity COMMAND isaac_lan_manifest_test)
     set_tests_properties(app.build-identity PROPERTIES TIMEOUT 30 LABELS "offline;native")
     add_executable(isaac_lan_net_test tests/net_test.cpp)
+    add_executable(isaac_lan_steam_test tests/steam_rooms_test.cpp tests/steam_single_account.cpp)
+    target_include_directories(isaac_lan_steam_test SYSTEM PRIVATE vendor/steamnet)
+    target_link_libraries(isaac_lan_steam_test PRIVATE isaac_lan_net)
+    add_test(NAME net.steam-rooms COMMAND isaac_lan_steam_test)
+    set_tests_properties(net.steam-rooms PROPERTIES LABELS "offline;network;steam")
+
     add_executable(isaac_lan_chat_native_input_test tests/chat_native_input_test.cpp
                                                     src/presentation/chat_input.cpp)
     target_include_directories(isaac_lan_chat_native_input_test PRIVATE src)
@@ -766,6 +777,7 @@ if(BUILD_TESTING)
         communication
         greed-settings
         host-disconnect
+        account-transport
         resource-lifecycle)
         add_test(NAME net.${test_case} COMMAND isaac_lan_net_test ${test_case})
         set_tests_properties(net.${test_case} PROPERTIES TIMEOUT 45 LABELS "offline;network;udp")
@@ -910,6 +922,7 @@ if(MINGW)
     target_compile_options(isaac_lan_probe PRIVATE -Wall -Wextra -Werror)
     target_compile_options(isaac_lan_lab PRIVATE -Wall -Wextra -Werror)
     if(BUILD_TESTING)
+        target_link_options(isaac_lan_steam_test PRIVATE -static-libgcc -static-libstdc++)
         target_link_options(isaac_lan_net_test PRIVATE -static-libgcc -static-libstdc++)
         target_compile_options(isaac_lan_net_test PRIVATE -Wall -Wextra -Werror)
     endif()

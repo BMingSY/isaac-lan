@@ -627,6 +627,18 @@ function _IsaacLanCommand(action, value)
         local ip, port = endpoint.parse(value)
         assert(ip, "无效的房主地址或端口")
         assert(native.net_join(ip, port, _IsaacLanFingerprint, modFingerprint()))
+    elseif action:sub(1, 6) == "steam_" then
+        local operation = action:sub(7)
+        local mods = ""
+        if operation == "create" or operation == "join" or operation == "accept" then
+            bot.reset()
+            playerOpacity.reset()
+            chat.reset()
+            chatUI.reset()
+            assert(native.input_virtual())
+            mods = modFingerprint()
+        end
+        assert(native.net_steam(operation, value or "", mods))
     elseif action == "challenge" then
         assert(native.net_challenge(assert(tonumber(value))), "无法选择联机挑战")
     elseif action == "room_options" then
@@ -686,7 +698,10 @@ end
 local chatSession = false
 function _IsaacLanFrame()
     local previousPhase = status.phase
-    status = native.net_poll()
+    status = native.net_poll(_IsaacLanFingerprint)
+    if status.steamCreated then
+        assert(native.net_configure_options(native.menu_room_options()), "无法载入房间规则")
+    end
     if status.phase == Phase.lobby and previousPhase ~= Phase.lobby then
         savedPlayers, savedOptions = native.net_saved_info()
     end

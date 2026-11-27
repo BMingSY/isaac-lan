@@ -49,7 +49,7 @@ local roomOptions = _IsaacLan.net_room_options()
 local idle = model.idle
 function _IsaacLanMenuOpen(returning)
     ui.page = not returning
-            and _IsaacLan.menu_official
+            and (_IsaacLan.menu_official or _IsaacLanStatus().steamAvailable)
             and idle(_IsaacLanStatus().phase or Phase.idle)
             and "modes"
         or "lan"
@@ -177,9 +177,27 @@ function _IsaacLanMenuRender(
         visible = false
     end
     ui.wasPlaying = playing
+    if status.steamInvite then
+        if status.steamInviteInGame or not idle(phase) then
+            ui.deferredInvite = status.steamInvite
+        elseif available and not status.steamBusy and phase == Phase.idle then
+            visible = true
+            if ui.deferredInvite == status.steamInvite then
+                ui.page = "steamInvite"
+            elseif ui.handledInvite ~= status.steamInvite then
+                ui.handledInvite = status.steamInvite
+                ui.page, ui.selection = "steam", 1
+                local ok, reason = pcall(_IsaacLanCommand, "steam_accept")
+                ui.errorText = ok and "" or tostring(reason):gsub("^.-:%d+: ", "")
+            end
+        end
+    else
+        ui.handledInvite, ui.deferredInvite = nil, nil
+    end
     if
         not visible
         and not available
+        and not status.steamInviteInGame
         and not status.prepared
         and not status.recovering
         and phase ~= Phase.waiting
@@ -245,6 +263,10 @@ function _IsaacLanMenuRender(
         )
         return false
     end
+    if phase == Phase.lobby and ui.lastPhase ~= phase and status.transport == "steam" then
+        visible = true
+        ui.page, ui.selection, ui.listScroll = "lan", 1, nil
+    end
     if phase ~= ui.lastPhase then
         if phase == Phase.running and ui.lastPhase == Phase.lobby then
             visible = false
@@ -273,16 +295,21 @@ function _IsaacLanMenuRender(
             ui.editing = nil
             _IsaacLan.menu_text_end()
             key = 0
+        elseif ui.page == "steam" or ui.page == "steamList" or ui.page == "steamInvite" then
+            _IsaacLanCommand(ui.page == "steamInvite" and "steam_dismiss" or "steam_cancel")
+            ui.page, ui.selection, ui.listScroll =
+                ui.page == "steamList" and "steam" or "modes", 1, nil
+            key = 0
         elseif model.back(ui) then
             key = 0
         elseif
-            _IsaacLan.menu_official
+            (_IsaacLan.menu_official or status.steamAvailable)
             and ui.page == "lan"
             and idle(phase)
             and not status.recovering
         then
             ui.page = "modes"
-            ui.selection = 2
+            ui.selection = _IsaacLan.menu_official and 2 or 1
             key = 0
         elseif not status.recovering then
             visible = false
@@ -296,7 +323,9 @@ function _IsaacLanMenuRender(
             renderRestart(status, assets[10])
         end
         local banner
-        if phase == Phase.waiting then
+        if status.steamInviteInGame then
+            banner = message("收到 Steam 邀请，返回主菜单后可加入")
+        elseif phase == Phase.waiting then
             banner = message("正在重连…")
         elseif status.prepared and (status.pause or 0) > 0 then
             banner =
@@ -347,13 +376,19 @@ function _IsaacLanMenuRender(
         end,
     })
     local rulesPage = ruleCount ~= nil
-    local listPage = rulesPage or ui.page == "challenges" or ui.page == "modSettings"
+    local listPage = ui.page == "steamList"
+        or rulesPage
+        or ui.page == "challenges"
+        or ui.page == "modSettings"
     local heading = message(
         modes and "联机模式"
             or ui.page == "autoTeleport" and "自动传送"
             or rulesPage and "房间规则"
             or ui.page == "modSettings" and "Mod 设置"
             or ui.page == "challenges" and "联机挑战"
+            or ui.page == "steamList" and "公开房间"
+            or ui.page == "steamInvite" and "Steam 好友邀请"
+            or (ui.page == "steam" or status.transport == "steam") and "Steam 联机"
             or "局域网联机"
     )
     if resources.native_lobby then
@@ -554,7 +589,10 @@ function _IsaacLanMenuRender(
         end
     end
     local errorText = status.saveError and status.saveError ~= "" and status.saveError
-        or (ui.errorText ~= "" and ui.errorText or networkError)
+        or (ui.errorText ~= "" and ui.errorText)
+        or status.steamError
+        or (status.steamBusy and message("正在连接 Steam…"))
+        or networkError
     local compatibilityLines = (not status.saveError or status.saveError == "")
         and ui.errorText == ""
         and model.compatibilityError(status)
@@ -586,7 +624,7 @@ function _IsaacLanMenuRender(
         messageColor = amber
     end
     local footerY = compatibilityLines and 206 or (errorText ~= "" and 235 or 243)
-    if not listPage and phase == Phase.lobby then
+    if not listPage and phase == Phase.lobby and status.transport ~= "steam" then
         if not host then
             text(message("房主地址：%s", ui.ip), 25, footerY - 12, 10)
         end

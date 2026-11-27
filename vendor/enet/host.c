@@ -28,6 +28,12 @@
 ENetHost *
 enet_host_create (const ENetAddress * address, size_t peerCount, size_t channelLimit, enet_uint32 incomingBandwidth, enet_uint32 outgoingBandwidth)
 {
+    return enet_host_create_with_io (address, peerCount, channelLimit, incomingBandwidth, outgoingBandwidth, NULL);
+}
+
+ENetHost *
+enet_host_create_with_io (const ENetAddress * address, size_t peerCount, size_t channelLimit, enet_uint32 incomingBandwidth, enet_uint32 outgoingBandwidth, const ENetDatagramIO * io)
+{
     ENetHost * host;
     ENetPeer * currentPeer;
 
@@ -48,36 +54,46 @@ enet_host_create (const ENetAddress * address, size_t peerCount, size_t channelL
     }
     memset (host -> peers, 0, peerCount * sizeof (ENetPeer));
 
-#ifdef _WIN32
-    host -> socket = enet_socket_create_family (ENET_SOCKET_TYPE_DATAGRAM,
-                                               address != NULL ? address -> family : ENET_ADDRESS_IPV4);
-#else
-    host -> socket = enet_socket_create (ENET_SOCKET_TYPE_DATAGRAM);
-#endif
-    if (host -> socket == ENET_SOCKET_NULL || (address != NULL && enet_socket_bind (host -> socket, address) < 0))
+    if (io != NULL)
+    {
+        host -> io = * io;
+        host -> socket = ENET_SOCKET_NULL;
+        if (address != NULL)
+          host -> address = * address;
+    }
+    else
     {
 #ifdef _WIN32
-       int socketError = WSAGetLastError ();
+        host -> socket = enet_socket_create_family (ENET_SOCKET_TYPE_DATAGRAM,
+                                                   address != NULL ? address -> family : ENET_ADDRESS_IPV4);
+#else
+        host -> socket = enet_socket_create (ENET_SOCKET_TYPE_DATAGRAM);
 #endif
-       if (host -> socket != ENET_SOCKET_NULL)
-         enet_socket_destroy (host -> socket);
+        if (host -> socket == ENET_SOCKET_NULL || (address != NULL && enet_socket_bind (host -> socket, address) < 0))
+        {
+#ifdef _WIN32
+           int socketError = WSAGetLastError ();
+#endif
+           if (host -> socket != ENET_SOCKET_NULL)
+             enet_socket_destroy (host -> socket);
 
-       enet_free (host -> peers);
-       enet_free (host);
+           enet_free (host -> peers);
+           enet_free (host);
 
 #ifdef _WIN32
-       WSASetLastError (socketError);
+           WSASetLastError (socketError);
 #endif
-       return NULL;
+           return NULL;
+        }
+
+        enet_socket_set_option (host -> socket, ENET_SOCKOPT_NONBLOCK, 1);
+        enet_socket_set_option (host -> socket, ENET_SOCKOPT_BROADCAST, 1);
+        enet_socket_set_option (host -> socket, ENET_SOCKOPT_RCVBUF, ENET_HOST_RECEIVE_BUFFER_SIZE);
+        enet_socket_set_option (host -> socket, ENET_SOCKOPT_SNDBUF, ENET_HOST_SEND_BUFFER_SIZE);
+
+        if (address != NULL && enet_socket_get_address (host -> socket, & host -> address) < 0)
+          host -> address = * address;
     }
-
-    enet_socket_set_option (host -> socket, ENET_SOCKOPT_NONBLOCK, 1);
-    enet_socket_set_option (host -> socket, ENET_SOCKOPT_BROADCAST, 1);
-    enet_socket_set_option (host -> socket, ENET_SOCKOPT_RCVBUF, ENET_HOST_RECEIVE_BUFFER_SIZE);
-    enet_socket_set_option (host -> socket, ENET_SOCKOPT_SNDBUF, ENET_HOST_SEND_BUFFER_SIZE);
-
-    if (address != NULL && enet_socket_get_address (host -> socket, & host -> address) < 0)   
-      host -> address = * address;
 
     if (! channelLimit || channelLimit > ENET_PROTOCOL_MAXIMUM_CHANNEL_COUNT)
       channelLimit = ENET_PROTOCOL_MAXIMUM_CHANNEL_COUNT;
@@ -156,7 +172,8 @@ enet_host_destroy (ENetHost * host)
     if (host == NULL)
       return;
 
-    enet_socket_destroy (host -> socket);
+    if (host -> socket != ENET_SOCKET_NULL)
+      enet_socket_destroy (host -> socket);
 
     for (currentPeer = host -> peers;
          currentPeer < & host -> peers [host -> peerCount];

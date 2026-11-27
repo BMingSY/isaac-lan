@@ -10,6 +10,7 @@
 #include "net/wire_codec.h"
 #include "test_support.h"
 #include "support/combat_records.h"
+#include "support/account_datagrams.h"
 #include "udp_relay.h"
 #include <winsock2.h>
 #include <windows.h>
@@ -723,6 +724,74 @@ void inputBackpressure() {
     for (const auto& message : peer.outgoing)
         remaining += message.size();
     require(peer.queued == remaining, "Replacement corrupted queued-byte accounting");
+}
+void accountTransport() {
+    constexpr std::uint64_t owner = 0x110000100000010, guestId = owner + 1, stranger = owner + 2;
+    auto bus = std::make_shared<AccountDatagrams::Network>();
+    auto route = [&](auto source, auto claimed) {
+        return std::make_shared<AccountDatagrams>(bus, owner, source, claimed);
+    };
+    TestSession host, guest;
+    require(host.host(0, "steam-test", {}, testAccess(), route(owner, owner)),
+            "Account host failed");
+    const auto join = [&](TestSession& peer, auto source, auto claimed) {
+        return peer.join({}, 0, "steam-test", {}, {}, testAccess(), route(source, claimed));
+    };
+    auto wait = [&](TestSession& peer, auto done) {
+        until([&] {
+            host.poll();
+            peer.poll();
+            return done();
+        });
+    };
+    auto reject = [&](auto source, auto claimed) {
+        TestSession other;
+        require(join(other, source, claimed), "Could not initiate account handshake");
+        wait(other,
+             [&] { return other.phase() == Phase::failed || other.phase() == Phase::closed; });
+        require(!host.hasAccountSeat(source), "An unauthorized account received a seat");
+    };
+    reject(stranger, guestId);
+    require(join(guest, guestId, guestId), "Account join failed");
+    wait(guest, [&] { return guest.phase() == Phase::lobby && host.players() == 2; });
+    require(guest.slot() == 1 && guest.identity() == accountIdentity(guestId) &&
+                host.hasAccountSeat(guestId),
+            "Authenticated account did not own P2");
+    Start start;
+    start.seed = "YV039KQF";
+    require(host.start(start), "Account room could not start");
+    wait(guest, [&] { return guest.phase() == Phase::running; });
+    require(guest.ready() && host.ready(), "Account players could not ready");
+    InputFrame held;
+    held.values[isaac::input::action::moveRight] = maxInputValue;
+    require(guest.submit(0, held) && guest.submit(1, held) && host.submit(0, {}),
+            "Account input submission failed");
+    wait(guest, [&] { return host.inputSequences()[1] == 1; });
+    std::optional<Frame> frame;
+    wait(guest, [&] {
+        frame = host.take();
+        return frame.has_value();
+    });
+    require(frame->inputs[1].values[isaac::input::action::moveRight] == maxInputValue,
+            "Host received different input");
+    host.completed(frame->tick);
+    WorldState state;
+    state.tick = frame->tick;
+    state.connected = host.connectedMask();
+    state.bytes.resize(8192, 0xab);
+    require(host.publish(1, state), "Account state publication failed");
+    wait(guest, [&] {
+        auto applied = guest.takeState();
+        return applied && applied->bytes == state.bytes;
+    });
+    guest.close();
+    wait(guest, [&] { return host.connectedMask() == 1; });
+    reject(stranger, stranger);
+    reject(stranger, guestId);
+    require(guest.reconnect(), "Authenticated client could not reconnect");
+    wait(guest, [&] { return guest.phase() == Phase::waiting; });
+    require(guest.slot() == 1 && host.hasAccountSeat(guestId),
+            "Account rejoin lost its original seat");
 }
 void floorRejoin() {
     Group g(2, 0, "127.0.0.1", {}, {1, 23});
@@ -3730,6 +3799,7 @@ int main(int argc, char** argv) {
          {"communication", communication},
          {"greed-settings", greedSettings},
          {"host-disconnect", hostDisconnect},
+         {"account-transport", accountTransport},
          {"resource-lifecycle", resourceLifecycle}});
     if (!result)
         std::puts("ALL STATE TRANSPORT TESTS PASSED");

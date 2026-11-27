@@ -11,6 +11,7 @@
 #include "engine/presentation.h"
 #include "engine/frontend.h"
 #include "net/session.h"
+#include "net/steam_rooms.h"
 #include "engine/rooms.h"
 #include "engine/rewind.h"
 #include "engine/input.h"
@@ -40,6 +41,8 @@ namespace {
 constexpr int registry = -1001000;
 using LuaFunction = int(__cdecl*)(lua_State*);
 isaac::lua::API lua{};
+lan::steam::Rooms steamRooms;
+std::string steamMods;
 std::unique_ptr<lan::Session> session;
 compat::challenges::ExternalCatalog challengeCatalog;
 std::uint64_t lobbyRoomOptions = 0;
@@ -885,6 +888,63 @@ void update(const backend::Call& original) {
         fail(std::string("Game update failed: ") + error.what());
     }
 }
+void newSession(const char* fingerprint) {
+    lobbyRoomOptions = 0;
+    session = std::make_unique<lan::Session>(ISAAC_LAN_VERSION, logger,
+                                             diagnostics::enabled() ? diagnostics::sample : nullptr,
+                                             logging::enabled(logging::Level::debug));
+    sessionFingerprint = lan::runtimeFingerprint(fingerprint, luaVersion);
+}
+int steamAction(lua_State* L) {
+    const std::string_view action = lua.checkString(L, 1, nullptr);
+    bool ok = false;
+    if (action == "invite")
+        ok = steamRooms.invite();
+    else if (action == "visibility")
+        ok = session && session->phase() == lan::Phase::lobby && steamRooms.visibility();
+    else if (action == "dismiss") {
+        steamRooms.dismiss();
+        ok = true;
+    } else if (action == "cancel") {
+        if (!session)
+            steamRooms.leave();
+        ok = !session;
+    } else if (!session && retryArchive()) {
+        if (action == "browse")
+            ok = steamRooms.browse();
+        else {
+            steamMods = lua.checkString(L, 3, nullptr);
+            if (action == "create")
+                ok = steamRooms.create();
+            else if (action == "join")
+                ok = steamRooms.join(lan::steam::parseId(lua.checkString(L, 2, nullptr)));
+            else if (action == "accept")
+                ok = steamRooms.accept();
+        }
+    }
+    lua.pushBoolean(L, ok);
+    lua.pushString(L, steamRooms.failure().empty() ? "Steam 房间操作不可用"
+                                                   : steamRooms.failure().c_str());
+    return 2;
+}
+int steamList(lua_State* L) {
+    const auto& list = steamRooms.rooms();
+    lua.createTable(L, list.size(), 0);
+    int index = 0;
+    for (const auto& entry : list) {
+        lua.createTable(L, 0, 4);
+        lua.pushString(L, std::to_string(entry.id).c_str());
+        lua.setField(L, -2, "id");
+        lua.pushString(L, entry.name.c_str());
+        lua.setField(L, -2, "name");
+        lua.pushInteger(L, entry.players);
+        lua.setField(L, -2, "players");
+        lua.pushInteger(L, lan::maxPlayers);
+        lua.setField(L, -2, "limit");
+        lua.rawSetI(L, -2, ++index);
+    }
+    return 1;
+}
 int host(lua_State* L) {
     const auto port = lua.checkInteger(L, 1);
     const char* fingerprint = lua.checkString(L, 2, nullptr);
@@ -893,11 +953,7 @@ int host(lua_State* L) {
         lua.pushBoolean(L, false);
         return 1;
     }
-    lobbyRoomOptions = 0;
-    session = std::make_unique<lan::Session>(ISAAC_LAN_VERSION, logger,
-                                             diagnostics::enabled() ? diagnostics::sample : nullptr,
-                                             logging::enabled(logging::Level::debug));
-    sessionFingerprint = lan::runtimeFingerprint(fingerprint, luaVersion);
+    newSession(fingerprint);
     lua.pushBoolean(L, session->host(static_cast<std::uint16_t>(port), sessionFingerprint, mods,
                                      personalAccess()));
     return 1;
@@ -911,11 +967,7 @@ int join(lua_State* L) {
         lua.pushBoolean(L, false);
         return 1;
     }
-    lobbyRoomOptions = 0;
-    session = std::make_unique<lan::Session>(ISAAC_LAN_VERSION, logger,
-                                             diagnostics::enabled() ? diagnostics::sample : nullptr,
-                                             logging::enabled(logging::Level::debug));
-    sessionFingerprint = lan::runtimeFingerprint(fingerprint, luaVersion);
+    newSession(fingerprint);
     try {
         const auto path = archivePath().parent_path() / L"player-id.txt";
         std::string identity;
@@ -950,6 +1002,28 @@ int poll(lua_State* L) {
         } else
             ++it;
     }
+    const char* fingerprint = lua.getTop(L) ? lua.checkString(L, 1, nullptr) : "";
+    const bool hadSteam = steamRooms.active();
+    steamRooms.poll(
+        {ISAAC_LAN_VERSION, lan::runtimeFingerprint(fingerprint, luaVersion)},
+        !session || session->phase() == lan::Phase::lobby,
+        [](auto id) { return session && session->hasAccountSeat(id); }, logger);
+    bool steamCreated = false;
+    if (steamRooms.active() && !session) {
+        newSession(fingerprint);
+        const auto& route = steamRooms.route();
+        steamCreated = steamRooms.hosting();
+        const bool attached =
+            steamCreated
+                ? session->host(0, sessionFingerprint, steamMods, personalAccess(), route)
+                : session->join({}, 0, sessionFingerprint, {}, steamMods, personalAccess(), route);
+        if (!attached) {
+            steamCreated = false;
+            steamRooms.leave();
+            session->abort("无法启动 Steam 联机");
+        }
+    } else if (hadSteam && !steamRooms.active() && session)
+        session->abort(steamRooms.failure());
     if (session)
         session->poll();
     if (session && session->phase() == lan::Phase::lobby && backend::managerReady() &&
@@ -983,8 +1057,12 @@ int poll(lua_State* L) {
     if (rejoinAt && InputClock::now() >= *rejoinAt) {
         rejoinAt.reset();
         if (session && !view.gated) {
-            if (session->reconnect() && logger)
-                logger("network_return=RECONNECTING");
+            if (session->reconnect()) {
+                if (session->route())
+                    steamRooms.reconnected(session->route());
+                if (logger)
+                    logger("network_return=RECONNECTING");
+            }
         }
     }
     if (guestRecovery && session && session->phase() == lan::Phase::lobby)
@@ -1019,7 +1097,26 @@ int poll(lua_State* L) {
     lua.setField(L, -2, "saveError");
     integer("port", session ? session->port() : 0);
     // Expose the session protocol to the local connection menu.
-    lua.pushString(L, "udp");
+    lua.pushBoolean(L, steamRooms.available());
+    lua.setField(L, -2, "steamAvailable");
+    lua.pushBoolean(L, steamRooms.busy());
+    lua.setField(L, -2, "steamBusy");
+    lua.pushBoolean(L, steamCreated);
+    lua.setField(L, -2, "steamCreated");
+    lua.pushBoolean(L, steamRooms.isPublic());
+    lua.setField(L, -2, "steamPublic");
+    if (steamRooms.invited()) {
+        lua.pushBoolean(L, backend::managerReady() && backend::gameReady() &&
+                               backend::cinematicFinished());
+        lua.setField(L, -2, "steamInviteInGame");
+        lua.pushString(L, std::to_string(steamRooms.invited()).c_str());
+        lua.setField(L, -2, "steamInvite");
+    }
+    if (!steamRooms.failure().empty()) {
+        lua.pushString(L, steamRooms.failure().c_str());
+        lua.setField(L, -2, "steamError");
+    }
+    lua.pushString(L, steamRooms.active() ? "steam" : "udp");
     lua.setField(L, -2, "transport");
     integer("tick", nextTick);
     integer("verified", session && session->verifiedTick() ? *session->verifiedTick() : -1ll);
@@ -1625,6 +1722,7 @@ int close(lua_State* L) {
     inputLatency = {};
     lastInputRoom.reset();
     if (!keep) {
+        steamRooms.leave();
         session.reset();
         input::leaveLan();
     }
@@ -2297,6 +2395,8 @@ bool bind(lua_State* L, HMODULE module, isaac::lua::Version version) {
     function("chat_send", communicationSend);
     function("chat_receive", communicationReceive);
     function("chat_execute", executeChatCommand);
+    function("net_steam", steamAction);
+    function("net_steam_list", steamList);
     function("net_host", host);
     function("net_join", join);
     function("net_poll", poll);

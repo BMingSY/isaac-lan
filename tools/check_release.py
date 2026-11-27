@@ -37,6 +37,7 @@ SHARED_FILES = {
     "licenses/miniz-LICENSE.txt",
     "licenses/zstd-LICENSE.txt",
     "licenses/ENet-LICENSE.txt",
+    "licenses/GameNetworkingSockets-LICENSE.txt",
 }
 LEGACY_FILES = SHARED_FILES | PAYLOAD_FILES
 

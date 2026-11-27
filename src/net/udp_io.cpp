@@ -35,17 +35,44 @@ void ENET_CALLBACK releasePacket(ENetPacket* packet) {
 
 class DatagramHost {
   public:
+    std::shared_ptr<DatagramRoute> route;
+    static int send(void* ctx, const ENetAddress* address, const ENetBuffer* buffers,
+                    size_t count) {
+        std::array<std::uint8_t, mtu> packet;
+        size_t length = 0;
+        for (size_t i = 0; i < count; ++i) {
+            if (buffers[i].dataLength > packet.size() - length)
+                return -1;
+            std::memcpy(packet.data() + length, buffers[i].data, buffers[i].dataLength);
+            length += buffers[i].dataLength;
+        }
+        return static_cast<DatagramRoute*>(ctx)->send(addressAccount(*address),
+                                                      {packet.data(), length});
+    }
+    static int receive(void* ctx, ENetAddress* address, ENetBuffer* buffer) {
+        std::uint64_t source = 0;
+        int n = static_cast<DatagramRoute*>(ctx)->receive(
+            source, {static_cast<std::uint8_t*>(buffer->data), buffer->dataLength});
+        if (n > 0 && !source)
+            return -2;
+        if (n > 0)
+            *address = accountAddress(source);
+        return n;
+    }
     ENetHost* handle = nullptr;
     WSAEVENT event = WSA_INVALID_EVENT;
-    explicit DatagramHost(std::optional<std::uint16_t> port,
-                          enet_uint16 family = ENET_ADDRESS_IPV6) {
+    explicit DatagramHost(std::optional<std::uint16_t> port, enet_uint16 family,
+                          std::shared_ptr<DatagramRoute> carrier)
+        : route(std::move(carrier)) {
         if (enet_initialize())
             throw std::runtime_error("Cannot initialize UDP transport");
         ENetAddress address{};
         address.port = port.value_or(0);
         address.family = family;
-        handle = enet_host_create(&address, maxPlayers + 1, channelCount, 0, 0);
-        if (!handle && port && family == ENET_ADDRESS_IPV6 &&
+        const ENetDatagramIO io{route.get(), send, receive};
+        handle = enet_host_create_with_io(&address, maxPlayers + 1, channelCount, 0, 0,
+                                          route ? &io : nullptr);
+        if (!route && !handle && port && family == ENET_ADDRESS_IPV6 &&
             (WSAGetLastError() == WSAEAFNOSUPPORT || WSAGetLastError() == WSAEPROTONOSUPPORT)) {
             // IPv6 can be disabled system-wide; keep IPv4 hosting available.
             address.family = ENET_ADDRESS_IPV4;
@@ -59,10 +86,11 @@ class DatagramHost {
             handle->maximumPacketSize = maxDatagramMessage;
             handle->maximumWaitingData = 4 * maxWorldSize;
             handle->checksum = enet_crc32;
-            event = WSACreateEvent();
+            if (!route)
+                event = WSACreateEvent();
         }
-        if (!handle || event == WSA_INVALID_EVENT ||
-            WSAEventSelect(handle->socket, event, FD_READ | FD_WRITE)) {
+        if (!handle || (!route && (event == WSA_INVALID_EVENT ||
+                                   WSAEventSelect(handle->socket, event, FD_READ | FD_WRITE)))) {
             if (handle)
                 enet_host_destroy(handle);
             if (event != WSA_INVALID_EVENT)
@@ -73,7 +101,8 @@ class DatagramHost {
     }
     ~DatagramHost() {
         enet_host_destroy(handle);
-        WSACloseEvent(event);
+        if (event != WSA_INVALID_EVENT)
+            WSACloseEvent(event);
         enet_deinitialize();
     }
 };
@@ -704,13 +733,15 @@ struct DatagramConnection {
 } // namespace
 
 std::shared_ptr<ConnectionPipe> NetworkIo::connectDatagram(const ENetAddress& address,
-                                                           const BuildIdentity& build) {
+                                                           const BuildIdentity& build,
+                                                           std::shared_ptr<DatagramRoute> route) {
     if (!build.valid())
         throw std::runtime_error("Invalid local build identity");
     auto pipe = std::make_shared<ConnectionPipe>(true);
     pipe->build = build;
     pipe->address = address;
-    pipe->datagrams = std::make_shared<DatagramHost>(std::nullopt, address.family);
+    pipe->datagrams =
+        std::make_shared<DatagramHost>(std::nullopt, address.family, std::move(route));
     auto queued = pipe;
     if (!additions.push(std::move(queued)))
         throw std::runtime_error("Connection task queue limit exceeded");
@@ -718,12 +749,13 @@ std::shared_ptr<ConnectionPipe> NetworkIo::connectDatagram(const ENetAddress& ad
     return pipe;
 }
 std::shared_ptr<ListenerPipe> NetworkIo::listenDatagram(std::uint16_t port,
-                                                        const BuildIdentity& build) {
+                                                        const BuildIdentity& build,
+                                                        std::shared_ptr<DatagramRoute> route) {
     if (!build.valid())
         throw std::runtime_error("Invalid local build identity");
     auto pipe = std::make_shared<ListenerPipe>();
     pipe->build = build;
-    pipe->datagrams = std::make_shared<DatagramHost>(port);
+    pipe->datagrams = std::make_shared<DatagramHost>(port, ENET_ADDRESS_IPV6, std::move(route));
     pipe->port = pipe->datagrams->handle->address.port;
     auto queued = pipe;
     if (!listeners.push(std::move(queued)))
@@ -758,7 +790,8 @@ void NetworkIo::runDatagrams() {
                 auto& e = *endpoint;
                 const bool closing = stopping.load() || (e.listener && e.listener->closing.load());
                 WSANETWORKEVENTS events{};
-                WSAEnumNetworkEvents(e.host->handle->socket, e.host->event, &events);
+                if (!e.host->route)
+                    WSAEnumNetworkEvents(e.host->handle->socket, e.host->event, &events);
                 for (auto it = e.connections.begin(); it != e.connections.end();) {
                     auto& connection = *it->second;
                     if (closing)
@@ -812,6 +845,8 @@ void NetworkIo::runDatagrams() {
                             }
                             auto pipe = std::make_shared<ConnectionPipe>(true);
                             pipe->build = e.listener->build;
+                            if (e.host->route)
+                                pipe->remoteAccount = addressAccount(event.peer->address);
                             e.connections.emplace(event.peer, std::make_unique<DatagramConnection>(
                                                                   event.peer, pipe, true));
                             e.connections.at(event.peer)->beginCompatibility();
@@ -854,7 +889,8 @@ void NetworkIo::runDatagrams() {
                 break;
             std::vector<HANDLE> handles{wake.handle()};
             for (const auto& e : endpoints)
-                handles.push_back(e.host->event);
+                if (!e.host->route)
+                    handles.push_back(e.host->event);
             // ENet timers need service even without socket readiness. Main-thread
             // publication/input wakes this wait immediately.
             if (WaitForMultipleObjects(handles.size(), handles.data(), FALSE,

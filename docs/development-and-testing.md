@@ -206,6 +206,8 @@ ctest --test-dir build-win32 --output-on-failure
 
 测试程序不带用例名时运行全部传输测试，通过标记为 `ALL STATE TRANSPORT TESTS PASSED`。
 
+Steam 房间的离线用例是 `net.steam-rooms`、`net.account-transport` 和 `bridge.steam-menu`。单账号实测时，在隔离目录中放入 `isaac_lan_steam_test.exe`、待验证游戏自带的 `steam_api.dll` 和内容为 `250900` 的 `steam_appid.txt`，登录 Steam 并运行 `isaac_lan_steam_test.exe single-account`。该用例创建私人房间，使用本账号的 P2P 连接往返数据后离开。跨网验证使用两账号，在同一对网络上分别关闭、开启加速器，按 `steam_route`、`pop`、`rtt_ms`、`max_jitter_us` 和 `delivery_quality` 比较实际路径和质量。负值表示 Steam 尚无该项读数。
+
 版本准入的定向检查为可移植的 `net.compatibility-codec`，Windows 的 `net.handshake`、`net.compatibility-versions`、`net.compatibility-rejoin`、`net.compatibility-wire`，以及菜单的 `bridge.challenge_menu`。覆盖完整版本号和 DLL 指纹、不同协议的前置交换、旧版／缺失／畸形报文、拒绝后的席位清理、原身份重连，以及双方版本与长版本号的错误显示。网络检查使用真实 ENet 回环连接，不启动游戏。
 
 IPv6 的定向检查为 `net.ipv6-addresses`、`net.ipv6-inputs`、`net.ipv6-rejoin`、`net.dual-stack`、`net.host-fallback` 和 `net.host-names`，覆盖完整地址／接口编号、系统域名解析、双栈混合玩家、输入／分片视图、重连及 IPv6 不可达后的 IPv4 回退。菜单与地址保存同时检查 `bridge.endpoint`、`bridge.challenge_menu`、`presentation.connection-settings` 和 `presentation.chat-native-input`。网络用例使用本机回环地址及 `localhost`，不代表跨公网路由或防火墙已经验证。

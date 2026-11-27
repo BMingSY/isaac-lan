@@ -1,5 +1,6 @@
 #pragma once
 #include "net/byte_worker.h"
+#include "net/datagram_route.h"
 #include "net/protocol.h"
 #include "net/compatibility.h"
 #include "core/latest_mailbox.h"
@@ -40,7 +41,8 @@ struct ConnectionPipe {
     enum State { connecting, connected, closed, failed };
     std::shared_ptr<DatagramHost> datagrams;
     std::optional<ENetAddress> address;
-    BuildIdentity build; // Immutable after publication to the network worker.
+    std::uint64_t remoteAccount = 0; // Authenticated by the platform transport.
+    BuildIdentity build;             // Immutable after publication to the network worker.
     SpscQueue<OutgoingPacket, 128> outgoing;
     IncomingQueue incoming;
     SpscQueue<NetworkSample, 64> samples;
@@ -96,8 +98,10 @@ class NetworkIo {
             throw std::runtime_error(failure);
     }
     std::shared_ptr<ConnectionPipe> connectDatagram(const ENetAddress& address,
-                                                    const BuildIdentity& build);
-    std::shared_ptr<ListenerPipe> listenDatagram(std::uint16_t port, const BuildIdentity& build);
+                                                    const BuildIdentity& build,
+                                                    std::shared_ptr<DatagramRoute> route = {});
+    std::shared_ptr<ListenerPipe> listenDatagram(std::uint16_t port, const BuildIdentity& build,
+                                                 std::shared_ptr<DatagramRoute> route = {});
     void signal() {
         wake.signal();
     }

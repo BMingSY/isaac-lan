@@ -1240,7 +1240,9 @@ enet_protocol_receive_incoming_commands (ENetHost * host, ENetEvent * event)
        buffer.data = host -> packetData [0];
        buffer.dataLength = sizeof (host -> packetData [0]);
 
-       receivedLength = enet_socket_receive (host -> socket,
+       receivedLength = host -> io.receive != NULL
+           ? host -> io.receive (host -> io.context, & host -> receivedAddress, & buffer)
+           : enet_socket_receive (host -> socket,
                                              & host -> receivedAddress,
                                              & buffer,
                                              1);
@@ -1723,7 +1725,9 @@ enet_protocol_send_outgoing_commands (ENetHost * host, ENetEvent * event, int ch
 
         currentPeer -> lastSendTime = host -> serviceTime;
 
-        sentLength = enet_socket_send (host -> socket, & currentPeer -> address, host -> buffers, host -> bufferCount);
+        sentLength = host -> io.send != NULL
+            ? host -> io.send (host -> io.context, & currentPeer -> address, host -> buffers, host -> bufferCount)
+            : enet_socket_send (host -> socket, & currentPeer -> address, host -> buffers, host -> bufferCount);
 
         enet_protocol_remove_sent_unreliable_commands (currentPeer, & sentUnreliableCommands);
 
@@ -1893,7 +1897,7 @@ enet_host_service (ENetHost * host, ENetEvent * event, enet_uint32 timeout)
           }
        }
 
-       if (ENET_TIME_GREATER_EQUAL (host -> serviceTime, timeout))
+       if (host -> io.receive != NULL || ENET_TIME_GREATER_EQUAL (host -> serviceTime, timeout))
          return 0;
 
        do
