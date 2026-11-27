@@ -42,6 +42,10 @@ end
 local round, renders, linked, chosen, done = 1, 0, false, false, false
 local origin, other, boss, red, gridIndex, esau, introUpdates
 local esauSeeds = {}
+local pursuerVariant = 0
+local function isPursuer(entity)
+    return entity.Type == EntityType.ENTITY_DARK_ESAU and entity.Variant == pursuerVariant
+end
 local deliriumRoom
 local introFrames, pinSamples, pauseFrames, pauseEdges = 0, 0, nil, 0
 local segmentSamples = {}
@@ -305,12 +309,19 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         elseif t == 370 then
             scoped(0, function()
                 for _, e in ipairs(Isaac.GetRoomEntities()) do
-                    if e.Type == 866 then
+                    if isPursuer(e) then
                         esau = e
                     end
                 end
                 if not esau then
-                    esau = Isaac.Spawn(866, 0, 0, Vector(480, 180), Vector.Zero, player(0))
+                    esau = Isaac.Spawn(
+                        EntityType.ENTITY_DARK_ESAU,
+                        pursuerVariant,
+                        0,
+                        Vector(480, 180),
+                        Vector.Zero,
+                        player(0)
+                    )
                     report("ESAU explicit owned follower fixture")
                 end
             end)
@@ -343,7 +354,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         elseif t == 390 then
             scoped(1, function()
                 for _, e in ipairs(Isaac.GetRoomEntities()) do
-                    if e.Type == EntityType.ENTITY_DARK_ESAU then
+                    if isPursuer(e) then
                         esau = e
                         esauSeeds[e.InitSeed] = true
                         report(
@@ -364,7 +375,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             scoped(1, function()
                 local count = 0
                 for _, e in ipairs(Isaac.GetRoomEntities()) do
-                    if e.Type == EntityType.ENTITY_DARK_ESAU then
+                    if isPursuer(e) then
                         count = count + 1
                         esauSeeds[e.InitSeed] = nil
                         report("ESAU arrived seed=" .. e.InitSeed)

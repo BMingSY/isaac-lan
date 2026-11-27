@@ -978,6 +978,10 @@ void moveEntity(Address entity, Room& from, Room& to) {
                 reinterpret_cast<void*>(entity));
     }
 }
+bool taintedJacobPursuer(Address entity) {
+    return compat::characters::taintedJacobPursuer(at<unsigned>(entity, layout.entity.type),
+                                                   at<unsigned>(entity, layout.entity.variant));
+}
 std::vector<Address> followers(Address player, const Room& room, bool departingFloor = false) {
     std::vector<Address> candidates, result;
     // Native lists keep attached knives in the persistence list along with familiars;
@@ -1019,16 +1023,16 @@ std::vector<Address> followers(Address player, const Room& room, bool departingF
         const bool tear = type == compat::ids::entity::tear;
         const auto attachment =
             tear && !parent ? at<Address>(entity, layout.entity.spawner) : parent;
-        bool darkEsau = type == compat::characters::darkEsau &&
-                        (at<Address>(player, layout.player.darkEsau) == entity ||
-                         owned(at<Address>(entity, layout.entity.parent)) ||
-                         owned(at<Address>(entity, layout.entity.spawner)) ||
-                         owned(at<Address>(entity, layout.entity.child)));
+        const bool pursuer = taintedJacobPursuer(entity);
+        bool ownedPursuer =
+            pursuer && (at<Address>(player, layout.player.darkEsau) == entity || owned(parent) ||
+                        owned(at<Address>(entity, layout.entity.spawner)) ||
+                        owned(at<Address>(entity, layout.entity.child)));
         // Native room saves restore Dark Esau as an NPC without a spawner and
         // cannot restore a player's EntityPtr across our independent rooms.
-        // Rebind only when the room has one unambiguous Tainted Jacob owner.
-        if (type == compat::characters::darkEsau && !darkEsau && jacobs.size() == 1 &&
-            jacobs[0] == player && !at<Address>(entity, layout.entity.parent) &&
+        // Rebind only the pursuer to an unambiguous owner. Its spawn pit belongs to the room.
+        if (pursuer && !ownedPursuer && jacobs.size() == 1 && jacobs[0] == player &&
+            !at<Address>(entity, layout.entity.parent) &&
             !at<Address>(entity, layout.entity.spawner) &&
             !at<Address>(entity, layout.entity.child)) {
             using SetRef = void(__attribute__((fastcall))*)(void*, void*);
@@ -1038,7 +1042,7 @@ std::vector<Address> followers(Address player, const Room& room, bool departingF
             engine<SetRef>(bindings.entry.entityPtrAssign)(
                 reinterpret_cast<void*>(entity + layout.entity.spawner),
                 reinterpret_cast<void*>(player));
-            darkEsau = true;
+            ownedPursuer = true;
         }
         if ((type == 3 && at<Address>(entity, layout.familiar.player) == player) ||
             (type == compat::ids::entity::effect && layout.player.crimeGun &&
@@ -1049,7 +1053,7 @@ std::vector<Address> followers(Address player, const Room& room, bool departingF
                 type, at<unsigned>(entity, layout.entity.variant), owned(attachment),
                 at<unsigned>(entity, layout.entity.subtype),
                 tear ? at<std::uint64_t>(entity, layout.tear.flagsHigh) : 0) ||
-            darkEsau ||
+            ownedPursuer ||
             (departingFloor &&
              compat::items::floorFollower(type, at<unsigned>(entity, layout.entity.variant),
                                           at<Address>(player, layout.player.redemptionEffect) ==
@@ -1103,9 +1107,7 @@ void arrival(Address player, const Room& room, int door, const std::vector<Addre
         place(player, *landing);
         for (auto entity : companions)
             if (at<unsigned>(entity, layout.entity.type) != compat::ids::entity::mothersShadow &&
-                !compat::characters::taintedJacobPursuer(
-                    at<unsigned>(entity, layout.entity.type),
-                    at<unsigned>(entity, layout.entity.variant)))
+                !taintedJacobPursuer(entity))
                 place(entity, *landing);
     }
     if (protect) {
@@ -3172,8 +3174,7 @@ struct RoomTransfer {
             location[player] = to;
         }
         for (auto entity : companions)
-            if (!created ||
-                at<unsigned>(entity, layout.entity.type) != compat::characters::darkEsau) {
+            if (!created || !taintedJacobPursuer(entity)) {
                 moveEntity(entity, *from, *to);
                 if (at<unsigned>(entity, layout.entity.type) == 867) {
                     using Persistent = void(__attribute__((thiscall))*)(void*, void*);
@@ -3253,7 +3254,7 @@ struct RoomTransfer {
                 engine<RoomCall>(bindings.entry.roomUpdateMusic)(
                     reinterpret_cast<void*>(to->pointer));
             for (auto entity : companions)
-                if (at<unsigned>(entity, layout.entity.type) == compat::characters::darkEsau)
+                if (taintedJacobPursuer(entity))
                     moveEntity(entity, *from, *to);
         } else {
             // Joining an occupied room must apply the arriving characters'
@@ -3272,9 +3273,7 @@ struct RoomTransfer {
             // the original NPC and let native entry translate its pursuit
             // position; placing it at the player's landing causes a hit.
             const auto type = at<unsigned>(entity, layout.entity.type);
-            const bool esau = compat::characters::taintedJacobPursuer(
-                type, at<unsigned>(entity, layout.entity.variant));
-            if ((esau && !runtime::replica()) ||
+            if ((taintedJacobPursuer(entity) && !runtime::replica()) ||
                 (type == compat::ids::entity::mothersShadow && !created)) {
                 auto& previousIndex = at<int>(game(), layout.game.previousRoomIndex);
                 auto& previousDimension = at<int>(game(), layout.game.previousDimension);
