@@ -212,7 +212,7 @@ return function(Phase, Command, endpoint, characters, text)
             end, not status.steamBusy)
             row(text("公开房间"), function()
                 if command("steam_browse") then
-                    ui.page, ui.selection, ui.listScroll = "steamList", 1, 1
+                    ui.page, ui.selection, ui.listScroll, ui.steamRooms = "steamList", 1, 1, nil
                 end
             end, not status.steamBusy)
             row(text("返回"), function()
@@ -223,18 +223,35 @@ return function(Phase, Command, endpoint, characters, text)
             row(text("刷新"), function()
                 command("steam_browse")
             end, not status.steamBusy)
-            for _, room in ipairs(deps.native.net_steam_list()) do
-                row(text("%s  %d/%d", room.name, room.players, room.limit), function()
+            local selection = ui.selection or 1
+            local selected = ui.steamRooms and ui.steamRooms[selection - 1]
+            local onBack = ui.steamRooms and selection == ui.steamBackRow
+            local rooms = deps.native.net_steam_list()
+            if selected then
+                ui.selection = 1
+            end
+            for _, room in ipairs(rooms) do
+                local ping = room.pingMs and tostring(room.pingMs) or "--"
+                local summary = string.format("%d/%d  %sms", room.players, room.limit, ping)
+                row(room.name .. "  " .. summary, function()
                     command("steam_join", room.id)
                 end, not status.steamBusy)
+                rows[#rows].roomName, rows[#rows].roomSummary = room.name, summary
+                if selected and selected.id == room.id then
+                    ui.selection = #rows
+                end
             end
             if #rows == 1 and not status.steamBusy then
                 row(text("没有公开房间"), function() end, false)
             end
             row(text("返回"), function()
                 command("steam_cancel")
-                ui.page, ui.selection, ui.listScroll = "steam", 2, nil
+                ui.page, ui.selection, ui.listScroll, ui.steamRooms = "steam", 2, nil, nil
             end)
+            ui.steamRooms, ui.steamBackRow = rooms, #rows
+            if onBack then
+                ui.selection = #rows
+            end
         elseif idle(phase) then
             row(text("创建房间"), function()
                 if validPort(ui) then

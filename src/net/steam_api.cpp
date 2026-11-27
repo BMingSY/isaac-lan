@@ -12,6 +12,22 @@ template <class F> bool load(HMODULE library, F& fn, const char* name) {
     std::memcpy(&fn, &symbol, sizeof(fn));
     return fn != nullptr;
 }
+std::string localLocation(ISteamNetworkingUtils* utils) {
+    SteamNetworkPingLocation_t location{};
+    if (utils->GetLocalPingLocation(location) < 0)
+        return {};
+    char text[k_cchMaxSteamNetworkingPingLocationString]{};
+    utils->ConvertPingLocationToString(location, text, sizeof(text));
+    return text;
+}
+std::optional<int> estimateFromLocal(ISteamNetworkingUtils* utils, const char* text) {
+    SteamNetworkPingLocation_t location{};
+    if (!text || !*text || std::strlen(text) >= k_cchMaxSteamNetworkingPingLocationString ||
+        !utils->ParsePingLocationString(text, location))
+        return std::nullopt;
+    const int estimate = utils->EstimatePingTimeFromLocalHost(location);
+    return estimate < 0 ? std::nullopt : std::optional{estimate};
+}
 } // namespace
 bool Api::alive() const {
     return !currentPipe || (library == GetModuleHandleW(L"steam_api.dll") && currentPipe() != 0);
@@ -59,6 +75,9 @@ bool Api::bind() {
     SteamNetworkingIdentity identity{};
     if (!match || !friends || !sockets || !networkingUtils)
         return false;
+    initRelay = [](ISteamNetworkingUtils* utils) { utils->InitRelayNetworkAccess(); };
+    localPingLocation = localLocation;
+    estimatePing = estimateFromLocal;
     bindStage = "identity";
     if (!sockets->GetIdentity(&identity) || !(local = identity.GetSteamID64()))
         return false;

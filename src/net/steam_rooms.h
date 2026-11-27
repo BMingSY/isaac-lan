@@ -9,6 +9,7 @@ struct Listing {
     Id id;
     std::string name;
     int players;
+    std::optional<int> pingMs;
 };
 class Rooms {
     using Clock = std::chrono::steady_clock;
@@ -32,7 +33,9 @@ class Rooms {
     Call pending = 0;
     Id lobby = 0, host = 0, target = 0, inspecting = 0, invitation = 0;
     Clock::time_point retryAt{}, deadline{}, inviteUntil{}, inspectAt{}, publishAt{}, logAt{};
+    Clock::time_point estimateAt{}, requestLocationAt{};
     int publishedMembers = 0;
+    std::string publishedLocation;
     std::shared_ptr<Transport> transport;
     std::vector<Listing> listings;
     std::string error;
@@ -84,9 +87,7 @@ class Rooms {
     Id invited() const {
         return invitation;
     }
-    const std::vector<Listing>& rooms() const {
-        return listings;
-    }
+    const std::vector<Listing>& rooms();
     const std::string& failure() const {
         return error;
     }

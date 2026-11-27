@@ -38,16 +38,21 @@ void singleAccount() {
     SteamClient client;
     Api api;
     require(api.bind(), "Steam interfaces unavailable");
-    Rooms rooms;
+    Rooms rooms, browser;
+    const BuildIdentity build{"single-account-test",
+                              "isolated-" + std::to_string(GetCurrentProcessId())};
     auto poll = [&] {
         client.pump();
-        rooms.poll({"single-account-test", "isolated"}, true, [](Id) { return false; }, nullptr);
+        auto noReservedSeat = [](Id) { return false; };
+        rooms.poll(build, true, noReservedSeat, nullptr);
+        browser.poll(build, true, noReservedSeat, nullptr);
     };
     auto wait = [&](auto done) {
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
         while (std::chrono::steady_clock::now() < deadline) {
             poll();
             require(rooms.failure().empty(), rooms.failure().c_str());
+            require(browser.failure().empty(), browser.failure().c_str());
             if (done())
                 return;
             Sleep(10);
@@ -94,8 +99,25 @@ void singleAccount() {
     message->Release();
     require(matches, "Outgoing local datagram mismatch");
     std::printf("Private Steam P2P round trip%s\n", rooms.route()->diagnostics().c_str());
+    require(browser.browse(), "Could not request public room list");
+    wait([&] { return !browser.busy(); });
+    require(browser.rooms().empty(), "Private test room was discoverable");
+    require(rooms.visibility(), "Could not publish the test room");
+    auto nextBrowse = std::chrono::steady_clock::now();
+    wait([&] {
+        const auto& list = browser.rooms();
+        if (!list.empty() && list.front().pingMs) {
+            std::printf("Public room browser estimated %d ms before joining\n",
+                        *list.front().pingMs);
+            return true;
+        }
+        const auto now = std::chrono::steady_clock::now();
+        if (list.empty() && !browser.busy() && now >= nextBrowse) {
+            require(browser.browse(), "Could not refresh public room list");
+            nextBrowse = now + std::chrono::seconds(2);
+        }
+        return false;
+    });
+    require(rooms.visibility(), "Could not make the test room private again");
     rooms.leave();
-    require(rooms.browse(), "Could not request public room list");
-    wait([&] { return !rooms.busy(); });
-    require(rooms.rooms().empty(), "Private test room was discoverable");
 }

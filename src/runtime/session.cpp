@@ -932,7 +932,7 @@ int steamList(lua_State* L) {
     lua.createTable(L, list.size(), 0);
     int index = 0;
     for (const auto& entry : list) {
-        lua.createTable(L, 0, 4);
+        lua.createTable(L, 0, 5);
         lua.pushString(L, std::to_string(entry.id).c_str());
         lua.setField(L, -2, "id");
         lua.pushString(L, entry.name.c_str());
@@ -941,6 +941,10 @@ int steamList(lua_State* L) {
         lua.setField(L, -2, "players");
         lua.pushInteger(L, lan::maxPlayers);
         lua.setField(L, -2, "limit");
+        if (entry.pingMs) {
+            lua.pushInteger(L, *entry.pingMs);
+            lua.setField(L, -2, "pingMs");
+        }
         lua.rawSetI(L, -2, ++index);
     }
     return 1;

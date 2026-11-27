@@ -1,6 +1,7 @@
 #include "net/steam_rooms.h"
 #include <shellapi.h>
 #include <algorithm>
+#include <tuple>
 #include <utility>
 
 namespace isaac::lan::steam {
@@ -8,9 +9,11 @@ namespace {
 constexpr char marker[] = "isaac_lan", kind[] = "room-v1";
 constexpr char protocolKey[] = "il_protocol", versionKey[] = "il_version", buildKey[] = "il_build",
                hostKey[] = "il_host", openKey[] = "il_open", nameKey[] = "il_name",
-               membersKey[] = "il_members";
+               membersKey[] = "il_members", locationKey[] = "il_ping_location";
 constexpr int maxListings = 50, equal = 0, worldwide = 3;
 constexpr auto callTimeout = std::chrono::seconds(25);
+constexpr auto estimateInterval = std::chrono::seconds(1),
+               locationRequestInterval = std::chrono::seconds(10);
 std::string displayName(std::string name) {
     constexpr size_t limit = 128;
     if (name.size() > limit) {
@@ -113,6 +116,8 @@ bool Rooms::browse() {
     if (!available() || lobby || pending || abandoned.size() >= maxPlayers || !build.valid())
         return false;
     listings.clear();
+    estimateAt = requestLocationAt = {};
+    api.initRelay(api.networkingUtils);
     api.filter(api.match, marker, kind, equal);
     api.filter(api.match, protocolKey, std::to_string(build.protocol).c_str(), equal);
     api.filter(api.match, versionKey, build.version.c_str(), equal);
@@ -121,6 +126,26 @@ bool Rooms::browse() {
     api.distance(api.match, worldwide);
     api.limit(api.match, maxListings);
     return start(Op::list, api.list(api.match));
+}
+const std::vector<Listing>& Rooms::rooms() {
+    const auto now = Clock::now();
+    if (listings.empty() || now < estimateAt)
+        return listings;
+    estimateAt = now + estimateInterval;
+    const bool refreshMissing = now >= requestLocationAt;
+    if (refreshMissing)
+        requestLocationAt = now + locationRequestInterval;
+    for (auto& room : listings) {
+        auto location = field(room.id, locationKey);
+        room.pingMs = api.estimatePing(api.networkingUtils, location.c_str());
+        if (refreshMissing && location.empty())
+            api.requestData(api.match, room.id);
+    }
+    std::ranges::sort(listings, {}, [](const Listing& room) {
+        // Known estimates first, with a stable room order for equal estimates.
+        return std::tuple{!room.pingMs.has_value(), room.pingMs, room.id};
+    });
+    return listings;
 }
 bool Rooms::join(Id id) {
     if (!available() || lobby || pending || !id ||
@@ -182,6 +207,7 @@ bool Rooms::visibility() {
     }
     error.clear();
     publicRoom = !publicRoom;
+    publishAt = {};
     event(publicRoom ? "visibility value=public" : "visibility value=private");
     return true;
 }
@@ -254,8 +280,8 @@ void Rooms::finishCall() {
             if (compatible(id) && field(id, openKey) == "1") {
                 auto members = parseId(field(id, membersKey));
                 if (members && members < maxPlayers)
-                    listings.push_back(
-                        {id, displayName(field(id, nameKey)), static_cast<int>(members)});
+                    listings.push_back({id, displayName(field(id, nameKey)),
+                                        static_cast<int>(members), std::nullopt});
             }
         }
         event("listed returned=" + std::to_string(count) +
@@ -331,6 +357,12 @@ void Rooms::poll(const BuildIdentity& identity, bool inLobby, const std::functio
             if (joinOpen != inLobby && api.joinable(api.match, lobby, inLobby) &&
                 api.set(api.match, lobby, openKey, inLobby ? "1" : "0"))
                 joinOpen = inLobby;
+            if (publicRoom && joinOpen) {
+                auto location = api.localPingLocation(api.networkingUtils);
+                if (!location.empty() && location != publishedLocation &&
+                    api.set(api.match, lobby, locationKey, location.c_str()))
+                    publishedLocation = std::move(location);
+            }
             int members = api.members(api.match, lobby);
             if (members != publishedMembers &&
                 api.set(api.match, lobby, membersKey, std::to_string(members).c_str()))
@@ -365,6 +397,8 @@ void Rooms::dropLobby() {
     publicRoom = false;
     joinOpen = true;
     publishedMembers = 0;
+    publishAt = {};
+    publishedLocation.clear();
 }
 void Rooms::leave() {
     if (pending)

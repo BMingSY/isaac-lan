@@ -1,6 +1,8 @@
 #pragma once
 #include <atomic>
 #include <cstdint>
+#include <optional>
+#include <string>
 #include <string_view>
 #include <windows.h>
 
@@ -36,6 +38,9 @@ struct Api {
     bool alive() const;
     const char* bindStage = "library";
     bool bind();
+    void (*initRelay)(ISteamNetworkingUtils*) = nullptr;
+    std::string (*localPingLocation)(ISteamNetworkingUtils*) = nullptr;
+    std::optional<int> (*estimatePing)(ISteamNetworkingUtils*, const char*) = nullptr;
     Call (*create)(void*, int, int) = nullptr;
     Call (*join)(void*, Id) = nullptr;
     void (*leave)(void*, Id) = nullptr;

@@ -87,7 +87,7 @@ class SocketRoute final : public Transport {
         : api(platform), sockets(*platform.sockets), self(platform.local), host(owner), logger(log),
           inbox(sockets) {}
     bool start() {
-        api.networkingUtils->InitRelayNetworkAccess();
+        api.initRelay(api.networkingUtils);
         group = sockets.CreatePollGroup();
         if (!group)
             return false;

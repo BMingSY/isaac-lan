@@ -504,8 +504,14 @@ function _IsaacLanMenuRender(
             assets.characterSwap:RenderLayer(CHARACTER_SWAP_ICON_LAYER, hint)
             assets.characterSwap:RenderLayer(CHARACTER_SWAP_KEY_LAYER, hint)
         end
+        local color = item.color or (item.enabled and ink or faded)
+        if item.roomSummary then
+            local summaryWidth = assets[10]:GetStringWidthUTF8(item.roomSummary)
+            text(item.roomSummary, labelX + maxWidth - summaryWidth, y, 10, color)
+            label, maxWidth = item.roomName, maxWidth - summaryWidth - 5
+        end
         local size = assets[12]:GetStringWidthUTF8(label) > maxWidth and 10 or 12
-        text(label, labelX, y, size, item.color or (item.enabled and ink or faded), maxWidth)
+        text(label, labelX, y, size, color, maxWidth)
         if i == ui.selection then
             pointer(37 + shift, y + 5)
         end
