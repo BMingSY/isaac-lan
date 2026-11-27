@@ -18,6 +18,7 @@ bool Api::alive() const {
 }
 bool Api::bind() {
     library = GetModuleHandleW(L"steam_api.dll");
+    bindStage = library ? "client_exports" : "library";
     void* (*client)();
     int (*user)(), (*pipe)();
     void* (*generic)(void*, int, int, const char*);
@@ -33,6 +34,7 @@ bool Api::bind() {
         !load(library, utilsInterface, "SteamAPI_ISteamClient_GetISteamUtils") ||
         !load(library, app, "SteamAPI_ISteamUtils_GetAppID"))
         return false;
+    bindStage = "client_session";
     currentPipe = pipe;
     const int hUser = user(), hPipe = pipe();
     if (!hUser || !hPipe)
@@ -43,9 +45,11 @@ bool Api::bind() {
     // Match the flat matchmaking/friends/utility wrappers to their own DLL ABI.
     // Both game builds obtain the independently versioned sockets API from Steam.
     const bool modern = GetProcAddress(library, "SteamAPI_SteamFriends_v017") != nullptr;
+    bindStage = "app_id";
     utils = utilsInterface(c, hPipe, modern ? "SteamUtils010" : "SteamUtils008");
     if (!utils || app(utils) != gameApp)
         return false;
+    bindStage = "interfaces";
     match = matchmaking(c, hUser, hPipe, "SteamMatchMaking009");
     friends = friendsInterface(c, hUser, hPipe, modern ? "SteamFriends017" : "SteamFriends015");
     sockets = static_cast<ISteamNetworkingSockets*>(
@@ -53,9 +57,12 @@ bool Api::bind() {
     networkingUtils = static_cast<ISteamNetworkingUtils*>(
         generic(c, hUser, hPipe, STEAMNETWORKINGUTILS_INTERFACE_VERSION));
     SteamNetworkingIdentity identity{};
-    if (!match || !friends || !sockets || !networkingUtils || !sockets->GetIdentity(&identity) ||
-        !(local = identity.GetSteamID64()))
+    if (!match || !friends || !sockets || !networkingUtils)
         return false;
+    bindStage = "identity";
+    if (!sockets->GetIdentity(&identity) || !(local = identity.GetSteamID64()))
+        return false;
+    bindStage = "matchmaking_exports";
     return load(library, create, "SteamAPI_ISteamMatchmaking_CreateLobby") &&
            load(library, join, "SteamAPI_ISteamMatchmaking_JoinLobby") &&
            load(library, leave, "SteamAPI_ISteamMatchmaking_LeaveLobby") &&

@@ -9,6 +9,7 @@ namespace {
 constexpr Id me = 17, friendId = 23, stranger = 29, roomId = 101, otherRoom = 102;
 struct Platform {
     Id owner = me, expected = 0;
+    unsigned enterResponse = 1;
     int type = -1, invites = 0, joins = 0;
     bool ready = false, joinable = true, overlay = true;
     std::vector<Id> list, left, members{me, friendId};
@@ -68,7 +69,8 @@ Api makeApi() {
         if (type == createResult)
             *static_cast<LobbyCreated*>(result) = {1, roomId};
         else if (type == enterResult)
-            *static_cast<LobbyEntered*>(result) = {platform.expected, 0, false, 1};
+            *static_cast<LobbyEntered*>(result) = {platform.expected, 0, false,
+                                                   platform.enterResponse};
         else
             *static_cast<unsigned*>(result) = platform.list.size();
         return true;
@@ -100,12 +102,15 @@ Api makeApi() {
     a.byIndex = [](void*, int i) { return platform.list.at(i); };
     return a;
 }
+std::vector<std::string> events;
 void contracts() {
-    Rooms rooms(makeApi(),
-                [](Api&, Id) -> std::shared_ptr<Transport> { return std::make_shared<Route>(); });
+    Rooms rooms(makeApi(), [](Api&, Id, Logger) -> std::shared_ptr<Transport> {
+        return std::make_shared<Route>();
+    });
     auto poll = [&](bool lobby = true) {
         rooms.poll(
-            {"version", "fingerprint"}, lobby, [](Id id) { return id == friendId; }, nullptr);
+            {"version", "fingerprint"}, lobby, [](Id id) { return id == friendId; },
+            [](const auto& message) { events.push_back(message); });
     };
     poll();
     require(rooms.create() && rooms.busy() && platform.type == privateLobby, "Default visibility");
@@ -156,11 +161,24 @@ void contracts() {
     require(!rooms.active() && platform.left.back() == roomId, "Accepted a migrated owner");
     platform.owner = friendId;
     platform.data[roomId]["il_host"] = std::to_string(friendId);
+    constexpr unsigned roomFull = 4;
+    platform.enterResponse = roomFull;
+    notify(roomId);
+    require(rooms.accept(), "Full room request did not start");
+    poll();
+    require(!rooms.active(), "Steam rejected the request but the room stayed active");
+    platform.enterResponse = 1;
     notify(roomId);
     require(rooms.accept(), "Fresh invite did not start");
     poll();
     require(rooms.active() && !rooms.hosting() && !rooms.visibility(),
             "Invited guest cannot own the lobby");
+    for (const char* expected :
+         {"steam_lobby=ready role=host", "steam_lobby=ready role=client",
+          "steam_lobby=cancel op=create", "steam_lobby=invite_failed reason=overlay_unavailable",
+          "steam_lobby=invite_recognized", "steam_lobby=setup_failed op=join reason=owner_changed",
+          "steam_lobby=result_failed op=join code=4"})
+        require(std::find(events.begin(), events.end(), expected) != events.end(), expected);
 }
 } // namespace
 void singleAccount();

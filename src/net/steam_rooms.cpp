@@ -48,11 +48,33 @@ Rooms::~Rooms() {
         dropLobby();
     }
 }
+void Rooms::event(const std::string& message) const {
+    if (logger)
+        logger("steam_lobby=" + message);
+}
+const char* Rooms::name(Op operation) {
+    switch (operation) {
+    case Op::create:
+        return "create";
+    case Op::join:
+        return "join";
+    case Op::list:
+        return "list";
+    default:
+        return "none";
+    }
+}
 bool Rooms::available() {
     if (bound || Clock::now() < retryAt)
         return bound;
     retryAt = Clock::now() + std::chrono::seconds(5);
-    if (!(bound = api.bind()))
+    bound = api.bind();
+    const std::string_view stage = bound ? "ready" : api.bindStage;
+    if (stage != lastBindStage) {
+        event("api stage=" + std::string(stage));
+        lastBindStage = stage;
+    }
+    if (!bound)
         return false;
     api.subscribe(&invitations, joinRequested);
     inspect(launchInvite());
@@ -72,12 +94,14 @@ bool Rooms::compatible(Id id) const {
 bool Rooms::start(Op type, Call call) {
     error.clear();
     if (!call) {
+        event(std::string("request_failed op=") + name(type));
         error = "Steam 房间请求失败";
         return false;
     }
     op = type;
     pending = call;
     deadline = Clock::now() + callTimeout;
+    event(std::string("request op=") + name(type));
     return true;
 }
 bool Rooms::create() {
@@ -110,6 +134,7 @@ bool Rooms::join(Id id) {
         return false;
     }
     if (!compatible(id) || field(id, openKey) != "1") {
+        event("join_rejected reason=closed_or_incompatible");
         error = "房间已关闭或版本不兼容";
         return false;
     }
@@ -123,7 +148,9 @@ void Rooms::inspect(Id id) {
         inspecting = id;
         inspectAt = {};
         inviteUntil = Clock::now() + callTimeout;
-    }
+        event("invite_lookup");
+    } else
+        event("invite_lookup_failed");
 }
 bool Rooms::accept() {
     const bool ok = join(invitation);
@@ -133,11 +160,14 @@ bool Rooms::accept() {
 }
 bool Rooms::invite() {
     if (!active() || !joinOpen || !api.overlay(api.utils)) {
+        event(active() && joinOpen ? "invite_failed reason=overlay_unavailable"
+                                   : "invite_failed reason=room_closed");
         error = "Steam 好友邀请不可用";
         return false;
     }
     error.clear();
     api.invite(api.friends, lobby);
+    event("invite_overlay_requested");
     return true;
 }
 void Rooms::reconnected(const std::shared_ptr<DatagramRoute>& route) {
@@ -152,6 +182,7 @@ bool Rooms::visibility() {
     }
     error.clear();
     publicRoom = !publicRoom;
+    event(publicRoom ? "visibility value=public" : "visibility value=private");
     return true;
 }
 bool Rooms::publish() {
@@ -164,21 +195,23 @@ bool Rooms::publish() {
            set(nameKey, name ? name : "") && set(membersKey, "1") && set(openKey, "1") &&
            set(marker, kind);
 }
-Id Rooms::enteredLobby(Op action, Call call, bool failed) {
+Id Rooms::enteredLobby(Op action, Call call, bool failed, int* response) {
     if (failed)
         return 0;
     if (action == Op::create) {
         LobbyCreated value{};
-        return api.result(api.utils, call, &value, sizeof(value), createResult, &failed) &&
-                       !failed && value.result == 1
-                   ? value.lobby
-                   : 0;
+        if (!api.result(api.utils, call, &value, sizeof(value), createResult, &failed) || failed)
+            return 0;
+        if (response)
+            *response = value.result;
+        return value.result == 1 ? value.lobby : 0;
     }
     LobbyEntered value{};
-    return api.result(api.utils, call, &value, sizeof(value), enterResult, &failed) && !failed &&
-                   value.response == 1
-               ? value.lobby
-               : 0;
+    if (!api.result(api.utils, call, &value, sizeof(value), enterResult, &failed) || failed)
+        return 0;
+    if (response)
+        *response = static_cast<int>(value.response);
+    return value.response == 1 ? value.lobby : 0;
 }
 void Rooms::cancelCall() {
     if (pending && op != Op::list)
@@ -200,6 +233,7 @@ void Rooms::finishCall() {
     bool failed{};
     if (!api.completed(api.utils, pending, &failed) && !failed) {
         if (Clock::now() > deadline) {
+            event(std::string("timeout op=") + name(op));
             cancelCall();
             error = "Steam 房间请求超时";
         }
@@ -211,6 +245,7 @@ void Rooms::finishCall() {
         unsigned count{};
         if (failed || !api.result(api.utils, call, &count, sizeof(count), listResult, &failed) ||
             failed) {
+            event("result_failed op=list");
             error = "无法获取公开房间";
             return;
         }
@@ -223,28 +258,43 @@ void Rooms::finishCall() {
                         {id, displayName(field(id, nameKey)), static_cast<int>(members)});
             }
         }
+        event("listed returned=" + std::to_string(count) +
+              " compatible=" + std::to_string(listings.size()));
         return;
     }
-    const Id entered = enteredLobby(action, call, failed);
+    int response = -1;
+    const Id entered = enteredLobby(action, call, failed, &response);
     if (!entered) {
+        event(std::string("result_failed op=") + name(action) +
+              " code=" + std::to_string(response));
         error = "无法进入 Steam 房间";
         return;
     }
     lobby = entered;
     const bool creating = action == Op::create;
     host = creating ? api.local : parseId(field(lobby, hostKey));
-    if (!host || api.owner(api.match, lobby) != host ||
-        (!creating && (lobby != target || !compatible(lobby) || field(lobby, openKey) != "1")) ||
-        !(transport = openTransport(api, host)) || (creating && !publish())) {
+    const char* issue = nullptr;
+    if (!host || api.owner(api.match, lobby) != host)
+        issue = "owner_changed";
+    else if (!creating && (lobby != target || !compatible(lobby) || field(lobby, openKey) != "1"))
+        issue = "closed_or_incompatible";
+    else if (!(transport = openTransport(api, host, logger)))
+        issue = "p2p_open";
+    else if (creating && !publish())
+        issue = "publish_metadata";
+    if (issue) {
+        event(std::string("setup_failed op=") + name(action) + " reason=" + issue);
         dropLobby();
         error = "房间已关闭或版本不兼容";
         return;
     }
+    event(creating ? "ready role=host" : "ready role=client");
     joinOpen = true;
     listings.clear();
 }
 void Rooms::poll(const BuildIdentity& identity, bool inLobby, const std::function<bool(Id)>& seat,
-                 void (*logger)(const std::string&)) {
+                 Logger log) {
+    logger = log;
     if (identity.valid() &&
         (identity.version != build.version || identity.fingerprint != build.fingerprint))
         build = identity;
@@ -257,8 +307,11 @@ void Rooms::poll(const BuildIdentity& identity, bool inLobby, const std::functio
         inspectAt = now + std::chrono::milliseconds(250);
         if (ours(inspecting)) {
             invitation = std::exchange(inspecting, 0);
-        } else if (now >= inviteUntil)
+            event("invite_recognized");
+        } else if (now >= inviteUntil) {
             inspecting = 0;
+            event("invite_unrecognized_or_expired");
+        }
     }
     reap();
     if (pending)
@@ -270,6 +323,7 @@ void Rooms::poll(const BuildIdentity& identity, bool inLobby, const std::functio
         auto owner = api.owner(api.match, lobby);
         if (owner != host) {
             dropLobby();
+            event("owner_left");
             error = "Steam 房主已离开";
             return;
         }
@@ -313,6 +367,10 @@ void Rooms::dropLobby() {
     publishedMembers = 0;
 }
 void Rooms::leave() {
+    if (pending)
+        event(std::string("cancel op=") + name(op));
+    if (active())
+        event(hosting() ? "left role=host" : "left role=client");
     cancelCall();
     dropLobby();
     listings.clear();

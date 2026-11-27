@@ -22,7 +22,8 @@ from game_profiles import (
 
 BINARIES = {"winmm.dll", "isaac_lan_probe.dll", "isaac_lan_check.exe"}
 PAYLOAD_FILES = BINARIES | {"game-profile.json", "payload.json"}
-SHARED_FILES = {
+STEAM_LOG_TOOLS = {"Collect-Steam-Logs.cmd", "collect_steam_logs.ps1"}
+SHARED_FILES = STEAM_LOG_TOOLS | {
     "Install.cmd",
     "Uninstall.cmd",
     "install.ps1",
@@ -186,6 +187,8 @@ def check(archive, tag, *, require_stripped=False, allow_legacy=False):
             backends = bundle_backends(index, allow_legacy=allow_legacy)
             expected = bundle_files(backends)
             directories = {b: root + f"backends/{b}/" for b in backends}
+        if allow_legacy and not any(root + name in names for name in STEAM_LOG_TOOLS):
+            expected = expected - STEAM_LOG_TOOLS
         if allow_legacy and root + "LICENSE" not in names:
             # Published installers predating the project license had only the Chinese README.
             expected = expected - {"LICENSE", "README.en.md"}
@@ -208,9 +211,12 @@ def check(archive, tag, *, require_stripped=False, allow_legacy=False):
                 ).hexdigest()
             if index["files"] != uninstall_files:
                 raise ValueError("Uninstall file hashes differ from the release")
-        for name in ("Install.cmd", "Uninstall.cmd"):
+        launchers = {"Install.cmd": b"install.ps1", "Uninstall.cmd": b"install.ps1"}
+        if "Collect-Steam-Logs.cmd" in expected:
+            launchers["Collect-Steam-Logs.cmd"] = b"collect_steam_logs.ps1"
+        for name, script in launchers.items():
             contents = zipped.read(root + name)
-            if b"\r\n" not in contents or b"install.ps1" not in contents:
+            if b"\r\n" not in contents or script not in contents:
                 raise ValueError(f"Invalid Windows installer entry: {name}")
     return {"archive": str(archive), "tag": tag, "sha256": digest, "imports": imports}
 

@@ -25,6 +25,10 @@ class Rooms {
     };
     std::vector<Abandoned> abandoned;
     Op op = Op::none;
+    Logger logger = nullptr;
+    std::string_view lastBindStage;
+    void event(const std::string& message) const;
+    static const char* name(Op operation);
     Call pending = 0;
     Id lobby = 0, host = 0, target = 0, inspecting = 0, invitation = 0;
     Clock::time_point retryAt{}, deadline{}, inviteUntil{}, inspectAt{}, publishAt{}, logAt{};
@@ -40,7 +44,7 @@ class Rooms {
     void finishCall();
     void cancelCall();
     void reap();
-    Id enteredLobby(Op action, Call call, bool failed);
+    Id enteredLobby(Op action, Call call, bool failed, int* response = nullptr);
     void dropLobby();
     void inspect(Id id);
     bool publish();
@@ -53,7 +57,7 @@ class Rooms {
     ~Rooms();
     bool available();
     void poll(const BuildIdentity& identity, bool inLobby, const std::function<bool(Id)>& seat,
-              void (*logger)(const std::string&));
+              Logger log);
     bool create();
     bool browse();
     bool join(Id id);

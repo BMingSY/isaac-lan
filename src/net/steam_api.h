@@ -34,6 +34,7 @@ struct Api {
     HMODULE library = nullptr;
     int (*currentPipe)() = nullptr;
     bool alive() const;
+    const char* bindStage = "library";
     bool bind();
     Call (*create)(void*, int, int) = nullptr;
     Call (*join)(void*, Id) = nullptr;

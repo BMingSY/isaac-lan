@@ -4,7 +4,9 @@ Runs with the standard library on Windows or WSL; other platforms skip it.
 The checker executable is a test double: native PE validation has its own tests.
 """
 
+import csv
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -13,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from zipfile import ZipFile
 
 ROOT = Path(__file__).resolve().parents[1]
 POWERSHELL = shutil.which("powershell.exe")
@@ -636,6 +639,81 @@ function Remove-Item {
         for name in OWNED:
             self.assertEqual((self.game / name).read_bytes(), (self.package / name).read_bytes())
 
+    def collect_steam_logs(self, documents, output):
+        result = powershell(
+            ROOT / "tools/collect_steam_logs.ps1",
+            "-MyGamesDirectory",
+            windows_path(documents),
+            "-OutputDirectory",
+            windows_path(output),
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        (archive,) = output.glob("Isaac-LAN-Steam-Logs-*.zip")
+        with ZipFile(archive) as zipped:
+            self.assertEqual(set(zipped.namelist()), {"events.log", "routes.csv", "summary.txt"})
+            return tuple(
+                zipped.read(f).decode("utf-8-sig")
+                for f in ("events.log", "routes.csv", "summary.txt")
+            )
+
+    def test_steam_logs_capture_both_paths_and_previous_launch(self):
+        documents = self.root / "My Games"
+        profile = documents / "Binding of Isaac Repentance+"
+        logs = profile / "isaac-lan/logs"
+        line = "[2026-11-27 18:00:00.000+08:00] [INFO] [pid=23] "
+        for day, label in ((20, "stale"), (21, "previous"), (22, "current")):
+            launch = logs / f"202611{day}-181500-000-p23"
+            launch.mkdir(parents=True)
+            (launch / "startup.log").write_text(
+                line.replace("18:00", "18:15") + "steam_lobby=" + label + "\n", encoding="utf-8"
+            )
+        run = logs / "20261121-181500-000-p23/001-ABCDEFGH-host"
+        run.mkdir()
+        (run / "runtime.log").write_text(
+            line
+            + "steam_p2p=admitted link=7 state=1 end_reason=0\n"
+            + "unrelated game data\n" * 80000
+            + line
+            + r"network_failure=read C:\Users\Jane Doe\file for 76561198000000000"
+            + "\n"
+            + line
+            + "steam_route=relay pop=- rtt_ms=99999999999 max_jitter_us=1 delivery_quality=-1\n"
+            + line
+            + " steam_route=SDR pop=hkg rtt_ms=42 max_jitter_us=-1 delivery_quality=0.99 link=7"
+            + " steam_route=direct pop=- rtt_ms=-1 max_jitter_us=25 delivery_quality=-1 link=8\n",
+            encoding="utf-8",
+        )
+        (profile / "crash.dmp").write_bytes(b"unrelated private dump")
+        events, routes, summary = self.collect_steam_logs(documents, self.root / "Log output")
+        self.assertIn("steam_lobby=previous", events)
+        self.assertIn("steam_lobby=current", events)
+        self.assertIn("steam_p2p=admitted", events)
+        self.assertLess(events.index("steam_p2p=admitted"), events.index("steam_lobby=previous"))
+        self.assertIn("%USERPROFILE%", events)
+        for unrelated in ("stale", "Jane Doe", "76561198000000000", "unrelated game data"):
+            self.assertNotIn(unrelated, events)
+        samples = list(csv.DictReader(io.StringIO(routes)))
+        self.assertEqual(
+            [(r["Route"], r["POP"], r["RTT_ms"], r["Link"]) for r in samples],
+            [("SDR", "hkg", "42", "7"), ("direct", "-", "-1", "8")],
+        )
+        self.assertIn("Windowed:", summary)
+        self.assertIn("mean RTT ms=n/a", summary)
+
+    def test_steam_logs_without_mod_launch(self):
+        documents = self.root / "My Games"
+        profile = documents / "Binding of Isaac Repentance"
+        profile.mkdir(parents=True)
+        (profile / "log.txt").write_text(
+            "[INFO] - Binding of Isaac: Repentance v1.7.9b.J835\nOther private content\n"
+        )
+        events, routes, summary = self.collect_steam_logs(documents, self.root / "No launch")
+        self.assertEqual(events, "")
+        self.assertEqual(list(csv.DictReader(io.StringIO(routes))), [])
+        self.assertIn("No Isaac LAN launch logs", summary)
+        self.assertIn("v1.7.9b.J835", summary)
+        self.assertNotIn("private content", summary)
+
     def test_packaged_launchers_preserve_exit_code_after_pause(self):
         launchers = self.root / "launchers with spaces"
         subprocess.run(
@@ -655,8 +733,9 @@ function Remove-Item {
         wrapper = self.root / "run-launcher.ps1"
         wrapper.write_text("param([string]$Launcher)\n& $Launcher\nexit $LASTEXITCODE\n")
         for code in (0, 7):
-            (launchers / "install.ps1").write_text(f"exit {code}\n")
-            for mode in ("Install", "Uninstall"):
+            for script in ("install.ps1", "collect_steam_logs.ps1"):
+                (launchers / script).write_text(f"exit {code}\n")
+            for mode in ("Install", "Uninstall", "Collect-Steam-Logs"):
                 with self.subTest(mode=mode, exit_code=code):
                     result = powershell(wrapper, windows_path(launchers / f"{mode}.cmd"))
                     self.assertEqual(result.returncode, code, result.stdout + result.stderr)

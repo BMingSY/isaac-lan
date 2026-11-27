@@ -46,6 +46,8 @@ class SocketRoute final : public Transport {
     Api& api;
     ISteamNetworkingSockets& sockets;
     const Id self, host;
+    Logger logger;
+    std::optional<ESteamNetworkingConnectionState> lastClientState;
     HSteamListenSocket listener{};
     HSteamNetPollGroup group{};
     ListenerEvents inbox;
@@ -54,17 +56,35 @@ class SocketRoute final : public Transport {
     std::vector<Request> requests;
     Clock::time_point nextCheck{};
     bool live(HSteamNetConnection connection, SteamNetConnectionInfo_t& info) {
-        return sockets.GetConnectionInfo(connection, &info) &&
-               info.m_eState >= k_ESteamNetworkingConnectionState_Connecting &&
+        if (!sockets.GetConnectionInfo(connection, &info)) {
+            info = {};
+            return false;
+        }
+        return info.m_eState >= k_ESteamNetworkingConnectionState_Connecting &&
                info.m_eState <= k_ESteamNetworkingConnectionState_Connected;
+    }
+    void peerEvent(const char* event, HSteamNetConnection handle,
+                   const SteamNetConnectionInfo_t& info) const {
+        if (logger)
+            logger(std::string("steam_p2p=") + event + " link=" + std::to_string(handle) +
+                   " state=" + std::to_string(info.m_eState) +
+                   " end_reason=" + std::to_string(info.m_eEndReason));
+    }
+    bool clientLive(HSteamNetConnection handle, SteamNetConnectionInfo_t& info) {
+        const bool active = live(handle, info);
+        if (lastClientState != info.m_eState) {
+            lastClientState = info.m_eState;
+            peerEvent("client_state", handle, info);
+        }
+        return active;
     }
     void close(HSteamNetConnection h) {
         sockets.CloseConnection(h, k_ESteamNetConnectionEnd_App_Generic, nullptr, false);
     }
 
   public:
-    SocketRoute(Api& platform, Id owner)
-        : api(platform), sockets(*platform.sockets), self(platform.local), host(owner),
+    SocketRoute(Api& platform, Id owner, Logger log)
+        : api(platform), sockets(*platform.sockets), self(platform.local), host(owner), logger(log),
           inbox(sockets) {}
     bool start() {
         api.networkingUtils->InitRelayNetworkAccess();
@@ -125,7 +145,7 @@ class SocketRoute final : public Transport {
             return listener ? State::connected : State::closed;
         SteamNetConnectionInfo_t info{};
         auto peer = peers.find(host);
-        if (peer == peers.end() || !live(peer->second, info))
+        if (peer == peers.end() || !clientLive(peer->second, info))
             return State::closed;
         return info.m_eState == k_ESteamNetworkingConnectionState_Connected ? State::connected
                                                                             : State::connecting;
@@ -140,7 +160,7 @@ class SocketRoute final : public Transport {
                 peers.erase(old);
             }
         }
-        return open(api, host);
+        return open(api, host, logger);
     }
     void service(const std::function<bool(Id)>& allowed) override {
         std::lock_guard guard(mutex);
@@ -159,6 +179,7 @@ class SocketRoute final : public Transport {
         std::erase_if(peers, [&](const auto& peer) {
             if (live(peer.second, info))
                 return false;
+            peerEvent("closed", peer.second, info);
             close(peer.second);
             return true;
         });
@@ -173,10 +194,12 @@ class SocketRoute final : public Transport {
                 if (sockets.AcceptConnection(r.connection) == k_EResultOK &&
                     sockets.SetConnectionPollGroup(r.connection, group)) {
                     peers.emplace(remote, r.connection);
+                    peerEvent("admitted", r.connection, info);
                     return true;
                 }
             } else if (remote && now - r.at < admissionGrace && requests.size() <= maxRequests)
                 return false;
+            peerEvent("rejected", r.connection, info);
             close(r.connection);
             return true;
         });
@@ -198,7 +221,7 @@ class SocketRoute final : public Transport {
         if (self != host && Clock::now() >= nextCheck) {
             nextCheck = Clock::now() + std::chrono::milliseconds(250);
             SteamNetConnectionInfo_t info{};
-            if (!peers.contains(host) || !live(peers.at(host), info))
+            if (!peers.contains(host) || !clientLive(peers.at(host), info))
                 return -1;
         }
         SteamNetworkingMessage_t* message = nullptr;
@@ -233,16 +256,16 @@ class SocketRoute final : public Transport {
                                                                                    : "direct")
                 << " pop=" << (info.m_idPOPRelay ? pop : "-") << " rtt_ms=" << status.m_nPing
                 << " max_jitter_us=" << status.m_usecMaxJitter
-                << " delivery_quality=" << status.m_flConnectionQualityLocal;
+                << " delivery_quality=" << status.m_flConnectionQualityLocal << " link=" << h;
         }
         return out.str();
     }
 };
 } // namespace
-std::shared_ptr<Transport> Transport::open(Api& api, Id host) {
+std::shared_ptr<Transport> Transport::open(Api& api, Id host, Logger logger) {
     if (!host || !api.local)
         return {};
-    auto route = std::make_shared<SocketRoute>(api, host);
+    auto route = std::make_shared<SocketRoute>(api, host, logger);
     return route->start() ? route : nullptr;
 }
 } // namespace isaac::lan::steam
