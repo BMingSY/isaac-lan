@@ -124,6 +124,36 @@ void __cdecl replacement() {
     events.emplace_back("unrelated-hook");
 }
 #ifndef ISAAC_LAN_TEST_REPENTANCE
+struct MemberNotice {
+    const void* reference;
+    const std::uint64_t* member;
+    unsigned change;
+    bool operator==(const MemberNotice&) const = default;
+};
+std::vector<MemberNotice> nativeMemberNotices;
+void __stdcall nativeMemberChange(const void* reference, const std::uint64_t* member,
+                                  unsigned change) {
+    nativeMemberNotices.push_back({reference, member, change});
+}
+void lobbyMembers() {
+    constexpr unsigned entered = 0, left = 1;
+    const std::uint64_t member = 17;
+    const int type = 1, lobby = 2, owner = 3;
+    // The wrapper itself remains valid when the official lobby lookup misses.
+    std::array<const void*, 3> reference{&type, nullptr, &owner};
+    auto notify = entry<decltype(&nativeMemberChange)>(backend::entry::officialLobbyMemberChange);
+    notify(reference.data(), &member, entered);
+    notify(reference.data(), &member, left);
+    reference[1] = &lobby;
+    notify(reference.data(), &member, entered);
+    notify(reference.data(), &member, left);
+    reference[1] = nullptr;
+    notify(reference.data(), &member, left);
+    require(nativeMemberNotices == std::vector<MemberNotice>{{reference.data(), &member, entered},
+                                                             {reference.data(), &member, left}},
+            "Only resolved official lobby events should reach the original handler with their "
+            "arguments");
+}
 unsigned nativeCompletions = 0;
 void __stdcall completionOriginal(unsigned, unsigned, unsigned) {
     ++nativeCompletions;
@@ -377,6 +407,7 @@ void prepare() {
     patch(backend::entry::progressSaveCloud, persistCloud);
     patch(backend::entry::progressSaveFile, persistFile);
     patch(backend::entry::recordCharacterCompletion, completionOriginal);
+    patch(backend::entry::officialLobbyMemberChange, nativeMemberChange);
 #endif
     constexpr unsigned independent = 0x1000;
     patch(independent, unrelated);
@@ -709,6 +740,9 @@ std::uintptr_t presentationPlayer(void*) {
 } // namespace isaac::rooms
 int main() {
     prepare();
+#ifndef ISAAC_LAN_TEST_REPENTANCE
+    lobbyMembers();
+#endif
     completion();
     hooks();
     state();

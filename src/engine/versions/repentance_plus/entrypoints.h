@@ -181,6 +181,7 @@ inline constexpr std::uint32_t progressSaveFile = 0x53e9a0;
 inline constexpr std::uint32_t progressTryUnlock = 0x53eeb0;
 inline constexpr std::uint32_t progressIncreaseCounter = 0x53efd0;
 inline constexpr std::uint32_t recordCharacterCompletion = 0x5716f0;
+inline constexpr std::uint32_t officialLobbyMemberChange = 0x6441e0;
 inline constexpr std::uint32_t runtimeNetStartGame = 0x56ea00;
 inline constexpr std::uint32_t managerSave = 0x56eec0;
 inline constexpr std::uint32_t managerDeleteSave = 0x56f120;

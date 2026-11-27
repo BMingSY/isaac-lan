@@ -14,6 +14,10 @@
 
 [双房间探针](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance_plus/room_probe.cpp) 持有诊断实验的后台房间与计数，保留原生分配／构造／析构／删除和名单借用边界。正式房间调度优先，只有未接管且显式创建实验房间时才执行探针。探针的前台名单临时裁剪和后台房间作用域均在返回及 C++ 异常时恢复；它只用于两个普通玩家、无转场的内部夹具，不是生产房间调度能力。
 
+## Steam 大厅成员变化
+
+《忏悔+》和 Mod 共用 Steam 回调。游戏收到大厅成员变化后，先将 Steam 大厅 ID 解析为原版大厅引用。J514 的成员处理入口采用 x86 stdcall，依次接收借用的大厅引用、成员 ID 指针和变化类型。引用中的 `+0x4` 是原版大厅对象。此字段为空时，后端直接返回。有对象时，三个参数原样交回游戏，仍由游戏检查当前大厅。引用的释放由调用方负责。该入口与会话 Hook 一起校验和安装。[J514 会话绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/repentance_plus/session_backend.cpp)
+
 ## 实体字段批量读写
 
 [`entity_fields_plan(type, template)`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/entity_fields.cpp)将 Lua 同步组件提供的嵌套字段名数组编译为 userdata。仅支持泪弹、跟班、掉落物和效果实体的具名属性白名单；`false` 为由 Lua 填充的占位，其他实体类型返回 `false`。模板最多 128 个节点、三层深度，不接受地址或偏移。计划只持有字段描述符，不持有游戏对象；线上的字段顺序仍由 Lua schema 决定。

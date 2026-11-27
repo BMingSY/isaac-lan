@@ -7,7 +7,6 @@
 #include "engine/versions/common/session_bindings.h"
 #include "engine/versions/common/completion_marks.h"
 #include "runtime/session.h"
-#include <MinHook.h>
 #include <cstring>
 
 namespace isaac::engine::session {
@@ -151,54 +150,35 @@ void __attribute__((fastcall)) consoleHook(void* object, void*, const void* text
                                                                : at<const char*>(address);
     callbacks.consoleCommand({data, size}, [=] { originalConsole(object, text, silent, player); });
 }
+bool installHooks(std::uintptr_t base, const Callbacks& handlers) {
+    native_session::SessionHooks hooks;
+    return installFloorGeneration(base, handlers.largeFloor) &&
+           installGeneratedChallenge(base, handlers.deleteThis, handlers.rewardChallenge) &&
+           hooks.add(base + binding.entry.save, saveHook, originalSave) &&
+           hooks.add(base + binding.entry.deleteSave, deleteHook, originalDelete) &&
+           (!binding.entry.deleteSlotFile ||
+            hooks.add(base + binding.entry.deleteSlotFile, deleteSlotHook, originalSlotDelete)) &&
+           hooks.add(base + binding.entry.saveRerun, rerunHook, originalRerun) &&
+           hooks.add(base + binding.entry.executeMenu, menuHook, originalMenu) &&
+           hooks.add(base + binding.entry.serializeProgress, serializeHook, originalSerialize) &&
+           native_session::addVersionHooks(base, hooks) &&
+           hooks.add(base + binding.entry.start, startHook, originalStart) &&
+           hooks.add(base + binding.entry.executeStart, executeStartHook, originalExecuteStart) &&
+           hooks.add(base + binding.entry.update, updateHook, originalUpdate) &&
+           hooks.add(base + binding.entry.consoleUpdate, consoleUpdateHook,
+                     originalConsoleUpdate) &&
+           hooks.add(base + binding.entry.consoleCommand, consoleHook, originalConsole) &&
+           hooks.add(base + binding.entry.consolePrint, consolePrintHook, originalConsolePrint) &&
+           hooks.add(base + binding.entry.controls, controlsHook, originalControls) &&
+           hooks.enable();
+}
 } // namespace
 bool install(std::uintptr_t base, const Callbacks& handlers) {
     if (!base || installed)
         return false;
     image = base;
     callbacks = handlers;
-    std::array<void*, 14> targets{};
-    unsigned count = 0;
-    auto hook = [&](std::uintptr_t target, auto replacement, auto& original) {
-        auto* address = reinterpret_cast<void*>(target);
-        if (MH_CreateHook(address, reinterpret_cast<void*>(replacement),
-                          reinterpret_cast<void**>(&original)) != MH_OK)
-            return false;
-        targets[count++] = address;
-        return true;
-    };
-    bool success =
-        installFloorGeneration(image, callbacks.largeFloor) &&
-        installGeneratedChallenge(image, callbacks.deleteThis, callbacks.rewardChallenge) &&
-        hook(image + binding.entry.save, saveHook, originalSave) &&
-        hook(image + binding.entry.deleteSave, deleteHook, originalDelete) &&
-        (!binding.entry.deleteSlotFile ||
-         hook(image + binding.entry.deleteSlotFile, deleteSlotHook, originalSlotDelete)) &&
-        hook(image + binding.entry.saveRerun, rerunHook, originalRerun) &&
-        hook(image + binding.entry.executeMenu, menuHook, originalMenu) &&
-        hook(image + binding.entry.serializeProgress, serializeHook, originalSerialize) &&
-        hook(image + native_session::completionHook.target, native_session::completionHook.detour,
-             *native_session::completionHook.original) &&
-        hook(image + binding.entry.start, startHook, originalStart) &&
-        hook(image + binding.entry.executeStart, executeStartHook, originalExecuteStart) &&
-        hook(image + binding.entry.update, updateHook, originalUpdate) &&
-        hook(image + binding.entry.consoleUpdate, consoleUpdateHook, originalConsoleUpdate) &&
-        hook(image + binding.entry.consoleCommand, consoleHook, originalConsole) &&
-        hook(image + binding.entry.consolePrint, consolePrintHook, originalConsolePrint) &&
-        hook(image + binding.entry.controls, controlsHook, originalControls);
-    if (success) {
-        for (unsigned i = 0; i < count; ++i) {
-            auto* target = targets[i];
-            if (MH_EnableHook(target) != MH_OK) {
-                success = false;
-                break;
-            }
-        }
-    }
-    if (!success) {
-        // Remove only this component's hooks, including ones already enabled.
-        while (count)
-            MH_RemoveHook(targets[--count]);
+    if (!installHooks(base, handlers)) {
         callbacks = {};
         image = 0;
         return false;
