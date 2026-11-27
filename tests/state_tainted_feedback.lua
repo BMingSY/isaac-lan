@@ -11,6 +11,8 @@ local spawnedMaterials = {}
 local focusSetting, focusSamples, focusErrors = Options.PauseOnFocusLost, 0, 0
 local guestShop, guestShopChecked
 local walkArrived, walkChecked
+local pursuerVariant, pitVariant = 0, 1
+local pitSeed, pitPosition, pursuerSeed
 local finishTick = 1140
 Options.PauseOnFocusLost = not host
 local owner = { Name = "Tainted character feedback regression" }
@@ -199,15 +201,45 @@ local function step(t)
             clear()
             p:ChangePlayerType(PlayerType.PLAYER_JACOB_B)
             p.Position = Game():GetRoom():GetCenterPos()
+            p:UseActiveItem(CollectibleType.COLLECTIBLE_ANIMA_SOLA, 0, ActiveSlot.SLOT_POCKET)
         end)
         Isaac.DebugString("LAN_NETWORK FOCUS_SET_REQUEST 4 host")
+    elseif t == 606 then
+        actor(1, function()
+            local pit = assert(Isaac.FindByType(EntityType.ENTITY_DARK_ESAU, pitVariant)[1])
+            local pursuer = assert(Isaac.FindByType(EntityType.ENTITY_DARK_ESAU, pursuerVariant)[1])
+            pitSeed, pitPosition, pursuerSeed = pit.InitSeed, pit.Position, pursuer.InitSeed
+        end)
+        assert(native.rooms_move(1, shop, 0, -1))
+    elseif t == 609 then
+        actor(1, function()
+            local pursuers = Isaac.FindByType(EntityType.ENTITY_DARK_ESAU, pursuerVariant)
+            check(
+                "summoned-esau-follows-owner",
+                #pursuers == 1 and pursuers[1].InitSeed == pursuerSeed
+            )
+            check(
+                "spawn-pit-stays-out-of-destination",
+                #Isaac.FindByType(EntityType.ENTITY_DARK_ESAU, pitVariant) == 0
+            )
+        end)
+        actor(0, function()
+            local pits = Isaac.FindByType(EntityType.ENTITY_DARK_ESAU, pitVariant)
+            check(
+                "spawn-pit-remains-in-source",
+                #pits == 1
+                    and pits[1].InitSeed == pitSeed
+                    and pits[1].Position:Distance(pitPosition) < 1
+            )
+        end)
+        assert(native.rooms_move(1, origin, 0, -1))
     elseif t == 810 then
         actor(1, function(p)
-            for _, entity in ipairs(Isaac.GetRoomEntities()) do
-                if entity.Type == EntityType.ENTITY_DARK_ESAU and entity.Variant == 0 then
-                    esau = entity
-                end
-            end
+            check(
+                "spawn-pit-closes-after-reunion",
+                #Isaac.FindByType(EntityType.ENTITY_DARK_ESAU, pitVariant) == 0
+            )
+            esau = Isaac.FindByType(EntityType.ENTITY_DARK_ESAU, pursuerVariant)[1]
             assert(esau, "Native Tainted Jacob did not spawn Dark Esau")
             for slot = 0, 7 do
                 local door = Game():GetRoom():GetDoor(slot)
