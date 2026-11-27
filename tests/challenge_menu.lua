@@ -202,6 +202,7 @@ _IsaacLan = {
     end,
 }
 _IsaacLanModules = {
+    ["presentation/chat_layout"] = dofile(root .. "/src/bridge/presentation/chat_layout.lua"),
     ["presentation/menu_locale"] = dofile(root .. "/src/bridge/presentation/menu_locale.lua"),
     ["presentation/fonts"] = dofile(root .. "/src/bridge/presentation/fonts.lua"),
     ["presentation/menu_assets"] = dofile(root .. "/src/bridge/presentation/menu_assets.lua"),
@@ -1445,3 +1446,34 @@ do
     Options.Language = "zh"
 end
 print("PASS live Chinese and English Repentance LAN, English fallback and original Plus locale")
+
+do
+    status = { phase = 0, steamAvailable = true }
+    local longName = string.rep("地下室", 12)
+    _IsaacLan.net_steam_list = function()
+        return {
+            { id = "1", name = longName, players = 1, limit = 4, pingMs = 50 },
+            { id = "2", name = "Caves", players = 2, limit = 4 },
+        }
+    end
+    _IsaacLanMenuOpen(false)
+    draw()
+    if _IsaacLan.menu_official then
+        draw(40)
+    end
+    draw(40)
+    draw(13)
+    draw(40)
+    draw(13)
+    draw()
+    local known, missing = assert(labelPositions["1/4  50ms"]), assert(labelPositions["2/4  --ms"])
+    assert(known.x == missing.x and known.y < missing.y and labelPositions.Caves)
+    local prefix
+    for label, at in pairs(labelPositions) do
+        if label:sub(-#"…") == "…" and at.y == known.y then
+            prefix = label:sub(1, -#"…" - 1)
+            assert(at.x < known.x)
+        end
+    end
+    assert(prefix and #prefix > 0 and utf8.len(prefix) and longName:sub(1, #prefix) == prefix)
+end

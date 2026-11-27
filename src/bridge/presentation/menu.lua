@@ -1,5 +1,9 @@
 -- The game's own menu sprites and bitmap fonts. No redistributed game assets.
 local assets
+local fitText = _IsaacLanModules["presentation/chat_layout"].fit
+local function smallTextWidth(value)
+    return assets[10]:GetStringWidthUTF8(value)
+end
 local resources = _IsaacLan.presentation_assets
 local menuLocale = _IsaacLanModules["presentation/menu_locale"]
 -- Options.Language is valid once the game presents a menu.
@@ -506,12 +510,14 @@ function _IsaacLanMenuRender(
         end
         local color = item.color or (item.enabled and ink or faded)
         if item.roomSummary then
-            local summaryWidth = assets[10]:GetStringWidthUTF8(item.roomSummary)
+            local summaryWidth = smallTextWidth(item.roomSummary)
             text(item.roomSummary, labelX + maxWidth - summaryWidth, y, 10, color)
-            label, maxWidth = item.roomName, maxWidth - summaryWidth - 5
+            local name = utf8.len(item.roomName) and item.roomName or "?"
+            text(fitText(name, maxWidth - summaryWidth - 5, smallTextWidth), labelX, y, 10, color)
+        else
+            local size = assets[12]:GetStringWidthUTF8(label) > maxWidth and 10 or 12
+            text(label, labelX, y, size, color, maxWidth)
         end
-        local size = assets[12]:GetStringWidthUTF8(label) > maxWidth and 10 or 12
-        text(label, labelX, y, size, color, maxWidth)
         if i == ui.selection then
             pointer(37 + shift, y + 5)
         end
