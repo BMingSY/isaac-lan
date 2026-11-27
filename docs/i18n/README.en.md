@@ -2,7 +2,7 @@
 
 [简体中文](https://github.com/BMingSY/isaac-lan/blob/main/README.md) · English
 
-Play *The Binding of Isaac* with 2–4 players over a LAN. One installation supports both Windows game builds, **Repentance v1.7.9b.J835** and **Repentance+ v1.9.7.20.J514**. [Download Isaac LAN](https://github.com/BMingSY/isaac-lan/releases/latest)
+Play *The Binding of Isaac* with 2–4 players. Invite Steam friends, join a public room, or connect directly over a LAN. One installation supports both Windows game builds, **Repentance v1.7.9b.J835** and **Repentance+ v1.9.7.20.J514**. [Download Isaac LAN](https://github.com/BMingSY/isaac-lan/releases/latest)
 
 ## Features
 
@@ -34,16 +34,25 @@ WINEDLLOVERRIDES="winmm=n,b" %command%
 
 ## Host or join a game
 
-All players need the same game build and Isaac LAN version. Launch through Steam, select a save slot and open the third item on the main menu.
+All players need matching builds of the game and Isaac LAN. Launch through Steam, select a save slot, then open **Online**, the third item on the main menu. Repentance+ shows Isaac LAN's menu labels in Chinese. Its **Online Play** (官方联机) option opens the game's built-in multiplayer. Once everyone in an Isaac LAN lobby has chosen a character and is ready, the host selects **Start Game** (开始游戏).
 
-| Game | Menu |
-| --- | --- |
-| Repentance | Online |
-| Repentance+ | Online → LAN Co-op |
+### Steam Co-op
 
-1. The host checks the port (UDP 29506 by default), selects **Create Room** and shares the address and port with the other players.
-2. Each guest enters the host's IPv4 address, IPv6 address or domain name and port, then selects **Join Room**.
-3. Once everyone has chosen a character and is ready, the host starts the run.
+- **Invite friends.** The host selects **Steam Co-op → Create Private Room** (Steam 联机 → 创建私人房间), then opens **Steam Room → Invite Steam Friends** (Steam 房间 → 邀请 Steam 好友) in the lobby. Guests accept in Steam to join. If the invitation launches the game, select a save slot first.
+- **Open a public room.** In **Steam Room**, the host changes visibility to **Public** (可见性：公开). Guests choose a room under **Steam Co-op → Public Rooms** (Steam 联机 → 公开房间). The number beside the player count is the estimated latency to the host. Lower estimates appear first. Rooms with no estimate display `--ms` and appear last.
+
+### LAN Co-op
+
+Open **LAN Co-op** (局域网联机). The host checks the port (UDP 29506 by default), selects **Create Room** (创建房间) and shares the address and port. Each guest enters the host's IPv4 address, IPv6 address or domain name, along with the port, then selects **Join Room** (加入房间). Repentance opens the LAN page directly when Steam Co-op is unavailable.
+
+### Reconnect or continue a saved run
+
+When a guest disconnects, the game tries to reconnect once. Only the original players can rejoin a run in progress.
+
+- **Steam Co-op.** A guest who is still in the Steam lobby can select **Reconnect** (重连游戏) on the **Steam Co-op** page. If the guest has left the room or closed the game, the host can stay in the run, press `Shift+Tab` to open the Steam friends list, and choose **Invite to Game** for that friend. Accepting on the original Steam account restores the guest's character in the host's current room.
+- **LAN Co-op.** Guests can reconnect using the original host's address and port.
+
+After saving and exiting, the host can select the original save slot and create a new room. Once the original players have joined in the same order and are ready, the host selects **Continue Saved Run** (继续上次联机). Temporary challenges only support reconnecting to a run in progress.
 
 ## Uninstall
 
@@ -116,9 +125,11 @@ The technical documentation and third-party mod integration guide are available 
 
 ## Report a problem
 
-In multiplayer chat, enter `/feedback` followed by a description. On success, the game shows a feedback ID. If the upload fails, it shows where the feedback package was saved locally.
+In lobby or in-game chat, enter `/feedback` followed by a description. After a crash, you can restart the game and submit from a multiplayer lobby. On success, the game shows a feedback ID. If the upload fails, it shows where the feedback package was saved locally.
 
-The package includes the game and extension versions, multiplayer logs from the last two launches, the game's `log.txt` and the extension's `config.ini`. It goes to the author's server and only the author can view the upload. Windows usernames in paths are redacted. [Feedback collection details (Chinese)](https://github.com/BMingSY/isaac-lan/blob/main/docs/feedback.md)
+The package includes the game and extension versions, multiplayer logs from the last two launches, the game's `log.txt` and the extension's `config.ini`. If a matching crash record is available, it also includes the crash text or exception summary. It goes to the author's server and only the author can view the upload. Windows usernames in paths are redacted. [Feedback collection details (Chinese)](https://github.com/BMingSY/isaac-lan/blob/main/docs/feedback.md)
+
+If Steam Co-op fails before you reach the lobby, or you need to compare both ends of a connection, the host and guest can each double-click `Collect-Steam-Logs.cmd` in the extracted Windows package. Each copy saves `Isaac-LAN-Steam-Logs-*.zip` in that player's Downloads folder. When sending the two ZIPs to the author, identify the host and guest and include the approximate time of the problem.
 
 For GitHub reports, include the game and extension versions, host or guest role, reproduction steps and enabled mods. If you have a feedback ID, include it so the author can find the logs. [Open an issue](https://github.com/BMingSY/isaac-lan/issues/new/choose)
 

@@ -26,7 +26,7 @@ A：脚本会输出 `Isaac LAN [错误类别]`、具体原因和 `Next step` 处
 
 双方安装相同构建的 Isaac LAN 并从 Steam 启动游戏。房主选好存档，进入「联机模式 → Steam 联机 → 创建私人房间」，在大厅「Steam 房间 → 邀请 Steam 好友」选择好友。房主也可以在这里把可见性改为公开，让客机从「公开房间」加入。列表在人数右侧显示 Steam 对你到房主的估算延迟，按延迟从低到高排列。暂时没有估算的房间显示 `--ms`，排在最后。
 
-出现问题后，房主和客机分别双击解压目录里的 `Collect-Steam-Logs.cmd`，从各自的 Windows「下载」目录取出 `Isaac-LAN-Steam-Logs-*.zip`。反馈时附上两份日志，注明谁是房主、大致发生时间、卡在哪一步，以及两边加速器是否开启。
+能进入联机大厅时，可以在聊天中输入 `/feedback 问题描述`。如果进不了大厅，或需要比对双方的连接，房主和客机可分别双击解压目录里的 `Collect-Steam-Logs.cmd`，从各自的 Windows「下载」目录取出 `Isaac-LAN-Steam-Logs-*.zip`。把两份 ZIP 发给作者时，注明谁是房主、问题发生的大致时间和卡在哪一步。使用加速器时也注明哪一端开启了加速。
 
 ## Q：Windows 上装好了 Isaac LAN，游戏里却找不到局域网联机入口怎么办？
 
@@ -35,7 +35,7 @@ A：退出游戏，在 Steam 库中右键《以撒的结合》，选择「管理
 1. 找到 `isaac-ng.exe`，查看同一目录下有没有 `winmm.dll`。如果缺少，重新运行安装包里的 `Install.cmd`，选择这里的 `isaac-ng.exe`。
 2. 如果 `winmm.dll` 已经在游戏目录，右键 `isaac-ng.exe`，打开「属性 → 兼容性」，尝试勾选 **「禁用全屏优化」** 并点击「应用」。[微软全屏优化设置说明](https://devblogs.microsoft.com/directx/demystifying-full-screen-optimizations/)
 
-从 Steam 库重新启动游戏并选择存档。忏悔打开「联机模式（Online）」即可，忏悔＋还需在里面选择「局域网联机」。
+从 Steam 库重新启动游戏并选择存档。打开「联机模式（Online）→ 局域网联机」。忏悔在 Steam 联机不可用时会直接显示「创建房间」和「加入房间」。
 
 如果仍找不到入口，让游戏停在主菜单，在开始菜单中打开 **Windows PowerShell (x86)**，粘贴下面的命令查看游戏加载的 DLL 路径。[微软 PowerShell 命令说明](https://learn.microsoft.com/zh-cn/powershell/module/microsoft.powershell.management/get-process?view=powershell-5.1)
 
@@ -94,4 +94,4 @@ A：内容 Mod 需各端一致；已适配的界面 Mod 可各自安装，见[�
 
 ## Q：连不上怎么办？
 
-A：全员选择相同的游戏版本，安装相同版本的联机扩展并重启，核对房主地址、端口（默认 UDP 29506）和防火墙；跨网络还需配置端口映射或转发。
+A：全员确认游戏版本和 Isaac LAN 构建一致，更新后重启游戏。使用「Steam 联机」时，确认双方都已登录 Steam，再接受邀请或刷新公开房间列表。使用「局域网联机」时，核对房主地址、端口（默认 UDP 29506）和防火墙。通过公网 IPv4 直连时，如果房主在路由器后，还需检查该 UDP 端口的转发设置。
