@@ -12,8 +12,16 @@ namespace isaac::lan::steam {
 using Id = std::uint64_t;
 using Call = std::uint64_t;
 constexpr unsigned gameApp = 250900;
-constexpr int privateLobby = 0, publicLobby = 2;
-constexpr int listResult = 510, createResult = 513, enterResult = 504, joinRequested = 333;
+constexpr int privateLobby = 0, friendsLobby = 1, publicLobby = 2;
+constexpr int listResult = 510, createResult = 513, enterResult = 504, joinRequested = 333,
+              presenceJoinRequested = 337;
+inline constexpr std::string_view lobbyCommand = "+connect_lobby ";
+struct PresenceJoinRequest {
+    Id friendId;
+    char connect[256]; // k_cchMaxRichPresenceValueLength in the Steamworks SDK
+};
+static_assert(sizeof(PresenceJoinRequest) == 264);
+Id lobbyFromConnect(std::string_view text);
 struct LobbyCreated {
     int result;
     Id lobby;
@@ -60,6 +68,10 @@ struct Api {
     bool (*overlay)(void*) = nullptr;
     void (*invite)(void*, Id) = nullptr;
     const char* (*name)(void*) = nullptr;
+    bool (*setPresence)(void*, const char*, const char*) = nullptr;
+    const char* (*getPresence)(void*, Id, const char*) = nullptr;
+    void* apps = nullptr;
+    int (*launchCommand)(void*, char*, int) = nullptr;
     bool (*completed)(void*, Call, bool*) = nullptr;
     bool (*result)(void*, Call, void*, int, int, bool*) = nullptr;
     void (*subscribe)(void*, int) = nullptr;
@@ -78,11 +90,12 @@ class Callback {
     explicit Callback(int id) : callback(id) {}
 };
 class InviteCallback : public Callback {
+    std::atomic<Id>& pending;
+
   public:
-    InviteCallback() : Callback(joinRequested) {}
+    InviteCallback(int kind, std::atomic<Id>& target) : Callback(kind), pending(target) {}
     void event(void* data) override;
     int size() override;
-    std::atomic<Id> pending{0};
 };
 std::uint64_t parseId(std::string_view value);
 } // namespace isaac::lan::steam

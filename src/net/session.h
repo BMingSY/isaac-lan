@@ -35,7 +35,7 @@ class Session {
               const LobbyAccess& access = {}, std::shared_ptr<DatagramRoute> route = {});
     bool reconnect();
     const std::shared_ptr<DatagramRoute>& route() const;
-    bool hasAccountSeat(std::uint64_t account) const;
+    std::span<const std::string> accountSeats() const;
     void poll();
     void close();
     void finish();

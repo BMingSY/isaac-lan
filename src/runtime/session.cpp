@@ -907,9 +907,23 @@ void newSession(const char* fingerprint) {
                                              logging::enabled(logging::Level::debug));
     sessionFingerprint = lan::runtimeFingerprint(fingerprint, luaVersion);
 }
+bool reconnectGuest();
+bool disconnectedSteamGuestAtMenu() {
+    return session && session->route() && !session->isHost() && !view.gated && !launch.requested &&
+           (session->phase() == lan::Phase::failed || session->phase() == lan::Phase::closed);
+}
+bool lostSteamGuestAtMenu() {
+    return disconnectedSteamGuestAtMenu() && !steamRooms.active() && !steamRooms.canRejoin();
+}
 int steamAction(lua_State* L) {
     const std::string_view action = lua.checkString(L, 1, nullptr);
     bool ok = false;
+    if (action == "accept" && steamRooms.invited() && lostSteamGuestAtMenu()) {
+        // Steam lost our lobby membership. A fresh accepted invite owns the next handshake.
+        session.reset();
+        guestRecovery = false;
+        rejoinAt.reset();
+    }
     if (action == "invite")
         ok = steamRooms.invite();
     else if (action == "visibility")
@@ -921,6 +935,14 @@ int steamAction(lua_State* L) {
         if (!session)
             steamRooms.leave();
         ok = !session;
+    } else if (action == "accept" && session && steamRooms.invitedToCurrent()) {
+        if (disconnectedSteamGuestAtMenu()) {
+            // An accepted invite can retry a previous recovery that ended at the menu.
+            if (!rejoinAt)
+                guestRecovery = false;
+            ok = rejoinAt.has_value() || reconnectGuest();
+            steamRooms.dismiss();
+        }
     } else if (!session && retryArchive()) {
         if (action == "browse")
             ok = steamRooms.browse();
@@ -933,8 +955,12 @@ int steamAction(lua_State* L) {
                 ok = steamRooms.create();
             else if (action == "join")
                 ok = steamRooms.join(lan::steam::parseId(lua.checkString(L, 2, nullptr)));
-            else if (action == "accept")
+            else if (action == "accept") {
+                const bool retained = steamRooms.invitedToCurrent();
                 ok = steamRooms.accept();
+                if (retained && ok)
+                    guestRecovery = true;
+            }
         }
     }
     lua.pushBoolean(L, ok);
@@ -1023,15 +1049,16 @@ int poll(lua_State* L) {
     }
     const char* fingerprint = lua.getTop(L) ? lua.checkString(L, 1, nullptr) : "";
     const bool hadSteam = steamRooms.active();
-    steamRooms.poll(
-        {ISAAC_LAN_VERSION, lan::runtimeFingerprint(fingerprint, luaVersion)},
-        !session || session->phase() == lan::Phase::lobby,
-        [](auto id) { return session && session->hasAccountSeat(id); }, logger);
+    steamRooms.poll({ISAAC_LAN_VERSION, lan::runtimeFingerprint(fingerprint, luaVersion)},
+                    !session || session->phase() == lan::Phase::lobby,
+                    session ? session->accountSeats() : std::span<const std::string>{}, logger);
     bool steamCreated = false;
     if (steamRooms.active() && !session) {
         newSession(fingerprint);
         const auto& route = steamRooms.route();
         steamCreated = steamRooms.hosting();
+        if (steamRooms.joiningRun())
+            guestRecovery = true;
         const bool attached =
             steamCreated
                 ? session->host(0, sessionFingerprint, steamMods, personalAccess(), route)
@@ -1052,8 +1079,13 @@ int poll(lua_State* L) {
         guestRecovery = false;
         session->abort(steamRooms.failure());
     }
-    if (session)
+    if (session) {
         session->poll();
+        // Accepting a duplicate invite must not restart a healthy or pending connection.
+        if (steamRooms.invitedToCurrent() && !steamRooms.canRejoin() &&
+            session->phase() != lan::Phase::failed && session->phase() != lan::Phase::closed)
+            steamRooms.dismiss();
+    }
     if (session && session->phase() == lan::Phase::lobby && backend::managerReady() &&
         session->choices()[session->slot()].candidates.empty()) {
         const auto character = session->choices()[session->slot()].character;
@@ -1137,7 +1169,9 @@ int poll(lua_State* L) {
     lua.setField(L, -2, "steamCreated");
     lua.pushBoolean(L, steamRooms.isPublic());
     lua.setField(L, -2, "steamPublic");
-    if (steamRooms.invited()) {
+    if (steamRooms.invited() && !rejoinAt) {
+        lua.pushBoolean(L, steamRooms.invitedToCurrent() || lostSteamGuestAtMenu());
+        lua.setField(L, -2, "steamInviteRejoin");
         lua.pushBoolean(L, backend::managerReady() && backend::gameReady() &&
                                backend::cinematicFinished());
         lua.setField(L, -2, "steamInviteInGame");
@@ -1770,14 +1804,12 @@ int close(lua_State* L) {
     restartState.close(keep);
     return 0;
 }
-int reconnect(lua_State* L) {
+bool reconnectGuest() {
     if (!session || session->isHost() || rejoinAt || (session->route() && !steamRooms.active()) ||
         (guestRecovery && session->phase() != lan::Phase::failed) ||
         (session->phase() != lan::Phase::running && session->phase() != lan::Phase::failed &&
-         session->phase() != lan::Phase::closed)) {
-        lua.pushBoolean(L, false);
-        return 1;
-    }
+         session->phase() != lan::Phase::closed))
+        return false;
     guestRecovery = true;
     if (view.gated || launch.requested) {
         // Release the seat now; reconnect only after MC_PRE_GAME_EXIT has
@@ -1791,7 +1823,10 @@ int reconnect(lua_State* L) {
         rejoinAt = InputClock::now();
         frontend::returnToLobby(lobbyMenu());
     }
-    lua.pushBoolean(L, true);
+    return true;
+}
+int reconnect(lua_State* L) {
+    lua.pushBoolean(L, reconnectGuest());
     return 1;
 }
 int leave(lua_State* L) {

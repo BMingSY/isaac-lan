@@ -42,11 +42,11 @@ void singleAccount() {
     bool inLobby = true;
     const BuildIdentity build{"single-account-test",
                               "isolated-" + std::to_string(GetCurrentProcessId())};
+    const std::array seats{accountIdentity(api.local)};
     auto poll = [&] {
         client.pump();
-        auto noReservedSeat = [](Id) { return false; };
-        rooms.poll(build, inLobby, [&](Id id) { return id == api.local; }, nullptr);
-        browser.poll(build, true, noReservedSeat, nullptr);
+        rooms.poll(build, inLobby, seats, nullptr);
+        browser.poll(build, true, {}, nullptr);
     };
     auto wait = [&](auto done) {
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
@@ -130,9 +130,29 @@ void singleAccount() {
         return false;
     });
     const auto room = browser.rooms().front().id;
-    require(rooms.visibility(), "Could not make the test room private again");
+    auto currentConnect = [&]() -> std::string {
+        const auto* value = api.getPresence(api.friends, api.local, "connect");
+        return value ? value : "";
+    };
+    const auto previousConnect = currentConnect();
     inLobby = false;
-    wait([&] { return std::string_view(api.get(api.match, room, "il_open")) == "0"; });
+    wait([&] { return lobbyFromConnect(currentConnect()) == room; });
+    require(browser.browse(), "Cannot query Steam while host is playing");
+    nextBrowse = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    wait([&] {
+        if (browser.busy())
+            return false;
+        if (browser.rooms().empty())
+            return true;
+        // Steam's matchmaking index can return a cached public listing just after a type change.
+        const auto now = std::chrono::steady_clock::now();
+        if (now >= nextBrowse) {
+            require(browser.browse(), "Could not refresh the running room search");
+            nextBrowse = now + std::chrono::seconds(2);
+        }
+        return false;
+    });
+    std::puts("Steam Friends exposes the running lobby invite; public search excludes it");
     connection.close();
     Connection returning{api.sockets, api.sockets->ConnectP2P(self, virtualPort, 0, nullptr)};
     waitConnected(returning.handle);
@@ -147,4 +167,5 @@ void singleAccount() {
     require(source == api.local && received == afterExit, "Reserved account lost its new datagram");
     std::puts("Reserved account reconnected over Steam P2P while the room was closed to new joins");
     rooms.leave();
+    require(previousConnect == currentConnect(), "Steam connect presence remained after leaving");
 }

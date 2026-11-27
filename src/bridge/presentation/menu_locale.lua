@@ -21,6 +21,7 @@ local english = {
     ["正在连接 Steam…"] = "Contacting Steam…",
     ["收到 Steam 邀请，返回主菜单后可加入"] = "Steam invite received. Return to the main menu to join.",
     ["房间已关闭或版本不兼容"] = "Room closed or incompatible",
+    ["进行中的对局只允许原玩家重连"] = "Only original players can rejoin this run",
     ["Steam 房间请求失败"] = "Steam room request failed",
     ["Steam 房间请求超时"] = "Steam room request timed out",
     ["无法进入 Steam 房间"] = "Could not enter the Steam room",

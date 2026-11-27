@@ -17,8 +17,12 @@ class Rooms {
     using OpenTransport = decltype(&Transport::open);
     Api api;
     OpenTransport openTransport = Transport::open;
-    InviteCallback invitations;
+    std::atomic<Id> requested{0};
+    InviteCallback invitations{joinRequested, requested},
+        presenceInvitations{presenceJoinRequested, requested};
     bool bound = false, publicRoom = false, joinOpen = true;
+    int appliedType = privateLobby;
+    bool targetInvited = false;
     struct Abandoned {
         Op op;
         Call call;
@@ -28,20 +32,25 @@ class Rooms {
     Op op = Op::none;
     Logger logger = nullptr;
     std::string_view lastBindStage;
+    void listenForInvites();
     void event(const std::string& message) const;
     static const char* name(Op operation);
     Call pending = 0;
-    Id lobby = 0, host = 0, target = 0, inspecting = 0, invitation = 0;
+    Id lobby = 0, host = 0, target = 0, targetHost = 0, inspecting = 0, invitation = 0;
     Clock::time_point retryAt{}, deadline{}, inviteUntil{}, inspectAt{}, publishAt{}, logAt{};
     Clock::time_point estimateAt{}, requestLocationAt{};
     int publishedMembers = 0;
-    std::string publishedLocation;
+    std::string publishedLocation, publishedAdmission, connectValue, previousConnect;
     std::shared_ptr<Transport> transport;
     std::vector<Listing> listings;
     std::string error;
     BuildIdentity build;
     bool ours(Id id) const;
     bool compatible(Id id) const;
+    bool allowsJoin(Id id, bool invited) const;
+    void updateAdmission(bool inLobby, std::span<const std::string> seats);
+    void updatePresence(bool playing);
+    bool setType(int type);
     std::string field(Id id, const char* key) const;
     bool start(Op type, Call call);
     void finishCall();
@@ -60,7 +69,7 @@ class Rooms {
     Rooms& operator=(const Rooms&) = delete;
     ~Rooms();
     bool available();
-    void poll(const BuildIdentity& identity, bool inLobby, const std::function<bool(Id)>& seat,
+    void poll(const BuildIdentity& identity, bool inLobby, std::span<const std::string> seats,
               Logger log);
     bool create();
     bool browse();
@@ -73,6 +82,12 @@ class Rooms {
     bool rejoin();
     void dismiss() {
         invitation = inspecting = 0;
+    }
+    bool invitedToCurrent() const {
+        return invitation && invitation == lobby && host != api.local;
+    }
+    bool joiningRun() const {
+        return active() && !hosting() && !joinOpen;
     }
     bool invite();
     bool visibility();

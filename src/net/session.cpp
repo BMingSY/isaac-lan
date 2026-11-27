@@ -1155,11 +1155,10 @@ bool Session::join(const std::string& ip, std::uint16_t port, const std::string&
 const std::shared_ptr<DatagramRoute>& Session::route() const {
     return impl->route;
 }
-bool Session::hasAccountSeat(std::uint64_t account) const {
-    if (!account || !impl->route)
-        return false;
-    return std::find(impl->identities.begin() + 1, impl->identities.end(),
-                     accountIdentity(account)) != impl->identities.end();
+std::span<const std::string> Session::accountSeats() const {
+    if (!impl->hosting || !impl->route)
+        return {};
+    return std::span(impl->identities).subspan(1, impl->playerCount - 1);
 }
 bool Session::reconnect() {
     if (impl->hosting || (impl->state != Phase::failed && impl->state != Phase::closed) ||

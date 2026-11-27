@@ -1,5 +1,6 @@
 #include "net/steam_rooms.h"
 #include "test_support.h"
+#include <cstdio>
 #include <cstring>
 #include <map>
 #include <set>
@@ -19,7 +20,8 @@ struct Platform {
     bool routeAvailable = true;
     std::map<Id, std::map<std::string, std::string>> data;
     std::map<std::string, std::string> filters;
-    Callback* invite = nullptr;
+    std::map<int, Callback*> callbacks;
+    std::string presence;
 } platform;
 class Route final : public Transport {
   public:
@@ -61,11 +63,22 @@ Api makeApi() {
         auto found = platform.estimates.find(location);
         return found == platform.estimates.end() ? std::nullopt : std::optional{found->second};
     };
-    a.subscribe = [](void* sub, int) { platform.invite = static_cast<Callback*>(sub); };
-    a.unsubscribe = [](void*) { platform.invite = nullptr; };
+    a.subscribe = [](void* sub, int kind) {
+        platform.callbacks[kind] = static_cast<Callback*>(sub);
+    };
+    a.unsubscribe = [](void* sub) {
+        platform.callbacks.erase(static_cast<Callback*>(sub)->callback);
+    };
+    a.setPresence = [](void*, const char* key, const char* value) {
+        require(std::string_view(key) == "connect", "Overwrote unrelated rich presence");
+        platform.presence = value ? value : "";
+        return true;
+    };
+    a.getPresence = [](void*, Id, const char*) { return platform.presence.c_str(); };
     a.create = [](void*, int type, int limit) -> Call {
         require(limit == maxPlayers, "Wrong capacity");
         platform.type = type;
+        platform.joinable = true;
         return 1;
     };
     a.join = [](void*, Id id) -> Call {
@@ -123,10 +136,10 @@ void contracts() {
         require(host == platform.owner, "Opened a route to a different lobby owner");
         return platform.routeAvailable ? std::make_shared<Route>() : nullptr;
     });
+    const std::array seats{accountIdentity(friendId)};
     auto poll = [&](bool lobby = true) {
-        rooms.poll(
-            {"version", "fingerprint"}, lobby, [](Id id) { return id == friendId; },
-            [](const auto& message) { events.push_back(message); });
+        rooms.poll({"version", "fingerprint"}, lobby, seats,
+                   [](const auto& message) { events.push_back(message); });
     };
     poll();
     require(rooms.create() && rooms.busy() && platform.type == privateLobby, "Default visibility");
@@ -150,10 +163,12 @@ void contracts() {
     require(!rooms.invite() && platform.invites == 1, "Missing overlay was not reported");
     platform.members = {me, stranger};
     poll(false);
-    require(!platform.joinable && !rooms.visibility() && route->admitted == std::set<Id>{friendId},
+    require(platform.joinable && platform.type == friendsLobby && !rooms.visibility() &&
+                route->admitted == std::set<Id>{friendId},
             "Active run admitted another account");
     poll();
-    require(platform.joinable, "Returning lobby stayed locked");
+    require(platform.joinable && platform.type == publicLobby,
+            "Returning lobby did not restore public visibility");
     rooms.leave();
     platform.list = {otherRoom, roomId};
     require(rooms.browse(), "Could not browse");
@@ -162,7 +177,7 @@ void contracts() {
             "Browser included a foreign lobby");
     require(!rooms.join(otherRoom) && !platform.joins, "Joined a foreign room");
     auto notify = [&](Id id) {
-        platform.invite->event(&id);
+        platform.callbacks.at(joinRequested)->event(&id);
         poll();
     };
     notify(otherRoom);
@@ -229,13 +244,146 @@ void contracts() {
           "steam_lobby=result_failed op=join code=4"})
         require(std::find(events.begin(), events.end(), expected) != events.end(), expected);
 }
+void overlayRejoin() {
+    platform = {};
+    platform.ready = true;
+    platform.presence = "official session";
+    const std::array seats{accountIdentity(friendId)};
+    auto open = [](Api&, Id, Logger) -> std::shared_ptr<Transport> {
+        return std::make_shared<Route>();
+    };
+    const auto build = BuildIdentity{"playtest", "build"};
+    std::string connect;
+    {
+        Rooms host(makeApi(), open);
+        auto poll = [&](bool lobby) { host.poll(build, lobby, seats, nullptr); };
+        poll(true);
+        require(host.create(), "Could not create native invite test lobby");
+        poll(true);
+        poll(false);
+        require(platform.type == friendsLobby, "A private room could not receive game invites");
+        poll(true);
+        require(platform.type == privateLobby, "The original private lobby was not restored");
+        require(host.visibility(), "Could not make lobby public");
+        poll(false);
+        connect = platform.presence;
+        require(lobbyFromConnect(connect) == roomId && platform.type == friendsLobby &&
+                    platform.joinable && host.invite(),
+                "Steam friends could not invite to the running, hidden room");
+        const auto duringRun = platform.data[roomId];
+        poll(true);
+        require(platform.type == publicLobby && platform.presence == "official session",
+                "Ending the run did not restore the original presence and visibility");
+        poll(false);
+        platform.presence = "owned by another activity";
+        host.leave();
+        require(platform.presence == "owned by another activity",
+                "Overwrote a foreign connect value");
+        // The following client sees the running host's real published metadata.
+        platform.data[roomId] = duringRun;
+        platform.joinable = true;
+    }
+    auto notify = [&](int kind) {
+        if (kind == joinRequested) {
+            std::array<Id, 2> request{roomId, me};
+            platform.callbacks.at(kind)->event(request.data());
+        } else {
+            PresenceJoinRequest request{me, {}};
+            std::copy(connect.begin(), connect.end(), request.connect);
+            platform.callbacks.at(kind)->event(&request);
+        }
+    };
+    for (Id local : {stranger, friendId}) {
+        auto api = makeApi();
+        api.local = local;
+        Rooms guest(api, open);
+        auto poll = [&] { guest.poll(build, true, {}, nullptr); };
+        poll();
+        platform.list = {roomId};
+        require(guest.browse(), "Browser could not run");
+        poll();
+        require(guest.rooms().empty() && !guest.join(roomId), "A running room was browsable");
+        const auto running = platform.data[roomId]["il_open"];
+        platform.data[roomId]["il_open"] = "1";
+        require(guest.browse(), "Could not load a pre-game listing");
+        poll();
+        require(guest.rooms().size() == 1, "Missing pre-game listing");
+        platform.data[roomId]["il_open"] = running;
+        require(!guest.join(roomId),
+                "A stale public listing allowed a guest to enter the running room");
+        for (int kind : {presenceJoinRequested, joinRequested}) {
+            auto joins = platform.joins;
+            notify(kind);
+            poll();
+            require(guest.invited() == roomId, "Accepted Steam invite did not reach the menu");
+            if (local == stranger) {
+                require(!guest.accept() && platform.joins == joins && !guest.active() &&
+                            guest.failure() == "进行中的对局只允许原玩家重连",
+                        "Invited new player occupied a lobby slot");
+                continue;
+            }
+            require(guest.accept() && platform.joins == joins + 1, "Lost returning member invite");
+            poll();
+            require(guest.active() && guest.joiningRun() && !guest.hosting(),
+                    "Invite did not restore the original guest");
+            guest.disconnectGuest();
+            notify(kind);
+            poll();
+            require(guest.invitedToCurrent() && guest.accept() && platform.joins == joins + 1,
+                    "A parked client re-entered Steam matchmaking for its own room");
+            guest.leave();
+        }
+    }
+    {
+        auto api = makeApi();
+        api.local = friendId;
+        Rooms guest(api, open);
+        auto poll = [&] { guest.poll(build, true, {}, nullptr); };
+        for (bool migrate : {false, true}) {
+            notify(joinRequested);
+            poll();
+            require(guest.accept(), "Returning guest could not begin joining");
+            auto before = platform.data[roomId];
+            if (migrate) {
+                platform.owner = stranger;
+                platform.data[roomId]["il_host"] = std::to_string(stranger);
+            } else {
+                platform.data[roomId]["il_open"] = "0";
+            }
+            const auto leaves = platform.left.size();
+            poll();
+            require(!guest.active() && platform.left.size() == leaves + 1,
+                    "Changed admission or a new owner took over a pending invitation");
+            platform.owner = me;
+            platform.data[roomId] = before;
+        }
+    }
+    auto cold = makeApi();
+    cold.local = friendId;
+    cold.apps = &platform;
+    cold.launchCommand = [](void*, char* dst, int size) {
+        return std::snprintf(dst, size, "+connect_lobby %llu",
+                             static_cast<unsigned long long>(roomId));
+    };
+    Rooms relaunched(cold, open);
+    relaunched.poll(build, true, {}, nullptr);
+    require(relaunched.invited() == roomId && !relaunched.active(),
+            "A cold-start Steam invite did not wait for a save selection");
+    require(relaunched.accept(), "Relaunched original guest lost its invite");
+    relaunched.poll(build, true, {}, nullptr);
+    require(relaunched.joiningRun(), "Cold-start invite did not select checkpoint recovery");
+    require(!lobbyFromConnect("official") && !lobbyFromConnect("+connect_lobby 101 extra") &&
+                !lobbyFromConnect("+connect_lobby -1") &&
+                !lobbyFromConnect("+connect_lobby 18446744073709551616"),
+            "Unrelated or malformed rich presence became an invite");
+}
 void browserLatency() {
     platform = {};
     Rooms rooms(makeApi(), [](Api&, Id, Logger) -> std::shared_ptr<Transport> {
         return std::make_shared<Route>();
     });
     auto poll = [&](bool inLobby = true) {
-        rooms.poll({"version", "fingerprint"}, inLobby, [](Id) { return false; }, nullptr);
+        rooms.poll({"version", "fingerprint"}, inLobby, {}, nullptr);
     };
     platform.ready = true;
     poll();
@@ -292,5 +440,8 @@ void singleAccount();
 int main(int argc, char** argv) {
     if (argc == 2 && std::string_view(argv[1]) == "single-account")
         return runTests(argc, argv, {{"single-account", singleAccount}});
-    return runTests(argc, argv, {{"rooms", contracts}, {"browser-latency", browserLatency}});
+    return runTests(argc, argv,
+                    {{"rooms", contracts},
+                     {"overlay-rejoin", overlayRejoin},
+                     {"browser-latency", browserLatency}});
 }

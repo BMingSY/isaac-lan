@@ -186,11 +186,19 @@ function _IsaacLanMenuRender(
     end
     ui.wasPlaying = playing
     if status.steamInvite then
-        if status.steamInviteInGame or status.transport == "steam" or not idle(phase) then
+        if
+            status.steamInviteInGame
+            or (status.transport == "steam" and not status.steamInviteRejoin)
+            or not idle(phase)
+        then
             ui.deferredInvite = status.steamInvite
-        elseif available and not status.steamBusy and phase == Phase.idle then
+        elseif
+            available
+            and not status.steamBusy
+            and (phase == Phase.idle or status.steamInviteRejoin)
+        then
             visible = true
-            if ui.deferredInvite == status.steamInvite then
+            if ui.deferredInvite == status.steamInvite and not status.steamInviteRejoin then
                 ui.page = "steamInvite"
             elseif ui.handledInvite ~= status.steamInvite then
                 ui.handledInvite = status.steamInvite

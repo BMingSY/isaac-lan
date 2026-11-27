@@ -206,7 +206,7 @@ ctest --test-dir build-win32 --output-on-failure
 
 测试程序不带用例名时运行全部传输测试，通过标记为 `ALL STATE TRANSPORT TESTS PASSED`。
 
-Steam 房间的离线用例是 `net.steam-rooms`、`net.account-transport` 和 `bridge.steam-menu`。单账号实测时，在隔离目录中放入 `isaac_lan_steam_test.exe`、待验证游戏自带的 `steam_api.dll` 和内容为 `250900` 的 `steam_appid.txt`，登录 Steam 并运行 `isaac_lan_steam_test.exe single-account`。该用例创建私人房间，使用本账号的 P2P 连接往返数据后离开。跨网验证使用两账号，在同一对网络上分别关闭、开启加速器，按 `steam_route`、`pop`、`rtt_ms`、`max_jitter_us` 和 `delivery_quality` 比较实际路径和质量。负值表示 Steam 尚无该项读数。
+Steam 房间的离线用例是 `net.steam-rooms`、`net.account-transport` 和 `bridge.steam-menu`。单账号实测时，在隔离目录中放入 `isaac_lan_steam_test.exe`、待验证游戏自带的 `steam_api.dll` 和内容为 `250900` 的 `steam_appid.txt`，登录 Steam 并运行 `isaac_lan_steam_test.exe single-account`。该用例创建私人房间，验证公开列表、开局后的好友连接信息、原账号重建 P2P 连接和离开后的清理。双账号实测时，分别让原客机离开大厅和关闭游戏，再从房主的 Steam 好友列表邀请，核对原角色和房主当前房间。跨网验证使用两账号，在同一对网络上分别关闭、开启加速器，按 `steam_route`、`pop`、`rtt_ms`、`max_jitter_us` 和 `delivery_quality` 比较实际路径和质量。负值表示 Steam 尚无该项读数。
 
 版本准入的定向检查为可移植的 `net.compatibility-codec`，Windows 的 `net.handshake`、`net.compatibility-versions`、`net.compatibility-rejoin`、`net.compatibility-wire`，以及菜单的 `bridge.challenge_menu`。覆盖完整版本号和 DLL 指纹、不同协议的前置交换、旧版／缺失／畸形报文、拒绝后的席位清理、原身份重连，以及双方版本与长版本号的错误显示。网络检查使用真实 ENet 回环连接，不启动游戏。
 

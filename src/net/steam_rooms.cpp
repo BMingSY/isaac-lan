@@ -10,6 +10,8 @@ constexpr char marker[] = "isaac_lan", kind[] = "room-v1";
 constexpr char protocolKey[] = "il_protocol", versionKey[] = "il_version", buildKey[] = "il_build",
                hostKey[] = "il_host", openKey[] = "il_open", nameKey[] = "il_name",
                membersKey[] = "il_members", locationKey[] = "il_ping_location";
+// One metadata write switches between public admission and invite-only original seats.
+constexpr std::string_view reservedPrefix = "rejoin,";
 constexpr int maxListings = 50, equal = 0, worldwide = 3;
 constexpr auto callTimeout = std::chrono::seconds(25);
 constexpr auto estimateInterval = std::chrono::seconds(1),
@@ -25,7 +27,16 @@ std::string displayName(std::string name) {
     std::erase_if(name, [](unsigned char c) { return c < 32 || c == 127; });
     return name;
 }
-Id launchInvite() {
+Id launchInvite(const Api& api) {
+    if (api.apps && api.launchCommand) {
+        char command[1024]{};
+        const int length = api.launchCommand(api.apps, command, sizeof(command));
+        if (length > 0 && static_cast<size_t>(length) < sizeof(command)) {
+            command[length] = '\0';
+            if (const auto id = lobbyFromConnect(command))
+                return id;
+        }
+    }
     int count{};
     auto** argv = CommandLineToArgvW(GetCommandLineW(), &count);
     if (!argv)
@@ -43,10 +54,16 @@ Id launchInvite() {
 }
 } // namespace
 Rooms::Rooms(Api ready, OpenTransport open) : api(ready), openTransport(open), bound(true) {
+    listenForInvites();
+}
+void Rooms::listenForInvites() {
     api.subscribe(&invitations, joinRequested);
+    api.subscribe(&presenceInvitations, presenceJoinRequested);
+    inspect(launchInvite(api));
 }
 Rooms::~Rooms() {
     if (bound && api.alive()) {
+        api.unsubscribe(&presenceInvitations);
         api.unsubscribe(&invitations);
         dropLobby();
     }
@@ -79,8 +96,7 @@ bool Rooms::available() {
     }
     if (!bound)
         return false;
-    api.subscribe(&invitations, joinRequested);
-    inspect(launchInvite());
+    listenForInvites();
     return true;
 }
 std::string Rooms::field(Id id, const char* key) const {
@@ -93,6 +109,12 @@ bool Rooms::ours(Id id) const {
 bool Rooms::compatible(Id id) const {
     return ours(id) && field(id, protocolKey) == std::to_string(build.protocol) &&
            field(id, versionKey) == build.version && field(id, buildKey) == build.fingerprint;
+}
+bool Rooms::allowsJoin(Id id, bool invited) const {
+    const auto admission = field(id, openKey);
+    return admission == "1" ||
+           (invited && admission.starts_with(reservedPrefix) &&
+            admission.find("," + accountIdentity(api.local) + ",") != std::string::npos);
 }
 bool Rooms::start(Op type, Call call) {
     error.clear();
@@ -158,17 +180,33 @@ bool Rooms::join(Id id) {
         error = "上一次 Steam 请求仍在结束";
         return false;
     }
-    if (!compatible(id) || field(id, openKey) != "1") {
-        event("join_rejected reason=closed_or_incompatible");
+    if (!compatible(id)) {
+        event("join_rejected reason=incompatible");
         error = "房间已关闭或版本不兼容";
         return false;
     }
+    if (!allowsJoin(id, id == invitation)) {
+        event("join_rejected reason=admission");
+        error = field(id, openKey).starts_with(reservedPrefix) ? "进行中的对局只允许原玩家重连"
+                                                               : "房间已关闭或版本不兼容";
+        return false;
+    }
     target = id;
+    targetHost = parseId(field(id, hostKey));
+    targetInvited = id == invitation;
     return start(Op::join, api.join(api.match, id));
 }
 void Rooms::inspect(Id id) {
-    if (!id || id == lobby)
+    if (!id)
         return;
+    if (id == lobby) {
+        inspecting = 0;
+        if (!hosting()) {
+            invitation = id;
+            event("invite_current_room");
+        }
+        return;
+    }
     if (api.requestData(api.match, id)) {
         inspecting = id;
         inspectAt = {};
@@ -178,15 +216,15 @@ void Rooms::inspect(Id id) {
         event("invite_lookup_failed");
 }
 bool Rooms::accept() {
-    const bool ok = join(invitation);
+    const bool ok = invitedToCurrent() ? rejoin() : join(invitation);
     if (ok || !pending)
         dismiss();
     return ok;
 }
 bool Rooms::invite() {
-    if (!active() || !joinOpen || !api.overlay(api.utils)) {
-        event(active() && joinOpen ? "invite_failed reason=overlay_unavailable"
-                                   : "invite_failed reason=room_closed");
+    if (!active() || !api.overlay(api.utils)) {
+        event(active() ? "invite_failed reason=overlay_unavailable"
+                       : "invite_failed reason=room_closed");
         error = "Steam 好友邀请不可用";
         return false;
     }
@@ -227,9 +265,16 @@ void Rooms::reconnected(const std::shared_ptr<DatagramRoute>& route) {
     if (active() && !hosting())
         transport = std::static_pointer_cast<Transport>(route);
 }
+bool Rooms::setType(int type) {
+    if (type == appliedType)
+        return true;
+    if (!api.setType(api.match, lobby, type))
+        return false;
+    appliedType = type;
+    return true;
+}
 bool Rooms::visibility() {
-    if (!hosting() || !joinOpen ||
-        !api.setType(api.match, lobby, publicRoom ? privateLobby : publicLobby)) {
+    if (!hosting() || !joinOpen || !setType(publicRoom ? privateLobby : publicLobby)) {
         error = "无法修改房间可见性";
         return false;
     }
@@ -328,9 +373,10 @@ void Rooms::finishCall() {
     const bool creating = action == Op::create;
     host = creating ? api.local : parseId(field(lobby, hostKey));
     const char* issue = nullptr;
-    if (!host || api.owner(api.match, lobby) != host)
+    if (!host || (!creating && host != targetHost) || api.owner(api.match, lobby) != host)
         issue = "owner_changed";
-    else if (!creating && (lobby != target || !compatible(lobby) || field(lobby, openKey) != "1"))
+    else if (!creating &&
+             (lobby != target || !compatible(lobby) || !allowsJoin(lobby, targetInvited)))
         issue = "closed_or_incompatible";
     else if (!(transport = openTransport(api, host, logger)))
         issue = "p2p_open";
@@ -343,10 +389,58 @@ void Rooms::finishCall() {
         return;
     }
     event(creating ? "ready role=host" : "ready role=client");
-    joinOpen = true;
+    joinOpen = creating || field(lobby, openKey) == "1";
+    if (creating)
+        publishedAdmission = "1";
     listings.clear();
 }
-void Rooms::poll(const BuildIdentity& identity, bool inLobby, const std::function<bool(Id)>& seat,
+void Rooms::updatePresence(bool playing) {
+    if (playing == !connectValue.empty())
+        return;
+    const auto* previous = api.getPresence(api.friends, api.local, "connect");
+    if (playing) {
+        auto connect = std::string(lobbyCommand) + std::to_string(lobby);
+        previousConnect = previous ? previous : "";
+        if (api.setPresence(api.friends, "connect", connect.c_str())) {
+            connectValue = std::move(connect);
+            event("friend_connect published");
+        }
+    } else {
+        // Only restore a presence value still owned by this room.
+        if (previous && previous == connectValue &&
+            !api.setPresence(api.friends, "connect",
+                             previousConnect.empty() ? nullptr : previousConnect.c_str()))
+            return;
+        previousConnect.clear();
+        connectValue.clear();
+    }
+}
+void Rooms::updateAdmission(bool inLobby, std::span<const std::string> seats) {
+    // A game invite carries a connect string, while a lobby invite grants entry.
+    // Friends-only permits either Steam flow without listing the running room.
+    if (!inLobby)
+        setType(friendsLobby);
+    else if (!publicRoom)
+        setType(privateLobby);
+    std::string admission = "1";
+    if (!inLobby && appliedType == publicLobby)
+        admission = "0"; // Keep seats private if Steam hasn't applied the visibility change yet.
+    else if (!inLobby) {
+        admission = reservedPrefix;
+        for (const auto& identity : seats) {
+            admission += identity;
+            admission += ',';
+        }
+    }
+    if (publishedAdmission != admission && api.set(api.match, lobby, openKey, admission.c_str())) {
+        publishedAdmission = admission;
+        event(inLobby ? "admission value=lobby" : "admission value=original_players");
+    }
+    if (inLobby && publicRoom && publishedAdmission == "1")
+        setType(publicLobby);
+    updatePresence(!inLobby);
+}
+void Rooms::poll(const BuildIdentity& identity, bool inLobby, std::span<const std::string> seats,
                  Logger log) {
     logger = log;
     if (identity.valid() &&
@@ -355,7 +449,7 @@ void Rooms::poll(const BuildIdentity& identity, bool inLobby, const std::functio
     if (!available())
         return;
     const auto now = Clock::now();
-    if (auto id = invitations.pending.exchange(0))
+    if (auto id = requested.exchange(0))
         inspect(id);
     if (inspecting && now >= inspectAt) {
         inspectAt = now + std::chrono::milliseconds(250);
@@ -370,16 +464,20 @@ void Rooms::poll(const BuildIdentity& identity, bool inLobby, const std::functio
     reap();
     if (pending)
         finishCall();
-    if (!lobby)
+    if (!lobby) {
+        updatePresence(false);
         return;
-    if (now >= publishAt || (hosting() && joinOpen != inLobby)) {
+    }
+    if (hosting() && joinOpen != inLobby) {
+        joinOpen = inLobby;
+        publishAt = {};
+    }
+    if (now >= publishAt) {
         publishAt = now + std::chrono::seconds(1);
         if (!checkOwner())
             return;
         if (hosting()) {
-            if (joinOpen != inLobby && api.joinable(api.match, lobby, inLobby) &&
-                api.set(api.match, lobby, openKey, inLobby ? "1" : "0"))
-                joinOpen = inLobby;
+            updateAdmission(inLobby, seats);
             if (publicRoom && joinOpen) {
                 auto location = api.localPingLocation(api.networkingUtils);
                 if (!location.empty() && location != publishedLocation &&
@@ -395,7 +493,7 @@ void Rooms::poll(const BuildIdentity& identity, bool inLobby, const std::functio
     if (hosting())
         transport->service([&](Id remote) {
             if (!inLobby)
-                return seat(remote);
+                return std::ranges::find(seats, accountIdentity(remote)) != seats.end();
             const int count = std::min<int>(api.members(api.match, lobby), maxPlayers);
             for (int i = 0; i < count; ++i)
                 if (api.member(api.match, lobby, i) == remote)
@@ -410,14 +508,19 @@ void Rooms::poll(const BuildIdentity& identity, bool inLobby, const std::functio
     }
 }
 void Rooms::dropLobby() {
+    updatePresence(false);
     if (lobby) {
+        if (invitation == lobby)
+            dismiss();
         if (host == api.local && api.owner(api.match, lobby) == host)
             api.joinable(api.match, lobby, false);
         api.leave(api.match, lobby);
     }
     transport.reset();
     host = lobby = 0;
+    appliedType = privateLobby;
     publicRoom = false;
+    publishedAdmission.clear();
     joinOpen = true;
     publishedMembers = 0;
     publishAt = {};

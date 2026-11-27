@@ -1,6 +1,7 @@
 #include "net/steam_api.h"
 #include <isteamnetworkingsockets.h>
 #include <isteamnetworkingutils.h>
+#include <algorithm>
 #include <charconv>
 #include <cstring>
 
@@ -78,6 +79,11 @@ bool Api::bind() {
     initRelay = [](ISteamNetworkingUtils* utils) { utils->InitRelayNetworkAccess(); };
     localPingLocation = localLocation;
     estimatePing = estimateFromLocal;
+    // Newer game DLLs can receive cold-start arguments through Steam instead of argv.
+    decltype(generic) appsInterface = nullptr;
+    if (load(library, launchCommand, "SteamAPI_ISteamApps_GetLaunchCommandLine") &&
+        load(library, appsInterface, "SteamAPI_ISteamClient_GetISteamApps"))
+        apps = appsInterface(c, hUser, hPipe, "STEAMAPPS_INTERFACE_VERSION008");
     bindStage = "identity";
     if (!sockets->GetIdentity(&identity) || !(local = identity.GetSteamID64()))
         return false;
@@ -103,6 +109,8 @@ bool Api::bind() {
            load(library, overlay, "SteamAPI_ISteamUtils_IsOverlayEnabled") &&
            load(library, invite, "SteamAPI_ISteamFriends_ActivateGameOverlayInviteDialog") &&
            load(library, name, "SteamAPI_ISteamFriends_GetPersonaName") &&
+           load(library, setPresence, "SteamAPI_ISteamFriends_SetRichPresence") &&
+           load(library, getPresence, "SteamAPI_ISteamFriends_GetFriendRichPresence") &&
            load(library, completed, "SteamAPI_ISteamUtils_IsAPICallCompleted") &&
            load(library, result, "SteamAPI_ISteamUtils_GetAPICallResult") &&
            load(library, subscribe, "SteamAPI_RegisterCallback") &&
@@ -119,13 +127,24 @@ void Callback::callResult(void* data, bool failed, Call) {
     if (!failed)
         event(data);
 }
+Id lobbyFromConnect(std::string_view text) {
+    return text.starts_with(lobbyCommand) ? parseId(text.substr(lobbyCommand.size())) : 0;
+}
 void InviteCallback::event(void* data) {
-    // GameLobbyJoinRequested_t starts with the lobby ID, followed by the inviter.
-    Id id;
-    std::memcpy(&id, data, sizeof(id));
-    pending.store(id);
+    Id id{};
+    if (callback == joinRequested) {
+        // GameLobbyJoinRequested_t starts with the lobby ID, followed by the inviter.
+        std::memcpy(&id, data, sizeof(id));
+    } else {
+        const auto& connect = static_cast<const PresenceJoinRequest*>(data)->connect;
+        const auto end = std::find(std::begin(connect), std::end(connect), '\0');
+        if (end != std::end(connect))
+            id = lobbyFromConnect({connect, static_cast<size_t>(end - connect)});
+    }
+    if (id)
+        pending.store(id);
 }
 int InviteCallback::size() {
-    return 2 * sizeof(Id);
+    return callback == joinRequested ? 2 * sizeof(Id) : sizeof(PresenceJoinRequest);
 }
 } // namespace isaac::lan::steam

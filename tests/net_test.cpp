@@ -744,18 +744,21 @@ void accountTransport() {
             return done();
         });
     };
+    auto hasSeat = [&](std::uint64_t id) {
+        const auto seats = host.accountSeats();
+        return std::ranges::find(seats, accountIdentity(id)) != seats.end();
+    };
     auto reject = [&](auto source, auto claimed) {
         TestSession other;
         require(join(other, source, claimed), "Could not initiate account handshake");
         wait(other,
              [&] { return other.phase() == Phase::failed || other.phase() == Phase::closed; });
-        require(!host.hasAccountSeat(source), "An unauthorized account received a seat");
+        require(!hasSeat(source), "An unauthorized account received a seat");
     };
     reject(stranger, guestId);
     require(join(guest, guestId, guestId), "Account join failed");
     wait(guest, [&] { return guest.phase() == Phase::lobby && host.players() == 2; });
-    require(guest.slot() == 1 && guest.identity() == accountIdentity(guestId) &&
-                host.hasAccountSeat(guestId),
+    require(guest.slot() == 1 && guest.identity() == accountIdentity(guestId) && hasSeat(guestId),
             "Authenticated account did not own P2");
     Start start;
     start.seed = "YV039KQF";
@@ -790,8 +793,7 @@ void accountTransport() {
     reject(stranger, guestId);
     require(guest.reconnect(), "Authenticated client could not reconnect");
     wait(guest, [&] { return guest.phase() == Phase::waiting; });
-    require(guest.slot() == 1 && host.hasAccountSeat(guestId),
-            "Account rejoin lost its original seat");
+    require(guest.slot() == 1 && hasSeat(guestId), "Account rejoin lost its original seat");
     auto restore = [&](TestSession& returning) {
         Start checkpoint = host.settings();
         checkpoint.snapshot = {2, 3, 5, 7};

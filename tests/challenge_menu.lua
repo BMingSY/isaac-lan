@@ -1503,3 +1503,30 @@ do
     draw()
     assert(labels["输入房主的 IP"] and not labels["创建私人房间"])
 end
+
+do
+    -- The Steam overlay has already obtained consent. No pause-menu action is needed.
+    status = {
+        phase = phaseValues.idle,
+        transport = "steam",
+        steamCanRejoin = true,
+        steamInvite = "original-room",
+        steamInviteRejoin = true,
+    }
+    local before = #commands
+    _IsaacLanMenuOpen(true, "steam")
+    draw()
+    draw()
+    assert(#commands == before + 1 and commands[#commands][1] == "steam_accept")
+    status.steamInvite = nil
+    draw()
+    status.phase, status.steamInvite, status.recovering = phaseValues.failed, "original-room", true
+    draw()
+    assert(#commands == before + 2 and commands[#commands][1] == "steam_accept")
+    status.steamInvite = nil
+    draw()
+    status.phase, status.transport, status.steamInvite, status.steamInviteRejoin =
+        phaseValues.idle, "udp", "cold-start-room", false
+    draw()
+    assert(commands[#commands][1] == "steam_accept" and #commands == before + 3)
+end
