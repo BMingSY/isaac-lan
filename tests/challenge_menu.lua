@@ -1477,3 +1477,29 @@ do
     end
     assert(prefix and #prefix > 0 and utf8.len(prefix) and longName:sub(1, #prefix) == prefix)
 end
+
+do
+    status = { phase = 0, transport = "udp", steamAvailable = true }
+    _IsaacLanMenuOpen(true, "steam")
+    draw()
+    assert(labels["创建私人房间"] and not labels["输入房主的 IP"])
+    status.transport, status.steamCanRejoin = "steam", true
+    _IsaacLanMenuOpen(true, "steam")
+    draw()
+    assert(labels["重连游戏"] and labels["离开房间"] and not labels["创建私人房间"])
+    local before = #commands
+    assert(not draw(27))
+    assert(#commands == before, "Hiding the room menu discarded Steam membership")
+    _IsaacLanMenuOpen(false)
+    draw(13)
+    assert(commands[#commands][1] == "steam_rejoin")
+    draw(40)
+    draw(13)
+    assert(commands[#commands][1] == "close")
+    status.transport, status.steamCanRejoin = "udp", false
+    draw()
+    assert(labels["创建私人房间"] and not labels["重连游戏"])
+    _IsaacLanMenuOpen(true, "lan")
+    draw()
+    assert(labels["输入房主的 IP"] and not labels["创建私人房间"])
+end

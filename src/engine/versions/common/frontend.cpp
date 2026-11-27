@@ -69,7 +69,7 @@ MainMenuPointer mainPointer = MainMenuPointer::none;
 std::string error, fingerprint, modFingerprint;
 int count = 0, draining = 0;
 bool prepared = false;
-bool lobbyRequested = false;
+std::optional<LobbyMenu> lobbyRequested;
 bool closeRequested = false, closeSent = false, closeReady = false;
 int menuKey = 0;
 bool menuClick = false;
@@ -570,7 +570,8 @@ void poll() {
     draining = number("draining");
     error = string("error");
     if (lobbyRequested && !prepared && menu_context::returnToMain(image, bindings.menu)) {
-        lobbyRequested = false;
+        const auto menu = *lobbyRequested;
+        lobbyRequested.reset();
         visible = true;
         chat_input::endField();
         menuKey = 0;
@@ -578,7 +579,8 @@ void poll() {
         const int saved = lua.getTop(state);
         if (lua.getGlobal(state, "_IsaacLanMenuOpen") == luaFunction) {
             lua.pushBoolean(state, true);
-            if (!invoke(1, 0))
+            lua.pushString(state, menu == LobbyMenu::steam ? "steam" : "lan");
+            if (!invoke(2, 0))
                 bridgeFailed = true;
         }
         lua.setTop(state, saved);
@@ -957,8 +959,8 @@ void configureConnection(const std::filesystem::path& path) {
     connectionPath = path;
     connectionSettings = presentation::loadConnectionSettings(path);
 }
-void returnToLobby() {
-    lobbyRequested = true;
+void returnToLobby(LobbyMenu menu) {
+    lobbyRequested = menu;
 }
 bool install(std::uintptr_t base, const std::wstring& root, void (*log)(const std::string&),
              int(__cdecl* bind)(lua_State*), HMODULE luaModule, bool installed) {

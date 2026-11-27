@@ -792,6 +792,23 @@ void accountTransport() {
     wait(guest, [&] { return guest.phase() == Phase::waiting; });
     require(guest.slot() == 1 && host.hasAccountSeat(guestId),
             "Account rejoin lost its original seat");
+    auto restore = [&](TestSession& returning) {
+        Start checkpoint = host.settings();
+        checkpoint.snapshot = {2, 3, 5, 7};
+        require(host.checkpoint(checkpoint, frame->tick + 1), "Account rejoin checkpoint failed");
+        wait(returning, [&] { return returning.phase() == Phase::running; });
+        require(returning.settings().snapshot == checkpoint.snapshot && returning.slot() == 1 &&
+                    returning.ready(),
+                "Returning account did not restore its checkpoint and seat");
+        wait(returning, [&] { return host.connectedMask() == 3; });
+    };
+    restore(guest);
+    require(guest.command(Command::leave), "Guest pause-menu exit failed");
+    wait(guest, [&] { return host.connectedMask() == 1; });
+    TestSession returning;
+    require(join(returning, guestId, guestId), "Fresh Steam session after voluntary exit failed");
+    wait(returning, [&] { return returning.phase() == Phase::waiting; });
+    restore(returning);
 }
 void floorRejoin() {
     Group g(2, 0, "127.0.0.1", {}, {1, 23});

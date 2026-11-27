@@ -49,6 +49,7 @@ class Rooms {
     void reap();
     Id enteredLobby(Op action, Call call, bool failed, int* response = nullptr);
     void dropLobby();
+    bool checkOwner();
     void inspect(Id id);
     bool publish();
 
@@ -65,6 +66,11 @@ class Rooms {
     bool browse();
     bool join(Id id);
     bool accept();
+    void disconnectGuest(std::string reason = {});
+    bool canRejoin() const {
+        return lobby && host != api.local && !transport;
+    }
+    bool rejoin();
     void dismiss() {
         invitation = inspecting = 0;
     }

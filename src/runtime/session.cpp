@@ -304,6 +304,18 @@ std::optional<InputClock::time_point> rejoinAt;
 // Survives the native exit tail and failed attempts, until a live view is applied
 // or the player explicitly leaves. Never restart a failed restore in a loop.
 bool guestRecovery = false;
+frontend::LobbyMenu lobbyMenu() {
+    return (session && session->route()) || steamRooms.active() || steamRooms.canRejoin()
+               ? frontend::LobbyMenu::steam
+               : frontend::LobbyMenu::lan;
+}
+bool sessionCommand(lan::Command command) {
+    if (!session || !session->command(command))
+        return false;
+    if (command == lan::Command::leave && view.gated && !guestRecovery)
+        steamRooms.disconnectGuest();
+    return true;
+}
 std::uint32_t nextTick = 0, currentTick = 0;
 std::array<std::uint32_t, lan::maxPlayers> consumedInputSequences{};
 struct StateCost {
@@ -369,7 +381,7 @@ void controls(const backend::Call& original) {
     if (request == pause_menu::Intent::resume && session->slot() == input::menuOwner())
         session->command(lan::Command::resume);
     else if (request == pause_menu::Intent::exit)
-        session->command(session->isHost() ? lan::Command::saveExit : lan::Command::leave);
+        sessionCommand(session->isHost() ? lan::Command::saveExit : lan::Command::leave);
 }
 void fail(const std::string& error);
 lan::Archive captureCheckpoint();
@@ -914,7 +926,10 @@ int steamAction(lua_State* L) {
             ok = steamRooms.browse();
         else {
             steamMods = lua.checkString(L, 3, nullptr);
-            if (action == "create")
+            if (action == "rejoin") {
+                ok = steamRooms.rejoin();
+                guestRecovery = ok;
+            } else if (action == "create")
                 ok = steamRooms.create();
             else if (action == "join")
                 ok = steamRooms.join(lan::steam::parseId(lua.checkString(L, 2, nullptr)));
@@ -1023,11 +1038,20 @@ int poll(lua_State* L) {
                 : session->join({}, 0, sessionFingerprint, {}, steamMods, personalAccess(), route);
         if (!attached) {
             steamCreated = false;
-            steamRooms.leave();
-            session->abort("无法启动 Steam 联机");
+            const char* message = "无法启动 Steam 联机";
+            session->abort(message);
+            if (guestRecovery) {
+                steamRooms.disconnectGuest(message);
+                session.reset();
+                guestRecovery = false;
+            } else
+                steamRooms.leave();
         }
-    } else if (hadSteam && !steamRooms.active() && session)
+    } else if (hadSteam && !steamRooms.active() && session) {
+        rejoinAt.reset();
+        guestRecovery = false;
         session->abort(steamRooms.failure());
+    }
     if (session)
         session->poll();
     if (session && session->phase() == lan::Phase::lobby && backend::managerReady() &&
@@ -1066,10 +1090,14 @@ int poll(lua_State* L) {
                     steamRooms.reconnected(session->route());
                 if (logger)
                     logger("network_return=RECONNECTING");
-            }
+            } else
+                session->abort("当前无法重连游戏");
         }
     }
-    if (guestRecovery && session && session->phase() == lan::Phase::lobby)
+    // A welcome alone also enters the lobby phase. Keep recovery pending until
+    // the host sends a lobby roster or starts restoring the running game.
+    if (guestRecovery && session && session->phase() == lan::Phase::lobby &&
+        session->slot() < session->players())
         guestRecovery = false;
     // Service input at render frequency too. Waiting until the next 30 Hz game
     // update to send it needlessly adds a whole frame to a LAN round trip.
@@ -1120,7 +1148,9 @@ int poll(lua_State* L) {
         lua.pushString(L, steamRooms.failure().c_str());
         lua.setField(L, -2, "steamError");
     }
-    lua.pushString(L, steamRooms.active() ? "steam" : "udp");
+    lua.pushBoolean(L, !session && steamRooms.canRejoin());
+    lua.setField(L, -2, "steamCanRejoin");
+    lua.pushString(L, lobbyMenu() == frontend::LobbyMenu::steam ? "steam" : "udp");
     lua.setField(L, -2, "transport");
     integer("tick", nextTick);
     integer("verified", session && session->verifiedTick() ? *session->verifiedTick() : -1ll);
@@ -1691,16 +1721,20 @@ int close(lua_State* L) {
     const bool gameExit = lua.getTop(L) > 0 && lua.checkInteger(L, 1) == 1;
     const bool guestExit =
         gameExit && session && !session->isHost() && (view.gated || launch.requested);
-    const bool retry = guestExit && ((session->phase() == lan::Phase::failed && !guestRecovery) ||
-                                     (session->phase() == lan::Phase::closed && guestRecovery));
-    guestRecovery = gameExit && (guestRecovery || retry);
+    const auto menu = lobbyMenu();
+    const bool canRecover = !session || !session->route() || steamRooms.active();
+    const bool retry = guestExit && canRecover &&
+                       ((session->phase() == lan::Phase::failed && !guestRecovery) ||
+                        (session->phase() == lan::Phase::closed && guestRecovery));
+    guestRecovery = gameExit && canRecover && (guestRecovery || retry);
     const bool returning = gameExit && view.playingEnding && !restartState.exiting && session &&
                            session->returnToLobby();
     const bool keep = gameExit && session &&
                       (returning || restartState.exiting ||
                        session->phase() == lan::Phase::waiting || guestRecovery);
-    if (returning || (guestExit && !restartState.exiting))
-        frontend::returnToLobby();
+    if (returning || (gameExit && !restartState.exiting &&
+                      (guestExit || (session && menu == frontend::LobbyMenu::steam))))
+        frontend::returnToLobby(menu);
     rejoinAt =
         retry ? std::optional{InputClock::now() + std::chrono::milliseconds(250)} : std::nullopt;
     // MC_PRE_GAME_EXIT runs before native Exit finishes saving/restoring its
@@ -1726,7 +1760,8 @@ int close(lua_State* L) {
     inputLatency = {};
     lastInputRoom.reset();
     if (!keep) {
-        steamRooms.leave();
+        if (!guestExit || !steamRooms.canRejoin())
+            steamRooms.leave();
         session.reset();
         input::leaveLan();
     }
@@ -1736,7 +1771,7 @@ int close(lua_State* L) {
     return 0;
 }
 int reconnect(lua_State* L) {
-    if (!session || session->isHost() || rejoinAt ||
+    if (!session || session->isHost() || rejoinAt || (session->route() && !steamRooms.active()) ||
         (guestRecovery && session->phase() != lan::Phase::failed) ||
         (session->phase() != lan::Phase::running && session->phase() != lan::Phase::failed &&
          session->phase() != lan::Phase::closed)) {
@@ -1754,7 +1789,7 @@ int reconnect(lua_State* L) {
         if (session->phase() == lan::Phase::running)
             session->close();
         rejoinAt = InputClock::now();
-        frontend::returnToLobby();
+        frontend::returnToLobby(lobbyMenu());
     }
     lua.pushBoolean(L, true);
     return 1;
@@ -1762,9 +1797,10 @@ int reconnect(lua_State* L) {
 int leave(lua_State* L) {
     const bool allowed = session && !session->isHost() && (view.gated || launch.requested);
     if (allowed) {
+        if (!sessionCommand(lan::Command::leave))
+            session->close();
         guestRecovery = false;
         rejoinAt.reset();
-        session->close();
         authorizedExit = true;
         rooms::requestExit(false);
     }
@@ -1780,7 +1816,7 @@ int bridgeFailure(lua_State* L) {
         afterExit(false);
         saves.resumingArchive.reset();
         guestRecovery = session && !session->isHost();
-        frontend::returnToLobby();
+        frontend::returnToLobby(lobbyMenu());
     }
     lua.pushBoolean(L, needsExit);
     return 1;
@@ -1886,8 +1922,9 @@ int epoch(lua_State* L) {
 }
 int sharedCommand(lua_State* L) {
     const auto command = lua.checkInteger(L, 1);
-    lua.pushBoolean(L, session && command >= 1 && command <= 4 &&
-                           session->command(static_cast<lan::Command>(command)));
+    lua.pushBoolean(L, command > static_cast<int>(lan::Command::none) &&
+                           command <= static_cast<int>(lan::Command::leave) &&
+                           sessionCommand(static_cast<lan::Command>(command)));
     return 1;
 }
 int pauseMenuState(lua_State* L) {
@@ -1907,7 +1944,7 @@ void executeMenu(const backend::Call& original) {
         backend::exitRequested() && backend::pause() > 0 && input::menuOwner() != 0) {
         backend::cancelExit();
         if (session->slot() == input::menuOwner())
-            session->command(lan::Command::leave);
+            sessionCommand(lan::Command::leave);
         return;
     }
     original();

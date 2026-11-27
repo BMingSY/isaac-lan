@@ -165,7 +165,9 @@ return function(Phase, Command, endpoint, characters, text)
                 command("reconnect")
             end, not busy)
             row(text("离开游戏"), function()
-                command("leave")
+                if command("leave") and status.transport == "steam" then
+                    ui.page, ui.selection = "steam", 1
+                end
             end)
         elseif modes then
             if deps.native.menu_official then
@@ -191,6 +193,11 @@ return function(Phase, Command, endpoint, characters, text)
                 deps.hide()
             end)
         elseif status.transport == "steam" and idle(phase) then
+            if status.steamCanRejoin then
+                row(text("重连游戏"), function()
+                    command("steam_rejoin")
+                end, not status.steamBusy)
+            end
             row(text("离开房间"), function()
                 if command("close") then
                     ui.page, ui.selection = "steam", 1

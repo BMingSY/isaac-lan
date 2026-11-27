@@ -51,12 +51,16 @@ local CHARACTER_SWAP_ICON_LAYER, CHARACTER_SWAP_KEY_LAYER = 1, 2
 local challenges = _IsaacLan.net_challenges()
 local roomOptions = _IsaacLan.net_room_options()
 local idle = model.idle
-function _IsaacLanMenuOpen(returning)
-    ui.page = not returning
-            and (_IsaacLan.menu_official or _IsaacLanStatus().steamAvailable)
-            and idle(_IsaacLanStatus().phase or Phase.idle)
-            and "modes"
-        or "lan"
+function _IsaacLanMenuOpen(returning, transport)
+    local status = _IsaacLanStatus()
+    ui.page = "lan"
+    if idle(status.phase or Phase.idle) and not status.recovering then
+        if transport == "steam" or status.transport == "steam" then
+            ui.page = "steam"
+        elseif not returning and (_IsaacLan.menu_official or status.steamAvailable) then
+            ui.page = "modes"
+        end
+    end
     ui.selection, ui.editing = 1, nil
     ui.ruleReturn, ui.listScroll, ui.modReturn = nil, nil, nil
     ui.autoReturn, ui.autoScroll = nil, nil
@@ -182,7 +186,7 @@ function _IsaacLanMenuRender(
     end
     ui.wasPlaying = playing
     if status.steamInvite then
-        if status.steamInviteInGame or not idle(phase) then
+        if status.steamInviteInGame or status.transport == "steam" or not idle(phase) then
             ui.deferredInvite = status.steamInvite
         elseif available and not status.steamBusy and phase == Phase.idle then
             visible = true
@@ -299,6 +303,8 @@ function _IsaacLanMenuRender(
             ui.editing = nil
             _IsaacLan.menu_text_end()
             key = 0
+        elseif ui.page == "steam" and status.transport == "steam" then
+            visible = false
         elseif ui.page == "steam" or ui.page == "steamList" or ui.page == "steamInvite" then
             _IsaacLanCommand(ui.page == "steamInvite" and "steam_dismiss" or "steam_cancel")
             ui.page, ui.selection, ui.listScroll =

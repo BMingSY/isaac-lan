@@ -195,6 +195,34 @@ bool Rooms::invite() {
     event("invite_overlay_requested");
     return true;
 }
+void Rooms::disconnectGuest(std::string reason) {
+    if (active() && !hosting()) {
+        error = std::move(reason);
+        transport.reset();
+        publishAt = {};
+        event("disconnected role=client");
+    }
+}
+bool Rooms::checkOwner() {
+    if (api.owner(api.match, lobby) == host)
+        return true;
+    dropLobby();
+    event("owner_left");
+    error = "Steam 房主已离开";
+    return false;
+}
+bool Rooms::rejoin() {
+    if (!canRejoin() || !checkOwner())
+        return false;
+    transport = openTransport(api, host, logger);
+    if (!transport) {
+        error = "当前无法重连游戏";
+        return false;
+    }
+    error.clear();
+    event("rejoin role=client");
+    return true;
+}
 void Rooms::reconnected(const std::shared_ptr<DatagramRoute>& route) {
     if (active() && !hosting())
         transport = std::static_pointer_cast<Transport>(route);
@@ -342,17 +370,12 @@ void Rooms::poll(const BuildIdentity& identity, bool inLobby, const std::functio
     reap();
     if (pending)
         finishCall();
-    if (!active())
+    if (!lobby)
         return;
     if (now >= publishAt || (hosting() && joinOpen != inLobby)) {
         publishAt = now + std::chrono::seconds(1);
-        auto owner = api.owner(api.match, lobby);
-        if (owner != host) {
-            dropLobby();
-            event("owner_left");
-            error = "Steam 房主已离开";
+        if (!checkOwner())
             return;
-        }
         if (hosting()) {
             if (joinOpen != inLobby && api.joinable(api.match, lobby, inLobby) &&
                 api.set(api.match, lobby, openKey, inLobby ? "1" : "0"))
@@ -379,7 +402,7 @@ void Rooms::poll(const BuildIdentity& identity, bool inLobby, const std::functio
                     return true;
             return false;
         });
-    if (logger && now >= logAt) {
+    if (transport && logger && now >= logAt) {
         logAt = now + std::chrono::seconds(5);
         auto sample = transport->diagnostics();
         if (!sample.empty())
@@ -403,7 +426,7 @@ void Rooms::dropLobby() {
 void Rooms::leave() {
     if (pending)
         event(std::string("cancel op=") + name(op));
-    if (active())
+    if (lobby)
         event(hosting() ? "left role=host" : "left role=client");
     cancelCall();
     dropLobby();

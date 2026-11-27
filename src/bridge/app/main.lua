@@ -630,7 +630,12 @@ function _IsaacLanCommand(action, value)
     elseif action:sub(1, 6) == "steam_" then
         local operation = action:sub(7)
         local mods = ""
-        if operation == "create" or operation == "join" or operation == "accept" then
+        if
+            operation == "create"
+            or operation == "join"
+            or operation == "accept"
+            or operation == "rejoin"
+        then
             bot.reset()
             playerOpacity.reset()
             chat.reset()

@@ -39,12 +39,13 @@ void singleAccount() {
     Api api;
     require(api.bind(), "Steam interfaces unavailable");
     Rooms rooms, browser;
+    bool inLobby = true;
     const BuildIdentity build{"single-account-test",
                               "isolated-" + std::to_string(GetCurrentProcessId())};
     auto poll = [&] {
         client.pump();
         auto noReservedSeat = [](Id) { return false; };
-        rooms.poll(build, true, noReservedSeat, nullptr);
+        rooms.poll(build, inLobby, [&](Id id) { return id == api.local; }, nullptr);
         browser.poll(build, true, noReservedSeat, nullptr);
     };
     auto wait = [&](auto done) {
@@ -70,15 +71,25 @@ void singleAccount() {
     struct Connection {
         ISteamNetworkingSockets* sockets;
         HSteamNetConnection handle;
+        void close() {
+            if (handle)
+                sockets->CloseConnection(handle, k_ESteamNetConnectionEnd_App_Generic, nullptr,
+                                         false);
+            handle = k_HSteamNetConnection_Invalid;
+        }
         ~Connection() {
-            sockets->CloseConnection(handle, k_ESteamNetConnectionEnd_App_Generic, nullptr, false);
+            close();
         }
     } connection{api.sockets, peer};
-    wait([&] {
-        SteamNetConnectionInfo_t info{};
-        return api.sockets->GetConnectionInfo(peer, &info) &&
-               info.m_eState == k_ESteamNetworkingConnectionState_Connected;
-    });
+    auto waitConnected = [&](HSteamNetConnection handle) {
+        require(handle, "Steam rejected the P2P connection");
+        wait([&] {
+            SteamNetConnectionInfo_t info{};
+            return api.sockets->GetConnectionInfo(handle, &info) &&
+                   info.m_eState == k_ESteamNetworkingConnectionState_Connected;
+        });
+    };
+    waitConnected(peer);
     const std::array<std::uint8_t, 5> sent{2, 3, 5, 7, 11};
     require(api.sockets->SendMessageToConnection(peer, sent.data(), sent.size(),
                                                  k_nSteamNetworkingSend_UnreliableNoDelay,
@@ -118,6 +129,22 @@ void singleAccount() {
         }
         return false;
     });
+    const auto room = browser.rooms().front().id;
     require(rooms.visibility(), "Could not make the test room private again");
+    inLobby = false;
+    wait([&] { return std::string_view(api.get(api.match, room, "il_open")) == "0"; });
+    connection.close();
+    Connection returning{api.sockets, api.sockets->ConnectP2P(self, virtualPort, 0, nullptr)};
+    waitConnected(returning.handle);
+    const std::array<std::uint8_t, 5> afterExit{13, 17, 19, 23, 29};
+    require(api.sockets->SendMessageToConnection(
+                returning.handle, afterExit.data(), afterExit.size(),
+                k_nSteamNetworkingSend_UnreliableNoDelay, nullptr) == k_EResultOK,
+            "Could not send on the replacement Steam connection");
+    wait([&] {
+        return rooms.route()->receive(source, received) == static_cast<int>(received.size());
+    });
+    require(source == api.local && received == afterExit, "Reserved account lost its new datagram");
+    std::puts("Reserved account reconnected over Steam P2P while the room was closed to new joins");
     rooms.leave();
 }

@@ -16,6 +16,7 @@ struct Platform {
     std::string localLocation;
     std::map<std::string, int> estimates;
     unsigned relayStarts = 0, locationWrites = 0;
+    bool routeAvailable = true;
     std::map<Id, std::map<std::string, std::string>> data;
     std::map<std::string, std::string> filters;
     Callback* invite = nullptr;
@@ -118,8 +119,9 @@ Api makeApi() {
 }
 std::vector<std::string> events;
 void contracts() {
-    Rooms rooms(makeApi(), [](Api&, Id, Logger) -> std::shared_ptr<Transport> {
-        return std::make_shared<Route>();
+    Rooms rooms(makeApi(), [](Api&, Id host, Logger) -> std::shared_ptr<Transport> {
+        require(host == platform.owner, "Opened a route to a different lobby owner");
+        return platform.routeAvailable ? std::make_shared<Route>() : nullptr;
     });
     auto poll = [&](bool lobby = true) {
         rooms.poll(
@@ -136,6 +138,8 @@ void contracts() {
     require(rooms.create(), "Retry failed");
     poll();
     require(rooms.hosting() && !rooms.isPublic(), "Host did not own private room");
+    rooms.disconnectGuest();
+    require(rooms.hosting() && !rooms.canRejoin(), "Host offered a guest rejoin");
     auto route = std::static_pointer_cast<Route>(rooms.route());
     require(route->admitted.contains(friendId) && !route->admitted.contains(stranger),
             "Admission ignored lobby membership");
@@ -187,8 +191,39 @@ void contracts() {
     poll();
     require(rooms.active() && !rooms.hosting() && !rooms.visibility(),
             "Invited guest cannot own the lobby");
+    const auto leaves = platform.left.size();
+    const auto joins = platform.joins;
+    std::weak_ptr<Transport> original = rooms.route();
+    platform.data[roomId]["il_open"] = "0";
+    rooms.disconnectGuest();
+    rooms.disconnectGuest();
+    poll(false);
+    require(original.expired() && rooms.canRejoin() && !rooms.active() &&
+                platform.left.size() == leaves,
+            "Leaving gameplay did not release P2P while preserving Steam membership");
+    platform.routeAvailable = false;
+    require(!rooms.rejoin() && rooms.canRejoin() && !rooms.failure().empty(),
+            "Failed P2P reopen consumed the room");
+    platform.routeAvailable = true;
+    require(rooms.rejoin() && rooms.active() && !rooms.canRejoin() && rooms.failure().empty() &&
+                platform.joins == joins && !rooms.rejoin(),
+            "Guest could not reconnect to its closed room through a fresh P2P route");
+    rooms.disconnectGuest();
+    platform.owner = stranger;
+    require(!rooms.rejoin() && !rooms.canRejoin() && platform.left.size() == leaves + 1,
+            "Owner migration preserved the previous rejoin target");
+
+    platform.owner = friendId;
+    platform.data[roomId]["il_open"] = "1";
+    notify(roomId);
+    require(rooms.accept(), "Fresh room did not accept an invite");
+    poll();
+    rooms.disconnectGuest();
+    rooms.leave();
+    require(!rooms.canRejoin() && !rooms.rejoin(), "Leaving Steam membership retained rejoin");
     for (const char* expected :
          {"steam_lobby=ready role=host", "steam_lobby=ready role=client",
+          "steam_lobby=disconnected role=client", "steam_lobby=rejoin role=client",
           "steam_lobby=cancel op=create", "steam_lobby=invite_failed reason=overlay_unavailable",
           "steam_lobby=invite_recognized", "steam_lobby=setup_failed op=join reason=owner_changed",
           "steam_lobby=result_failed op=join code=4"})
