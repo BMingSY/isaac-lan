@@ -1,0 +1,4 @@
+Valve GameNetworkingSockets v1.6.1, public interface headers
+https://github.com/ValveSoftware/GameNetworkingSockets/tree/d534c19aa760df3fb75fd20db13ba1932b8a5463/include/steam
+License: BSD-3-Clause (LICENSE). The game supplies the Steamworks implementation.
+Trailing whitespace in the imported headers is normalized.

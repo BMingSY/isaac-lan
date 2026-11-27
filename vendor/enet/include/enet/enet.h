@@ -380,8 +380,17 @@ typedef int (ENET_CALLBACK * ENetInterceptCallback) (struct _ENetHost * host, st
     @sa enet_host_bandwidth_limit()
     @sa enet_host_bandwidth_throttle()
   */
+/* Optional nonblocking datagram carrier. Address metadata is local to the carrier. */
+typedef struct _ENetDatagramIO
+{
+   void * context;
+   int (* send) (void *, const ENetAddress *, const ENetBuffer *, size_t);
+   int (* receive) (void *, ENetAddress *, ENetBuffer *);
+} ENetDatagramIO;
+
 typedef struct _ENetHost
 {
+   ENetDatagramIO       io;
    ENetSocket           socket;
    ENetAddress          address;                     /**< Internet address of the host */
    enet_uint32          incomingBandwidth;           /**< downstream bandwidth of the host */
@@ -582,6 +591,7 @@ ENET_API void         enet_packet_destroy (ENetPacket *);
 ENET_API int          enet_packet_resize  (ENetPacket *, size_t);
 ENET_API enet_uint32  enet_crc32 (const ENetBuffer *, size_t);
                 
+ENET_API ENetHost * enet_host_create_with_io (const ENetAddress *, size_t, size_t, enet_uint32, enet_uint32, const ENetDatagramIO *);
 ENET_API ENetHost * enet_host_create (const ENetAddress *, size_t, size_t, enet_uint32, enet_uint32);
 ENET_API void       enet_host_destroy (ENetHost *);
 ENET_API ENetPeer * enet_host_connect (ENetHost *, const ENetAddress *, size_t, enet_uint32);

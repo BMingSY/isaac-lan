@@ -2,7 +2,7 @@
 
 [简体中文](https://github.com/BMingSY/isaac-lan/blob/main/README.md) · English
 
-Play *The Binding of Isaac* with 2–4 players over a LAN. One installation supports both Windows game builds, **Repentance v1.7.9b.J835** and **Repentance+ v1.9.7.20.J514**. [Download Isaac LAN](https://github.com/BMingSY/isaac-lan/releases/latest)
+Play *The Binding of Isaac* with 2–4 players. Invite Steam friends, join a public room, or connect directly over a LAN. One installation supports both Windows game builds, **Repentance v1.7.9b.J835** and **Repentance+ v1.9.7.20.J514**. [Download Isaac LAN](https://github.com/BMingSY/isaac-lan/releases/latest)
 
 ## Features
 
@@ -34,16 +34,16 @@ WINEDLLOVERRIDES="winmm=n,b" %command%
 
 ## Host or join a game
 
-All players need the same game build and Isaac LAN version. Launch through Steam, select a save slot and open the third item on the main menu.
+All players need matching builds of the game and Isaac LAN. Launch through Steam, select a save slot, then open **Online**, the third item on the main menu. Repentance+ shows Isaac LAN's menu labels in Chinese. Its **Online Play** (官方联机) option opens the game's built-in multiplayer. Once everyone in an Isaac LAN lobby has chosen a character and is ready, the host selects **Start Game** (开始游戏).
 
-| Game | Menu |
-| --- | --- |
-| Repentance | Online |
-| Repentance+ | Online → LAN Co-op |
+### Steam Co-op
 
-1. The host checks the port (UDP 29506 by default), selects **Create Room** and shares the address and port with the other players.
-2. Each guest enters the host's IPv4 address, IPv6 address or domain name and port, then selects **Join Room**.
-3. Once everyone has chosen a character and is ready, the host starts the run.
+- **Invite friends.** The host selects **Steam Co-op → Create Private Room** (Steam 联机 → 创建私人房间), then opens **Steam Room → Invite Steam Friends** (Steam 房间 → 邀请 Steam 好友) in the lobby.
+- **Public rooms.** In **Steam Room**, the host sets visibility to **Public** (可见性：公开). Guests choose a room under **Steam Co-op → Public Rooms** (Steam 联机 → 公开房间).
+
+### LAN Co-op
+
+Open **LAN Co-op** (局域网联机). The host checks the port (UDP 29506 by default), selects **Create Room** (创建房间) and shares the address and port. Each guest enters the host's IPv4 address, IPv6 address or domain name, along with the port, then selects **Join Room** (加入房间). Repentance opens the LAN page directly when Steam Co-op is unavailable.
 
 ## Uninstall
 
@@ -116,9 +116,9 @@ The technical documentation and third-party mod integration guide are available 
 
 ## Report a problem
 
-In multiplayer chat, enter `/feedback` followed by a description. On success, the game shows a feedback ID. If the upload fails, it shows where the feedback package was saved locally.
+In lobby or in-game chat, enter `/feedback` followed by a description. After a crash, you can restart the game and submit from a multiplayer lobby. On success, the game shows a feedback ID. If the upload fails, it shows where the feedback package was saved locally.
 
-The package includes the game and extension versions, multiplayer logs from the last two launches, the game's `log.txt` and the extension's `config.ini`. It goes to the author's server and only the author can view the upload. Windows usernames in paths are redacted. [Feedback collection details (Chinese)](https://github.com/BMingSY/isaac-lan/blob/main/docs/feedback.md)
+The package includes the game and extension versions, multiplayer logs from the last two launches, the game's `log.txt` and the extension's `config.ini`. If a matching crash record is available, it also includes the crash text or exception summary. It goes to the author's server and only the author can view the upload. Windows usernames in paths are redacted. [Feedback collection details (Chinese)](https://github.com/BMingSY/isaac-lan/blob/main/docs/feedback.md)
 
 For GitHub reports, include the game and extension versions, host or guest role, reproduction steps and enabled mods. If you have a feedback ID, include it so the author can find the logs. [Open an issue](https://github.com/BMingSY/isaac-lan/issues/new/choose)
 

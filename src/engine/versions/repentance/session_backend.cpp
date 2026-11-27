@@ -35,9 +35,10 @@ __attribute__((naked)) void isaac_lan_repentance_completion() {
                          "%esp\n\t" ISAAC_LAN_NATIVE_BRANCH_RESTORE);
 }
 }
-const CompletionHook completionHook{backend::entry::recordCompletionBoundary,
-                                    reinterpret_cast<void*>(isaac_lan_repentance_completion),
-                                    &originalRecordCompletion};
+bool addVersionHooks(std::uintptr_t image, SessionHooks& hooks) {
+    return hooks.add(image + backend::entry::recordCompletionBoundary,
+                     isaac_lan_repentance_completion, originalRecordCompletion);
+}
 constinit const Bindings bindings{
     .manager = backend::globals::manager,
     .game = backend::globals::game,

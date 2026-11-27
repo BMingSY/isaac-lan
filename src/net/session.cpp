@@ -54,6 +54,7 @@ struct Session::Impl {
     std::string failure, version, fingerprint, identity, mods, hostIP;
     std::optional<CompatibilityFailure> compatibilityFailure;
     std::shared_ptr<HostResolution> resolving;
+    std::shared_ptr<DatagramRoute> route;
     std::vector<ENetAddress> hostAddresses;
     std::size_t nextHostAddress = 0;
     Clock::time_point joinAt, connectUntil;
@@ -211,7 +212,7 @@ struct Session::Impl {
             const auto& address = hostAddresses[nextHostAddress++];
             try {
                 peers[0] = std::make_unique<Peer>(
-                    io, io->connectDatagram(address, {version, fingerprint}));
+                    io, io->connectDatagram(address, {version, fingerprint}, route));
                 connecting = true;
                 const auto now = Clock::now();
                 const auto candidates = hostAddresses.size() - nextHostAddress + 1;
@@ -485,6 +486,7 @@ struct Session::Impl {
         p.mods = r.string();
         const auto declaredAccess = r.access();
         if (!validIdentity(id) ||
+            (p.pipe->remoteAccount && accountIdentity(p.pipe->remoteAccount) != id) ||
             std::find(identities.begin(), identities.end(), id) != identities.end())
             throw std::runtime_error("Invalid or duplicate player identity");
         identities[slot] = id;
@@ -1038,7 +1040,9 @@ struct Session::Impl {
                     const auto declaredAccess = r.access();
                     const auto found =
                         std::find(identities.begin() + 1, identities.begin() + playerCount, id);
-                    if (!validIdentity(id) || found == identities.begin() + playerCount)
+                    if (!validIdentity(id) ||
+                        (p.pipe->remoteAccount && accountIdentity(p.pipe->remoteAccount) != id) ||
+                        found == identities.begin() + playerCount)
                         throw std::runtime_error("Only original players can rejoin");
                     const auto i = static_cast<unsigned>(found - identities.begin());
                     if (peers[i] || (activeMask & (1u << i)))
@@ -1090,12 +1094,13 @@ Session::Session(std::string version, void (*logger)(const std::string&), Observ
     : impl(std::make_unique<Impl>(std::move(version), logger, observer, debugLogs)) {}
 Session::~Session() = default;
 bool Session::host(std::uint16_t port, const std::string& fingerprint, const std::string& mods,
-                   const LobbyAccess& access) {
+                   const LobbyAccess& access, std::shared_ptr<DatagramRoute> route) {
     if (!impl->winsock || impl->state != Phase::idle ||
         !BuildIdentity{impl->version, fingerprint}.valid() || !access.valid())
         return false;
     try {
-        impl->listener = impl->io->listenDatagram(port, {impl->version, fingerprint});
+        impl->route = std::move(route);
+        impl->listener = impl->io->listenDatagram(port, {impl->version, fingerprint}, impl->route);
         impl->boundPort = impl->listener->port;
         impl->hosting = true;
         impl->fingerprint = fingerprint;
@@ -1109,16 +1114,19 @@ bool Session::host(std::uint16_t port, const std::string& fingerprint, const std
     }
 }
 bool Session::join(const std::string& ip, std::uint16_t port, const std::string& fingerprint,
-                   const std::string& identity, const std::string& mods,
-                   const LobbyAccess& access) {
+                   const std::string& identity, const std::string& mods, const LobbyAccess& access,
+                   std::shared_ptr<DatagramRoute> route) {
     if (!impl->winsock || impl->state != Phase::idle ||
         !BuildIdentity{impl->version, fingerprint}.valid() || !access.valid())
         return false;
     try {
-        impl->identity = identity.empty() ? randomIdentity() : identity;
+        impl->route = std::move(route);
+        impl->identity = impl->route        ? accountIdentity(impl->route->localAccount())
+                         : identity.empty() ? randomIdentity()
+                                            : identity;
         if (!validIdentity(impl->identity))
             throw std::runtime_error("Invalid player identity");
-        if (!validHostAddress(ip))
+        if (!impl->route && !validHostAddress(ip))
             throw std::runtime_error("Enter a valid IPv4/IPv6 address or host name");
         impl->fingerprint = fingerprint;
         impl->mods = mods;
@@ -1130,7 +1138,9 @@ bool Session::join(const std::string& ip, std::uint16_t port, const std::string&
         ENetAddress address{};
         address.port = port;
         const std::string host(unbracketHostAddress(ip));
-        if (enet_address_set_host_ip(&address, host.c_str()) == 0) {
+        if (impl->route) {
+            impl->hostAddresses.push_back(accountAddress(impl->route->hostAccount()));
+        } else if (enet_address_set_host_ip(&address, host.c_str()) == 0) {
             impl->hostAddresses.push_back(address);
             impl->connectNextAddress();
         } else {
@@ -1142,9 +1152,17 @@ bool Session::join(const std::string& ip, std::uint16_t port, const std::string&
         return false;
     }
 }
+const std::shared_ptr<DatagramRoute>& Session::route() const {
+    return impl->route;
+}
+std::span<const std::string> Session::accountSeats() const {
+    if (!impl->hosting || !impl->route)
+        return {};
+    return std::span(impl->identities).subspan(1, impl->playerCount - 1);
+}
 bool Session::reconnect() {
     if (impl->hosting || (impl->state != Phase::failed && impl->state != Phase::closed) ||
-        impl->hostIP.empty())
+        (!impl->route && impl->hostIP.empty()))
         return false;
     std::erase_if(retiring, [](const auto& value) { return value->workersFinished(); });
     constexpr std::size_t maxRetiringConnections = 2;
@@ -1152,6 +1170,9 @@ bool Session::reconnect() {
         return false;
     const auto ip = impl->hostIP, identity = impl->identity, fingerprint = impl->fingerprint,
                mods = impl->mods, version = impl->version;
+    auto route = impl->route ? impl->route->reconnect() : nullptr;
+    if (impl->route && !route)
+        return false;
     const auto port = impl->boundPort;
     const auto logger = impl->logger;
     const auto observer = impl->observer;
@@ -1162,7 +1183,7 @@ bool Session::reconnect() {
     retiring.push_back(std::move(impl));
     impl = std::make_unique<Impl>(version, logger, observer, debug);
     impl->choices = choices;
-    return join(ip, port, fingerprint, identity, mods, access);
+    return join(ip, port, fingerprint, identity, mods, access, std::move(route));
 }
 bool Session::beginStage(const Stage& value) {
     if (!impl->hosting || impl->state != Phase::running || impl->ending)
@@ -1310,6 +1331,17 @@ void Session::poll() {
         return;
     try {
         impl->finishBytes();
+        if (impl->route && impl->state == Phase::connecting && !impl->nextHostAddress) {
+            constexpr auto platformTimeout = std::chrono::seconds(40);
+            auto state = impl->route->state();
+            if (state == DatagramRoute::State::closed ||
+                Clock::now() - impl->joinAt >= platformTimeout)
+                throw std::runtime_error("Steam P2P connection unavailable");
+            if (state == DatagramRoute::State::connecting)
+                return;
+            impl->joinAt = Clock::now();
+            impl->connectNextAddress();
+        }
         if (impl->resolving) {
             if (!impl->resolving->ready.load(std::memory_order_acquire)) {
                 if (Clock::now() - impl->joinAt > Impl::joinTimeout)

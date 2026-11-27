@@ -18,6 +18,21 @@ void __stdcall recordCompletion(unsigned event, unsigned character, unsigned dif
     originalRecordCompletion(event, character, difficulty);
     observeCompletion(event, character, difficulty);
 }
+// The caller owns this reference and releases it after dispatch, even when the
+// game could not resolve the Steam lobby to one of its own lobby objects.
+struct LobbyReference {
+    const void* vtable;
+    const void* lobby;
+    const void* owner;
+};
+static_assert(offsetof(LobbyReference, lobby) == 4 && sizeof(LobbyReference) == 12);
+using MemberChange = void(__stdcall*)(const LobbyReference*, const std::uint64_t*, unsigned);
+MemberChange originalMemberChange;
+void __stdcall memberChange(const LobbyReference* reference, const std::uint64_t* member,
+                            unsigned change) {
+    if (reference && reference->lobby)
+        originalMemberChange(reference, member, change);
+}
 void persistProgress(std::uintptr_t image, std::uintptr_t progress) {
     using Method = void(__attribute__((thiscall))*)(void*);
     auto* object = reinterpret_cast<void*>(progress);
@@ -25,9 +40,12 @@ void persistProgress(std::uintptr_t image, std::uintptr_t progress) {
     reinterpret_cast<Method>(image + repentance_plus::entry::progressSaveFile)(object);
 }
 } // namespace
-const CompletionHook completionHook{backend::entry::recordCharacterCompletion,
-                                    reinterpret_cast<void*>(recordCompletion),
-                                    reinterpret_cast<void**>(&originalRecordCompletion)};
+bool addVersionHooks(std::uintptr_t image, SessionHooks& hooks) {
+    return hooks.add(image + backend::entry::recordCharacterCompletion, recordCompletion,
+                     originalRecordCompletion) &&
+           hooks.add(image + backend::entry::officialLobbyMemberChange, memberChange,
+                     originalMemberChange);
+}
 constinit const Bindings bindings{
     .manager = backend::globals::manager,
     .game = backend::globals::game,

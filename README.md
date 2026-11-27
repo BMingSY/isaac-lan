@@ -2,7 +2,7 @@
 
 简体中文 · [English](https://github.com/BMingSY/isaac-lan/blob/main/docs/i18n/README.en.md)
 
-《以撒的结合》的 2–4 人局域网联机扩展。一次安装即可在 Windows 版 **忏悔 v1.7.9b.J835** 和 **忏悔＋ v1.9.7.20.J514** 中使用。
+《以撒的结合》的 2–4 人联机扩展。你可以邀请 Steam 好友、加入公开房间，或通过局域网地址直连。一次安装即可在 Windows 版 **忏悔 v1.7.9b.J835** 和 **忏悔＋ v1.9.7.20.J514** 中使用。[下载 Isaac LAN](https://github.com/BMingSY/isaac-lan/releases/latest)
 
 ## 功能
 
@@ -34,16 +34,16 @@ WINEDLLOVERRIDES="winmm=n,b" %command%
 
 ## 创建与加入
 
-所有玩家需使用相同的游戏版本和扩展版本。从 Steam 启动游戏，选择存档后打开主菜单第三项。
+所有玩家需使用相同的游戏版本和 Isaac LAN 构建。从 Steam 启动游戏，选择存档栏，打开主菜单第三项「联机模式（Online）」。忏悔＋的扩展菜单使用中文，其中「官方联机」通往游戏自带的多人模式。进入 Isaac LAN 大厅后，全员选好角色并准备，由房主选择「开始游戏」。
 
-| 游戏 | 菜单路径 |
-| --- | --- |
-| 忏悔 | 联机模式（Online） |
-| 忏悔＋ | 联机模式（Online） → 局域网联机 |
+### Steam 联机
 
-1. 房主确认端口（默认 UDP 29506），选择「创建房间」，把地址和端口发给队友。
-2. 队友输入房主的 IPv4 地址、IPv6 地址或域名，填好端口，选择「加入房间」。
-3. 所有人选好角色并准备后，由房主开始游戏。
+- **邀请好友**　房主选择「Steam 联机 → 创建私人房间」，在大厅打开「Steam 房间 → 邀请 Steam 好友」。
+- **公开房间**　房主在「Steam 房间」把可见性切换为「公开」。队友从「Steam 联机 → 公开房间」选择房间。
+
+### 局域网联机
+
+打开「局域网联机」。房主确认端口（默认 UDP 29506），选择「创建房间」，把地址和端口发给队友。队友输入房主的 IPv4 地址、IPv6 地址或域名及端口，选择「加入房间」。忏悔在 Steam 联机不可用时会直接打开局域网页面。
 
 ## 卸载
 
@@ -123,9 +123,9 @@ python3 tools/build_package.py --build build-repentance --build build-repentance
 
 ## 问题与建议
 
-在联机聊天中输入 `/feedback 问题描述`。提交成功后，游戏会显示反馈编号。上传失败时，游戏会显示本地反馈包的位置。
+在联机大厅或对局的聊天中输入 `/feedback 问题描述`。闪退后可重新启动游戏，进入联机大厅提交。提交成功后，游戏会显示反馈编号。上传失败时，游戏会显示本地反馈包的位置。
 
-反馈包包含游戏和扩展版本、最近两次启动的联机日志、游戏的 `log.txt` 和扩展的 `config.ini`。日志上传到作者服务器，仅作者可见。路径中的 Windows 用户名会隐去。[反馈收集范围](https://github.com/BMingSY/isaac-lan/blob/main/docs/feedback.md)
+反馈包包含游戏和扩展版本、最近两次启动的联机日志、游戏的 `log.txt` 和扩展的 `config.ini`。有匹配的崩溃记录时，还会附上崩溃文本或异常摘要。日志上传到作者服务器，仅作者可见。路径中的 Windows 用户名会隐去。[反馈收集范围](https://github.com/BMingSY/isaac-lan/blob/main/docs/feedback.md)
 
 在 GitHub 报告问题时，请写明游戏版本、你是房主还是客机、复现步骤和使用的 Mod，并附上已有的反馈编号或相关日志。[提交 Issue](https://github.com/BMingSY/isaac-lan/issues)
 

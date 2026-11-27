@@ -12,7 +12,8 @@ namespace isaac::frontend {
 void prepareView();
 const std::vector<presentation::MinimapView>& minimapViews();
 void render();
-void returnToLobby();
+enum class LobbyMenu { lan, steam };
+void returnToLobby(LobbyMenu menu);
 bool capturesInput();
 void configureConnection(const std::filesystem::path& path);
 void configureChat(const chat::Appearance& appearance,

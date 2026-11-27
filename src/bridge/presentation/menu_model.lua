@@ -57,7 +57,10 @@ return function(Phase, Command, endpoint, characters, text)
         end
     end
     local function back(ui)
-        if ui.page == "autoTeleport" then
+        if ui.page == "steamOptions" then
+            ui.page, ui.selection = "lan", ui.steamReturn or 1
+            return true
+        elseif ui.page == "autoTeleport" then
             ui.page, ui.selection, ui.listScroll = "rules", ui.autoReturn or 1, ui.autoScroll or 1
             ui.autoReturn, ui.autoScroll = nil, nil
             return true
@@ -162,7 +165,9 @@ return function(Phase, Command, endpoint, characters, text)
                 command("reconnect")
             end, not busy)
             row(text("离开游戏"), function()
-                command("leave")
+                if command("leave") and status.transport == "steam" then
+                    ui.page, ui.selection = "steam", 1
+                end
             end)
         elseif modes then
             if deps.native.menu_official then
@@ -177,9 +182,83 @@ return function(Phase, Command, endpoint, characters, text)
                 ui.page = "lan"
                 ui.selection = 1
             end)
+            if status.steamAvailable then
+                row(text("Steam 联机"), function()
+                    if command("close") then
+                        ui.page, ui.selection = "steam", 1
+                    end
+                end)
+            end
             row(text("返回"), function()
                 deps.hide()
             end)
+        elseif status.transport == "steam" and idle(phase) then
+            if status.steamCanRejoin then
+                row(text("重连游戏"), function()
+                    command("steam_rejoin")
+                end, not status.steamBusy)
+            end
+            row(text("离开房间"), function()
+                if command("close") then
+                    ui.page, ui.selection = "steam", 1
+                end
+            end)
+        elseif ui.page == "steamInvite" and idle(phase) then
+            row(text("加入受邀房间"), function()
+                if command("steam_accept") then
+                    ui.page, ui.selection = "steam", 1
+                end
+            end, not status.steamBusy)
+            row(text("忽略邀请"), function()
+                command("steam_dismiss")
+                ui.page, ui.selection = "modes", 1
+            end)
+        elseif ui.page == "steam" and idle(phase) then
+            row(text("创建私人房间"), function()
+                command("steam_create")
+            end, not status.steamBusy)
+            row(text("公开房间"), function()
+                if command("steam_browse") then
+                    ui.page, ui.selection, ui.listScroll, ui.steamRooms = "steamList", 1, 1, nil
+                end
+            end, not status.steamBusy)
+            row(text("返回"), function()
+                command("steam_cancel")
+                ui.page, ui.selection = "modes", 1
+            end)
+        elseif ui.page == "steamList" and idle(phase) then
+            row(text("刷新"), function()
+                command("steam_browse")
+            end, not status.steamBusy)
+            local selection = ui.selection or 1
+            local selected = ui.steamRooms and ui.steamRooms[selection - 1]
+            local onBack = ui.steamRooms and selection == ui.steamBackRow
+            local rooms = deps.native.net_steam_list()
+            if selected then
+                ui.selection = 1
+            end
+            for _, room in ipairs(rooms) do
+                local ping = room.pingMs and tostring(room.pingMs) or "--"
+                local summary = string.format("%d/%d  %sms", room.players, room.limit, ping)
+                row(room.name .. "  " .. summary, function()
+                    command("steam_join", room.id)
+                end, not status.steamBusy)
+                rows[#rows].roomName, rows[#rows].roomSummary = room.name, summary
+                if selected and selected.id == room.id then
+                    ui.selection = #rows
+                end
+            end
+            if #rows == 1 and not status.steamBusy then
+                row(text("没有公开房间"), function() end, false)
+            end
+            row(text("返回"), function()
+                command("steam_cancel")
+                ui.page, ui.selection, ui.listScroll, ui.steamRooms = "steam", 2, nil, nil
+            end)
+            ui.steamRooms, ui.steamBackRow = rooms, #rows
+            if onBack then
+                ui.selection = #rows
+            end
         elseif idle(phase) then
             row(text("创建房间"), function()
                 if validPort(ui) then
@@ -202,12 +281,27 @@ return function(Phase, Command, endpoint, characters, text)
                 end
             end, ui.ip ~= "")
             row(text("返回"), function()
-                if deps.native.menu_official then
+                if deps.native.menu_official or status.steamAvailable then
                     ui.page = "modes"
-                    ui.selection = 2
+                    ui.selection = deps.native.menu_official and 2 or 1
                 else
                     deps.hide()
                 end
+            end)
+        elseif phase == Phase.lobby and ui.page == "steamOptions" then
+            row(text("邀请 Steam 好友"), function()
+                command("steam_invite")
+            end)
+            if host then
+                row(
+                    text(status.steamPublic and "可见性：公开" or "可见性：私人"),
+                    function()
+                        command("steam_visibility")
+                    end
+                )
+            end
+            row(text("返回"), function()
+                back(ui)
             end)
         elseif phase == Phase.lobby and ui.page == "modSettings" then
             for _, setting in ipairs(settings) do
@@ -425,8 +519,16 @@ return function(Phase, Command, endpoint, characters, text)
                     ui.page, ui.selection, ui.listScroll, ui.modReturn = "modSettings", 1, 1, index
                 end)
             end
+            if status.transport == "steam" then
+                local index = #rows + 1
+                row(text("Steam 房间"), function()
+                    ui.page, ui.selection, ui.steamReturn = "steamOptions", 1, index
+                end)
+            end
             row(text("离开房间"), function()
-                command("close")
+                if command("close") and status.transport == "steam" then
+                    ui.page, ui.selection = "steam", 1
+                end
             end)
         elseif phase == Phase.running then
             if (status.pause or 0) == 0 then

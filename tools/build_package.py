@@ -79,12 +79,18 @@ def write_installer(output):
     for document in ("README.md", "docs/i18n/README.en.md", "LICENSE"):
         shutil.copy2(ROOT / document, output)
     shutil.copy2(ROOT / "docs/faq.md", output / "FAQ.md")
-    for mode in ("Install", "Uninstall"):
-        (output / f"{mode}.cmd").write_bytes(
+    shutil.copy2(ROOT / "tools/collect_steam_logs.ps1", output)
+    launchers = {
+        "Install": ("install.ps1", " -Mode Install"),
+        "Uninstall": ("install.ps1", " -Mode Uninstall"),
+        "Collect-Steam-Logs": ("collect_steam_logs.ps1", ""),
+    }
+    for name, (script, arguments) in launchers.items():
+        (output / f"{name}.cmd").write_bytes(
             (
-                '@echo off\r\nsetlocal\r\npowershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0install.ps1" -Mode '
-                + mode
-                + '\r\nset "installer_exit=%errorlevel%"\r\npause\r\nexit /b %installer_exit%\r\n'
+                "@echo off\r\nsetlocal\r\n"
+                f'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0{script}"{arguments}\r\n'
+                'set "installer_exit=%errorlevel%"\r\npause\r\nexit /b %installer_exit%\r\n'
             ).encode("ascii")
         )
     shutil.copytree(ROOT / "third_party", output / "licenses")

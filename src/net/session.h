@@ -5,6 +5,7 @@
 #include <optional>
 
 namespace isaac::lan {
+class DatagramRoute;
 struct TransportResources {
     std::size_t connections = 0, queuedBytes = 0, receiveCapacity = 0, worldBytes = 0;
     std::size_t cachedWorldBytes = 0, inFlightBytes = 0, inFlightStates = 0;
@@ -14,7 +15,7 @@ struct TransportResources {
                   fullWorldBytes = 0, comparedWorldBytes = 0;
 };
 // Main-thread session coordinator. Socket/byte workers exchange owned values;
-// no worker invokes Lua or touches game objects. All traffic uses UDP/ENet.
+// no worker invokes Lua or touches game objects. ENet owns channel delivery on both transports.
 class Session {
     struct Impl;
     std::unique_ptr<Impl> impl;
@@ -28,11 +29,13 @@ class Session {
     Session(const Session&) = delete;
     Session& operator=(const Session&) = delete;
     bool host(std::uint16_t port, const std::string& fingerprint, const std::string& mods = {},
-              const LobbyAccess& access = {});
+              const LobbyAccess& access = {}, std::shared_ptr<DatagramRoute> route = {});
     bool join(const std::string& address, std::uint16_t port, const std::string& fingerprint,
               const std::string& identity = {}, const std::string& mods = {},
-              const LobbyAccess& access = {});
+              const LobbyAccess& access = {}, std::shared_ptr<DatagramRoute> route = {});
     bool reconnect();
+    const std::shared_ptr<DatagramRoute>& route() const;
+    std::span<const std::string> accountSeats() const;
     void poll();
     void close();
     void finish();

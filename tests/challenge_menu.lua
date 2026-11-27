@@ -202,6 +202,7 @@ _IsaacLan = {
     end,
 }
 _IsaacLanModules = {
+    ["presentation/chat_layout"] = dofile(root .. "/src/bridge/presentation/chat_layout.lua"),
     ["presentation/menu_locale"] = dofile(root .. "/src/bridge/presentation/menu_locale.lua"),
     ["presentation/fonts"] = dofile(root .. "/src/bridge/presentation/fonts.lua"),
     ["presentation/menu_assets"] = dofile(root .. "/src/bridge/presentation/menu_assets.lua"),
@@ -1445,3 +1446,87 @@ do
     Options.Language = "zh"
 end
 print("PASS live Chinese and English Repentance LAN, English fallback and original Plus locale")
+
+do
+    status = { phase = 0, steamAvailable = true }
+    local longName = string.rep("地下室", 12)
+    _IsaacLan.net_steam_list = function()
+        return {
+            { id = "1", name = longName, players = 1, limit = 4, pingMs = 50 },
+            { id = "2", name = "Caves", players = 2, limit = 4 },
+        }
+    end
+    _IsaacLanMenuOpen(false)
+    draw()
+    if _IsaacLan.menu_official then
+        draw(40)
+    end
+    draw(40)
+    draw(13)
+    draw(40)
+    draw(13)
+    draw()
+    local known, missing = assert(labelPositions["1/4  50ms"]), assert(labelPositions["2/4  --ms"])
+    assert(known.x == missing.x and known.y < missing.y and labelPositions.Caves)
+    local prefix
+    for label, at in pairs(labelPositions) do
+        if label:sub(-#"…") == "…" and at.y == known.y then
+            prefix = label:sub(1, -#"…" - 1)
+            assert(at.x < known.x)
+        end
+    end
+    assert(prefix and #prefix > 0 and utf8.len(prefix) and longName:sub(1, #prefix) == prefix)
+end
+
+do
+    status = { phase = 0, transport = "udp", steamAvailable = true }
+    _IsaacLanMenuOpen(true, "steam")
+    draw()
+    assert(labels["创建私人房间"] and not labels["输入房主的 IP"])
+    status.transport, status.steamCanRejoin = "steam", true
+    _IsaacLanMenuOpen(true, "steam")
+    draw()
+    assert(labels["重连游戏"] and labels["离开房间"] and not labels["创建私人房间"])
+    local before = #commands
+    assert(not draw(27))
+    assert(#commands == before, "Hiding the room menu discarded Steam membership")
+    _IsaacLanMenuOpen(false)
+    draw(13)
+    assert(commands[#commands][1] == "steam_rejoin")
+    draw(40)
+    draw(13)
+    assert(commands[#commands][1] == "close")
+    status.transport, status.steamCanRejoin = "udp", false
+    draw()
+    assert(labels["创建私人房间"] and not labels["重连游戏"])
+    _IsaacLanMenuOpen(true, "lan")
+    draw()
+    assert(labels["输入房主的 IP"] and not labels["创建私人房间"])
+end
+
+do
+    -- The Steam overlay has already obtained consent. No pause-menu action is needed.
+    status = {
+        phase = phaseValues.idle,
+        transport = "steam",
+        steamCanRejoin = true,
+        steamInvite = "original-room",
+        steamInviteRejoin = true,
+    }
+    local before = #commands
+    _IsaacLanMenuOpen(true, "steam")
+    draw()
+    draw()
+    assert(#commands == before + 1 and commands[#commands][1] == "steam_accept")
+    status.steamInvite = nil
+    draw()
+    status.phase, status.steamInvite, status.recovering = phaseValues.failed, "original-room", true
+    draw()
+    assert(#commands == before + 2 and commands[#commands][1] == "steam_accept")
+    status.steamInvite = nil
+    draw()
+    status.phase, status.transport, status.steamInvite, status.steamInviteRejoin =
+        phaseValues.idle, "udp", "cold-start-room", false
+    draw()
+    assert(commands[#commands][1] == "steam_accept" and #commands == before + 3)
+end

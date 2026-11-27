@@ -1,4 +1,5 @@
 #pragma once
+#include "engine/versions/common/hooks.h"
 #include "engine/versions/common/progress.h"
 #include <optional>
 
@@ -24,14 +25,9 @@ struct Game {
     unsigned pauseMenu, console, stage, stageType, floorSeeds, stateFlags;
     unsigned fadeAction, fadeAlpha, restartHeldFrames;
 };
-// Version-owned call/branch adapters observe native-eligible awards. The session
-// component owns installation and rollback with its other lifecycle hooks.
-struct CompletionHook {
-    unsigned target;
-    void* detour;
-    void** original;
-};
-extern const CompletionHook completionHook;
+// Register edition-specific native entries in the same transaction as the shared session hooks.
+using SessionHooks = native_hooks::Group<14>;
+bool addVersionHooks(std::uintptr_t image, SessionHooks& hooks);
 void observeCompletion(unsigned event, unsigned character, unsigned difficulty) noexcept;
 struct Bindings {
     std::uint32_t manager, game;
