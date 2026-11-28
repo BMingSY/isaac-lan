@@ -190,7 +190,7 @@ function _IsaacLanFrame()
     end
     if status.verified >= 2550 and not finished then
         assert(status.verified < 3100, "Carried Tainted Forgotten stalled the floor transition")
-        if not native.rooms_ready() or Game():GetLevel():GetStage() ~= LevelStage.STAGE1_2 then
+        if not native.rooms_ready() or Game():GetLevel():GetStage() ~= LevelStage.STAGE2_1 then
             return status
         end
         assert(
@@ -375,7 +375,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 assert(native.rooms_move(0, native.rooms_positions()["1"].index, 0, -1))
             elseif t == 2460 then
                 actor(1, function(_, room)
-                    assert(Game():GetLevel():GetStage() == LevelStage.STAGE1_1)
+                    assert(Game():GetLevel():GetStage() == LevelStage.STAGE1_2)
                     local index = room:GetGridIndex(
                         room:FindFreeTilePosition(room:GetCenterPos() + Vector(80, 0), 0)
                     )
