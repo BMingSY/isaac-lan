@@ -233,7 +233,20 @@ local function step(t)
             )
         end)
         assert(native.rooms_move(1, origin, 0, -1))
+    elseif t > 609 and t < 810 then
+        -- Keep both idle players clear of the doors while the native spawn pit closes.
+        for slot = 0, 1 do
+            actor(slot, function(p)
+                p.Position = Game():GetRoom():GetCenterPos() + Vector(slot == 0 and -100 or 100, 0)
+                p.Velocity = Vector.Zero
+            end)
+        end
     elseif t == 810 then
+        local positions = native.rooms_positions()
+        assert(
+            positions["0"].index == origin and positions["1"].index == origin,
+            "Doorway trial must start with both players in the summoning room"
+        )
         actor(1, function(p)
             check(
                 "spawn-pit-closes-after-reunion",

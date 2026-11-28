@@ -115,8 +115,15 @@ class ProgressFixtureTests(unittest.TestCase):
         data += struct.pack("<3I", 2, 1984, 496) + bytes(1984) + bytes(range(200))
         source = data + struct.pack("<I", checksum(data[16:]))
         for host in (True, False):
-            result = patch(source, backend="repentance", host=host, endings=True)
+            result = patch(source, backend="repentance", host=host, endings=True, completion=True)
             self.assertEqual(result[32 + 637], int(host))
+            counters = 32 + layout.achievements + 12
+            self.assertEqual(
+                struct.unpack_from("<I", result, counters + 173 * 4)[0], 0 if host else 1
+            )
+            self.assertEqual(
+                struct.unpack_from("<I", result, counters + 27 * 4)[0], 1 if host else 2
+            )
             self.assertEqual(
                 struct.unpack_from("<I", result, 32 + 638 + 12 + 495 * 4)[0], 98765 if host else 321
             )

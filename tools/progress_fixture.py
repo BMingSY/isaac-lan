@@ -103,10 +103,12 @@ def patch(
     if knife and not host:
         achievements[AZAZEL_ACHIEVEMENT] = 1
     if completion:
-        # Isaac's twelve original widget layers; online bits deliberately differ
-        # from the single-player marks to catch accidental blue/purple overlays.
+        # Repentance stores marks as 0..2. Repentance+ also stores online marks.
+        online_marks = 0
+        if layout == LAYOUTS["repentance_plus"]:
+            online_marks = 8 if host else 4
         for layer, identifier in enumerate((173, 27, 41, 55, 69, 83, 97, 116, 130, 144, 423, 457)):
-            value = ((layer + (0 if host else 1)) % 3) | (8 if host else 4)
+            value = ((layer + (0 if host else 1)) % 3) | online_marks
             struct.pack_into("<I", data, counters + identifier * 4, value)
     del achievements
     struct.pack_into("<I", data, len(data) - 4, checksum(data[16:-4]))
