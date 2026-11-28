@@ -2305,6 +2305,9 @@ void beginStage(bool same, int animation, unsigned restart, unsigned cinematic,
     if (logger)
         logger("floor_event=SENT epoch=" + std::to_string(view.floorEpoch));
 }
+void ordinaryFloorDeparture() {
+    integrationCallback("_IsaacLanOrdinaryFloorDeparture");
+}
 void prepareEnding() {
     view.playingEnding = true;
     input::reset();

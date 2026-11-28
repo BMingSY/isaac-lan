@@ -42,6 +42,7 @@ void refreshAutomation(std::uint32_t renderFrame);
 void pollLocalConsole();
 void beginStage(bool same, int animation, unsigned restart = 0, unsigned cinematic = 0,
                 std::span<const std::string> departureAnimations = {});
+void ordinaryFloorDeparture();
 void prepareEnding();
 bool beginEnding(unsigned ending, bool completed = false);
 void beginRewind(std::span<const std::uint8_t> bytes);
