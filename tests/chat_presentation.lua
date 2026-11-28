@@ -3,6 +3,7 @@ local factory = dofile(root .. "/src/bridge/presentation/chat.lua")
 local layout = dofile(root .. "/src/bridge/presentation/chat_layout.lua")
 local fonts = dofile(root .. "/src/bridge/presentation/fonts.lua")
 local resources = dofile(root .. "/tests/fixtures/presentation_assets.lua")(arg[2] == "vanilla")
+local commands = dofile(root .. "/src/bridge/api/chat_commands.lua")(2048)
 local completion = dofile(root .. "/src/bridge/presentation/chat_completion.lua")
 local roomDefinitions = dofile(root .. "/src/bridge/core/room_types.lua")
 local draws, loads, missing = {}, {}, false
@@ -181,7 +182,7 @@ local function create(image, opacity, options, messages, service)
         end,
         limits = { characters = 60, commandBytes = 2048 },
         options = options or { FoundHUD = false, ExtraHUDStyle = 0, HUDOffset = 0 },
-        completion = completion(roomDefinitions, 2048),
+        completion = completion(roomDefinitions, 2048, commands),
     }, layout)
     ui.input = input
     return ui
@@ -347,6 +348,7 @@ assert(draws[5].position.X == resized.position.X, "Clicking the input line start
 -- Enter and controller confirmation use the real service without accepting an empty draft.
 local service = dofile(root .. "/src/bridge/runtime/chat.lua")({
     limits = { characters = 60, commandBytes = 2048, history = 200, dice = 999 },
+    commands = commands,
     nonce = function()
         return string.rep("0", 32)
     end,

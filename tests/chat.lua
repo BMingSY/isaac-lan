@@ -43,7 +43,13 @@ for slot = 0, 2 do
         packets[#packets + 1] = { target, packet }
         return true
     end
+    local commands = dofile(root .. "/src/bridge/api/chat_commands.lua")(limits.commandBytes)
+    local logs = {}
     local chat = factory({
+        commands = commands,
+        log = function(message)
+            logs[#logs + 1] = message
+        end,
         limits = limits,
         dice = dice,
         emotes = emoteCount,
@@ -95,7 +101,8 @@ for slot = 0, 2 do
             return "反馈：" .. text
         end,
     }, wire)
-    peers[slot + 1] = { chat = chat, info = info, context = context }
+    peers[slot + 1] =
+        { chat = chat, info = info, context = context, commands = commands, logs = logs }
 end
 local function poll()
     for _, peer in ipairs(peers) do
@@ -585,6 +592,67 @@ poll()
 assert(#packets == packetCount and #executions == executionCount)
 assert(#host.messages == hostCount and #other.messages == otherCount and next(guest.bubbles) == nil)
 peers[2].info.ready = 1
+-- A slash command executes once on the submitting peer, even in the lobby.
+local commandCalls = {}
+for i, peer in ipairs({ peers[1], peers[2] }) do
+    peer.commands.register("example", {
+        name = "dance",
+        aliases = { "wave" },
+        description = "做动作",
+        usage = "<动作>",
+        execute = function(args, ctx)
+            commandCalls[#commandCalls + 1] = { i, args, ctx }
+            if args == "fail" then
+                error("callback failed")
+            end
+            if args == "invalid" then
+                return {}
+            end
+            if args ~= "" then
+                return args
+            end
+        end,
+    })
+    local beforePackets, beforeMessages = #packets, #peer.chat.messages
+    peer.info.ready = 0
+    assert(peer.chat.submit("/WaVe 指向  左边"))
+    local call = commandCalls[#commandCalls]
+    assert(#commandCalls == i and call[1] == i and call[2] == "指向  左边")
+    assert(call[3].name == "dance" and call[3].alias == "wave" and call[3].ownerId == i)
+    local reply = peer.chat.messages[#peer.chat.messages]
+    assert(#peer.chat.messages == beforeMessages + 2 and reply.text == call[2] and not reply.bubble)
+    assert(peer.chat.submit("/help"))
+    assert(peer.chat.messages[#peer.chat.messages].text == "/dance /wave <动作>　做动作")
+    assert(#packets == beforePackets)
+    peer.info.ready = 1
+end
+assert(
+    guest.submit("/dance fail") and guest.messages[#guest.messages].text == "Mod 命令执行失败"
+)
+assert(peers[2].logs[1]:find("callback failed", 1, true))
+assert(
+    guest.submit("/dance invalid")
+        and guest.messages[#guest.messages].text == "Mod 命令返回的文字无效或过长"
+)
+assert(guest.submit("/dance") and guest.messages[#guest.messages].command)
+local beforeNetwork = #commandCalls
+inbox[1][1] = {
+    1,
+    wire.encodeRequest({
+        sequence = 1,
+        nonce = string.rep("x", 32),
+        run = peers[2].info.runId,
+        epoch = 1,
+        room = 84,
+        dimension = 0,
+        text = "/dance hello",
+    }),
+}
+poll()
+assert(
+    #commandCalls == beforeNetwork
+        and guest.messages[#guest.messages].text == "此命令在本机执行"
+)
 local layout = dofile(root .. "/src/bridge/presentation/chat_layout.lua")
 local function measure(text)
     return utf8.len(text) * 10

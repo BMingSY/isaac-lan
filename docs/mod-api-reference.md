@@ -24,6 +24,7 @@
 | `HideHUD(component, audience)` | 在本机隐藏选定参与者的一种 HUD 组件，返回恢复函数 |
 | `OnHUDRender(component, audience, draw)` | 在该组件的绘制位置调用 `draw(panel)`，返回取消函数 |
 | `OnHUDHearts(audience, draw)` | 等价于 `OnHUDRender("hearts", audience, draw)` |
+| `RegisterChatCommand(definition)` | 注册联机控制台的斜杠命令，返回撤销函数 |
 | `RegisterMenuSetting(definition)` | 在本机大厅的「Mod 设置」页登记选项，返回撤销函数 |
 | `On(event, fn)` | 订阅 LAN 生命周期，返回取消函数；无 LAN 时不产生事件 |
 | `RequireEffectSync(variant, subtype?)` | 完整同步匹配的房间特效，返回可重复调用的释放函数，见下文 |
@@ -54,6 +55,28 @@
 | `SessionReady` | 第一份或重建后的第一份视图就绪 |
 
 事件在游戏主线程、完整状态应用和原生作用域恢复后、UI 绘制前执行，按表中顺序触发需要的事件。除 `StateReset` 外在本机只读视图中调用。事件参数为提交上下文副本；取角色用 `lan:View()`。不会补发订阅前的事件；`SessionReady` 可在同局多次发生。订阅报错只停用该订阅。`StateReset` 时不能用旧对象访问世界。
+
+## 联机控制台命令
+
+用 `lan:RegisterChatCommand` 注册命令后，装有该 Mod 的玩家在联机大厅或对局中可以用 `/help` 查看说明，用 Tab 补全命令及别名。例如输入 `/whoami` 或 `/me` 可以查看自己的联机编号。
+
+```lua
+local lan = IsaacLAN:Attach(mod, "example.party")
+if lan.RegisterChatCommand then
+    lan:RegisterChatCommand({
+        name = "whoami",
+        aliases = { "me" },
+        description = "查看自己的联机编号",
+        execute = function(args, context)
+            return ("你是 %dP"):format(context.ownerId)
+        end,
+    })
+end
+```
+
+`name` 和可选的 `aliases` 省略斜杠，以英文字母开头，最长 32 字节，可含英文字母、数字、下划线、点和连字符。命令名忽略大小写。内置命令、别名及掷骰写法保留。名称与本机已有注册冲突时，整次注册失败。可选的 `usage` 用于显示参数提示，例如 `"<物品名>"`。调用撤销函数或关闭句柄会同时移除命令、帮助和补全。单机 SDK 接受注册，联机控制台在加入会话后可用。
+
+`execute(args, context)` 在提交命令的玩家本机执行一次。`args` 是命令名后的参数文本，`context.ownerId` 从 1 开始，`context.name` 是主名称，`context.alias` 是实际输入的名称，两者均为小写。返回字符串可向本人显示结果（最多 2048 个 UTF-8 字节），返回 `nil` 则静默完成。要修改联机玩法，可在回调中调用已定义动作的 `action:Request(payload)`，由房主校验并执行。兼容较早的 API 2 构建时，先检查句柄上是否有该方法。
 
 ## 联机 HUD 与大厅设置
 

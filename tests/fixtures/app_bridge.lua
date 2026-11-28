@@ -125,6 +125,8 @@ return function(root, native, modules)
     native.chat_limits = function()
         return { characters = 60, commandBytes = 2048, history = 200, dice = 999 }
     end
+    modules["api/public"].chatCommands =
+        dofile(root .. "/src/bridge/api/chat_commands.lua")(native.chat_limits().commandBytes)
     native.api_nonce = native.api_nonce or function()
         return string.rep("n", 32)
     end

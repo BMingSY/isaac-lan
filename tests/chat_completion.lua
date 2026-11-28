@@ -1,7 +1,8 @@
 local root = assert(arg[1])
 local factory = dofile(root .. "/src/bridge/presentation/chat_completion.lua")
 local rooms = dofile(root .. "/src/bridge/core/room_types.lua")
-local model = factory(rooms, 2048)
+local commands = dofile(root .. "/src/bridge/api/chat_commands.lua")(2048)
+local model = factory(rooms, 2048, commands)
 local function input(text)
     return { open = true, text = text, cursor = #text, anchor = #text }
 end
@@ -113,4 +114,23 @@ assert(
     #model.rows == 0 and not model.advance(input(nearLimit)),
     "Completion exceeded the byte limit"
 )
+local prefix = input("/nav")
+model.update(prefix)
+assert(#model.rows == 0)
+local remove = commands.register("example", {
+    name = "route",
+    aliases = { "nav" },
+    usage = "<楼层>",
+    description = "选路线",
+    execute = function() end,
+})
+model.update(prefix)
+assert(
+    #model.rows == 1 and model.rows[1].detail == "选路线" and model.advance(prefix) == "/nav "
+)
+model.update(input("/nav "))
+assert(model.usage == "/nav <楼层>")
+remove()
+model.update(input("/nav "))
+assert(#model.rows == 0 and model.usage == nil)
 print("PASS command completion, aliases, arguments, Tab cycling, IME and editor boundaries")

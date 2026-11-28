@@ -1,27 +1,7 @@
 -- Local suggestions only; command execution remains owned by the chat service.
-return function(roomDefinitions, maxBytes)
+return function(roomDefinitions, maxBytes, registry)
     assert(maxBytes, "Chat command byte limit is required")
-    local rebirth = {
-        names = { "rebirth" },
-        detail = "让自己或队友重生",
-        usage = "[1p-4p]",
-    }
-    local commands = {
-        { names = { "help", "h" }, detail = "查看命令" },
-        { names = { "c", "console" }, detail = "原版控制台", usage = "<原版命令>" },
-        { names = { "tp" }, detail = "传送", usage = "<房间/玩家/坐标>" },
-        { names = { "lanbot" }, detail = "本机托管", usage = "<操作>" },
-        { names = { "opacity" }, detail = "玩家不透明度", usage = "<玩家> <0～100>" },
-        { names = { "feedback", "fb" }, detail = "提交反馈", usage = "<反馈内容>" },
-        { names = { "e", "echo" }, detail = "本机输出", usage = "<文字>" },
-        { names = { "d6" }, detail = "掷六面骰" },
-        { names = { "2d6" }, detail = "掷两颗六面骰" },
-        { names = { "d20" }, detail = "掷二十面骰" },
-        { names = { "d100" }, detail = "掷百分骰" },
-        { names = { "d100b" }, detail = "奖励骰" },
-        { names = { "d100p" }, detail = "惩罚骰" },
-        rebirth,
-    }
+    local commands, rebirth = registry.entries, registry.byName.rebirth
     local nativeCommands = {
         { names = { "help" }, detail = "原版命令帮助" },
         { names = { "giveitem", "g" }, detail = "给予道具", usage = "<道具ID>" },
@@ -132,7 +112,7 @@ return function(roomDefinitions, maxBytes)
             end
             return rows
         end
-        local command = named(commands, name:lower())
+        local command = registry.byName[name:lower()]
         if not command then
             return {}, nil
         end
@@ -208,7 +188,10 @@ return function(roomDefinitions, maxBytes)
             or #input.text > maxBytes
         then
             model.reset()
-        elseif input.text ~= model.text then
+        elseif input.text ~= model.text or model.revision ~= registry.revision then
+            if model.revision ~= registry.revision then
+                model.applied, model.revision = nil, registry.revision
+            end
             if input.text ~= model.applied or #model.rows <= 1 then
                 model.rows, model.usage = query(input.text)
                 model.selected, model.applied = 1, nil

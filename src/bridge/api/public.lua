@@ -47,6 +47,7 @@ bridge.lifecycle = modules["api/lifecycle"](bridge)
 bridge.effects = modules["api/effect_sync"](modules["sync/effect_classes"], EffectVariant)
 bridge.actions = modules["api/actions"](bridge)
 bridge.hud = modules["api/hud"](bridge, native, modules["api/hud_players"](bridge, native))
+bridge.chatCommands = modules["api/chat_commands"](native.chat_limits().commandBytes)
 bridge.menuSettings = modules["api/menu_settings"](bridge.log)
 _G._IsaacLanRenderHUD = bridge.hud.render
 local sdk = assert(modules["api/sdk"])
@@ -123,6 +124,9 @@ function api:Attach(mod, id)
         hideHUD = bridge.hud.hide,
         renderHUD = function(component, audience, fn)
             return bridge.hud.subscribe(id, component, audience, fn)
+        end,
+        chatCommand = function(def)
+            return bridge.chatCommands.register(id, def)
         end,
         menuSetting = function(def)
             return bridge.menuSettings.register(id, def)
