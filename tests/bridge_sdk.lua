@@ -184,8 +184,42 @@ local late = g:Action("late"):Request(nil, {
         lateCalls = lateCalls + 1
     end,
 })
+local commands = guest.bridge.chatCommands
+local function register(name, aliases)
+    return g:RegisterChatCommand({
+        name = name,
+        aliases = aliases,
+        description = "查看路线",
+        execute = function() end,
+    })
+end
+local remove = register("Route", { "path" })
+assert(commands.byName.route == commands.byName.path)
+for _, names in ipairs({
+    { "other", { "free", "PATH" } },
+    { "Other", { "OTHER" } },
+    { "help" },
+    { "console" },
+    { "fb" },
+    { "d6" },
+    { "d10p" },
+    { "3d6" },
+    { "a/b" },
+    { "space here" },
+    { "other", { [2] = "gap" } },
+}) do
+    assert(not pcall(register, table.unpack(names)))
+    assert(not commands.byName.other and not commands.byName.free)
+end
+remove()
+local removeAgain = register("path", { "route" })
+remove()
+assert(commands.byName.path and commands.byName.route)
 g:Close()
 g:Close()
+assert(not commands.byName.route and not commands.byName.path)
+removeAgain()
+assert(not pcall(register, "closed"))
 assert(late.status == "unknown" and late.code == "integration_closed" and lateCalls == 1)
 host.bridge.actions.step()
 guest.bridge.actions.poll()
@@ -200,6 +234,15 @@ local sdk = assert(loadfile(root .. "/src/bridge/api/sdk.lua", "t", env))()
 local soloMod = modFixture()
 local solo = sdk.attach(soloMod, "example.solo")
 assert(sdk.attach(soloMod, "example.solo") == solo)
+local cancelCommand = solo:RegisterChatCommand({
+    name = "route",
+    description = "查看路线",
+    execute = function()
+        error("No LAN console in solo")
+    end,
+})
+cancelCommand()
+cancelCommand()
 local soloRenders = 0
 solo:OnLocalRender(function(view)
     assert(not view.networked and view.players[1] == runtime.actors[1])

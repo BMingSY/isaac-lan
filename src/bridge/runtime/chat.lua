@@ -177,6 +177,10 @@ return function(deps, wire)
         if lower == "e" or lower == "echo" then
             return { kind = "echo", text = args }
         end
+        local entry = deps.commands.byName[lower]
+        if entry and entry.execute then
+            return { kind = "custom", entry = entry, name = lower, text = args }
+        end
         if lower:match("^[%dd]") then
             local body, audience = scope(text:sub(2))
             local parsed, reason = dice.parse(body, limits.dice)
@@ -359,6 +363,27 @@ return function(deps, wire)
                 "/feedback /fb 描述：上传日志并反馈问题",
             }) do
                 chat.output(line, { audience = "self" })
+            end
+            for _, entry in ipairs(deps.commands.entries) do
+                if entry.help then
+                    chat.output(entry.help, { audience = "self" })
+                end
+            end
+            return true
+        elseif parsed.kind == "custom" then
+            local entry = parsed.entry
+            local ok, result = pcall(entry.execute, parsed.text, {
+                ownerId = info.slot + 1,
+                name = entry.names[1],
+                alias = parsed.name,
+            })
+            if not ok then
+                deps.log(entry.namespace .. " chat_command_error=" .. tostring(result))
+                errorTo("Mod 命令执行失败", info.slot)
+            elseif
+                result ~= nil and not chat.output(result, { owner = info.slot, audience = "self" })
+            then
+                errorTo("Mod 命令返回的文字无效或过长", info.slot)
             end
             return true
         elseif parsed.kind == "teleport" and parsed.target.kind == "help" then

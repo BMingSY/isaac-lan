@@ -55,6 +55,9 @@ return function(root)
                 return p.actors[p.scope ~= nil and p.scope + 1 or index + 1]
             end,
         }
+        function native.chat_limits()
+            return { commandBytes = 2048 }
+        end
         function native.api_info()
             return {
                 active = p.active,
@@ -152,6 +155,7 @@ return function(root)
             "api/hud_players",
             "api/hud",
             "api/menu_settings",
+            "api/chat_commands",
             "api/sdk",
             "api/public",
             "compat/mods/wrapping",

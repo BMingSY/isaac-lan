@@ -381,6 +381,8 @@ local playerOpacity = _IsaacLanModules["presentation/player_opacity"]({
 })
 chat = _IsaacLanModules["runtime/chat"]({
     limits = chatLimits,
+    commands = integration.chatCommands,
+    log = integration.log,
     nonce = native.api_nonce,
     clock = Isaac.GetTime,
     send = native.chat_send,
@@ -436,7 +438,8 @@ local chatUI = _IsaacLanModules["presentation/chat"]({
     clock = Isaac.GetTime,
     completion = _IsaacLanModules["presentation/chat_completion"](
         _IsaacLanModules["core/room_types"],
-        chatLimits.commandBytes
+        chatLimits.commandBytes,
+        integration.chatCommands
     ),
 }, _IsaacLanModules["presentation/chat_layout"])
 function _IsaacLanChatRender()

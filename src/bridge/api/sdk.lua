@@ -102,6 +102,12 @@
 ---@field networkMs? integer Ping label, when measured.
 ---@field syncMs? integer Ping label, when measured.
 ---@alias IsaacLANHeartPanel IsaacLANHUDPanel
+---@class IsaacLANChatCommand
+---@field name string Command name without a slash.
+---@field aliases? string[] Additional names for the same command.
+---@field description string Text displayed in /help and completion.
+---@field usage? string Argument hint.
+---@field execute fun(args: string, context: {ownerId: integer, name: string, alias: string}): string? Runs on the submitting machine. Returned text is private.
 ---@class IsaacLANMenuSetting
 ---@field id string
 ---@field name string
@@ -126,6 +132,7 @@
 ---@field HideHUD fun(self: IsaacLANHandle, component: IsaacLANHUDComponent, audience: IsaacLANHUDAudience): function
 ---@field OnHUDRender fun(self: IsaacLANHandle, component: IsaacLANHUDComponent, audience: IsaacLANHUDAudience, draw: fun(panel: IsaacLANHUDPanel): boolean?): function
 ---@field OnHUDHearts fun(self: IsaacLANHandle, audience: IsaacLANHUDAudience, draw: fun(panel: IsaacLANHeartPanel): boolean?): function
+---@field RegisterChatCommand fun(self: IsaacLANHandle, definition: IsaacLANChatCommand): function
 ---@field RegisterMenuSetting fun(self: IsaacLANHandle, definition: IsaacLANMenuSetting): function
 ---@field RegisterChallenge fun(self: IsaacLANHandle, definition: IsaacLANChallengeDefinition): IsaacLANChallenge
 ---@field RequireEffectSync fun(self: IsaacLANHandle, variant: integer, subtype?: integer): function Keep matching room effects in this view. Returns a release function.
@@ -273,6 +280,10 @@ function SDK.create(mod, id, backend)
     end
     function handle:OnHUDHearts(audience, draw)
         return self:OnHUDRender("hearts", audience, draw)
+    end
+    function handle:RegisterChatCommand(definition)
+        attached()
+        return backend and own(backend.chatCommand(definition)) or noop
     end
     function handle:RegisterMenuSetting(definition)
         attached()

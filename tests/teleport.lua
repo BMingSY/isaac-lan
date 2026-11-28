@@ -127,6 +127,8 @@ for _, peer in ipairs({ host, guest }) do
         end,
     })
     peer.chat = chatFactory({
+        commands = peer.bridge.chatCommands,
+        log = peer.bridge.log,
         teleport = peer.teleport,
         limits = { characters = 60, commandBytes = 2048, history = 200, dice = 999 },
         nonce = native.api_nonce,
