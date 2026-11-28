@@ -112,3 +112,54 @@ component.departFloor(player, 0, false, { "Trapdoor" })
 component.departFloor(player, 0, false, { "LightTravel" })
 assert(#departures == 3, "Co-op ghost acquired a living body's departure")
 print("PASS authoritative light/trapdoor departures, unrelated actions and co-op ghosts")
+
+-- Carrying a skeleton onto a trapdoor gives the native transition a second
+-- departing body, even if the soul switches to its pickup pose.
+local types = dofile(root .. "/tests/fixtures/game_enums.lua").PlayerType
+local forgotten = dofile(root .. "/src/bridge/compat/characters/forgotten.lua")(types)
+local room = {
+    GetGridIndex = function(_, pos)
+        return pos.tile
+    end,
+}
+local function body(kind, tile, pose)
+    local actor = { Position = { tile = tile }, pose = pose, jumps = 0 }
+    function actor:GetPlayerType()
+        return kind
+    end
+    function actor:GetSprite()
+        return self
+    end
+    function actor:IsPlaying(name)
+        return self.pose == name
+    end
+    function actor:IsCoopGhost()
+        return self.ghost or false
+    end
+    function actor:GetOtherTwin()
+        return self.twin
+    end
+    function actor:AnimateTrapdoor()
+        self.jumps, self.pose = self.jumps + 1, "Trapdoor"
+    end
+    return actor
+end
+local soul = body(types.PLAYER_THESOUL_B, 42, "Trapdoor")
+local bone = body(types.PLAYER_THEFORGOTTEN_B, 42, "WalkDown")
+forgotten.departTrapdoor(soul, room)
+soul.twin = bone
+for _, other in ipairs({ "WalkDown", "LightTravel", "PickupWalkDown" }) do
+    soul.pose = other
+    forgotten.departTrapdoor(soul, room)
+end
+soul.pose, bone.Position.tile = "Trapdoor", 70
+forgotten.departTrapdoor(soul, room)
+bone.Position.tile, soul.ghost = 42, true
+forgotten.departTrapdoor(soul, room)
+soul.ghost, bone.ghost = false, true
+forgotten.departTrapdoor(soul, room)
+assert(bone.jumps == 0 and soul.jumps == 0)
+bone.ghost = false
+forgotten.departTrapdoor(soul, room)
+forgotten.departTrapdoor(soul, room)
+assert(bone.jumps == 1 and soul.jumps == 0)

@@ -22,6 +22,27 @@ return function(types, native)
                 return player:GetSubPlayer()
             end
         end,
+        departTrapdoor = function(player, room)
+            if
+                player:GetPlayerType() ~= types.PLAYER_THESOUL_B
+                or player:IsCoopGhost()
+                or not player:GetSprite():IsPlaying("Trapdoor")
+            then
+                return
+            end
+            local skeleton = player:GetOtherTwin()
+            if
+                skeleton
+                and skeleton:GetPlayerType() == types.PLAYER_THEFORGOTTEN_B
+                and not skeleton:IsCoopGhost()
+                and room:GetGridIndex(skeleton.Position) == room:GetGridIndex(player.Position)
+                and not skeleton:GetSprite():IsPlaying("Trapdoor")
+            then
+                -- Picking the skeleton up can replace the soul's exit pose on the next
+                -- player update. Let the body at the same exit complete the native jump.
+                skeleton:AnimateTrapdoor()
+            end
+        end,
         predictMovement = function(player)
             return player:GetPlayerType() ~= types.PLAYER_THEFORGOTTEN_B
         end,

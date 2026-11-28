@@ -3535,12 +3535,17 @@ void finishFrame() {
         // Use the ordinary floor entry rather than waiting for local markers
         // and re-evaluating the chest against replica unlocks/inventory. Repentance+
         // animation 1 plays Forget Me Now's collectible pickup, not a fade.
-        const auto animation = runtime::replica() && request.animation == 4 ? 0 : request.animation;
+        constexpr int ordinaryStageAnimation = 0;
+        const auto animation = runtime::replica() && request.animation == 4 ? ordinaryStageAnimation
+                                                                            : request.animation;
         logger("floor_transaction=BEGIN same=" + std::to_string(request.same) +
                " received_animation=" + std::to_string(request.animation) + " native_animation=" +
                std::to_string(animation) + " source_room=" + std::to_string(request.sourceRoom));
         originalStage(reinterpret_cast<void*>(game()), request.same, animation,
                       reinterpret_cast<void*>(request.player));
+        // The complete native roster is available until the first departure update.
+        if (!request.same && animation == ordinaryStageAnimation)
+            runtime::ordinaryFloorDeparture();
         return;
     }
     setConnected(connectedMask);

@@ -91,6 +91,13 @@ local roomPlacement = assert(modules["runtime/room_placement"])({
     collision = GridCollisionClass,
     canPlace = crawlspace.gridPlacement,
 })
+function _IsaacLanOrdinaryFloorDeparture()
+    local game = Game()
+    local room = game:GetRoom()
+    for i = 0, game:GetNumPlayers() - 1 do
+        forgotten.departTrapdoor(Isaac.GetPlayer(i), room)
+    end
+end
 function _IsaacLanRoomLeaving()
     modules["compat/items/blue_key"](Game(), RoomDescriptor.FLAG_BLUE_REDIRECT)
 end

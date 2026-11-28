@@ -4,7 +4,7 @@ local fields, schema = _IsaacLanModules["sync/fields"], _IsaacLanModules["sync/w
 local host, frame, gate = config.host, _IsaacLanFrame, native.net_gate
 local Phase = native.net_phases()
 local renders, linked, chosen, finished, snapshots = 0, false, false, false, 0
-local origin, other, treasure, source, pickupSeed
+local origin, other, treasure, source, pickupSeed, trapdoor
 local resourceChecks, orderChecks, heldChecks, blueChecks = 0, 0, 0, 0
 local items = {
     CollectibleType.COLLECTIBLE_MAGIC_MUSHROOM,
@@ -188,7 +188,11 @@ function _IsaacLanFrame()
     if status.phase == Phase.failed then
         Isaac.DebugString("LAN_NETWORK FAILED " .. status.error)
     end
-    if status.verified >= 2500 and not finished then
+    if status.verified >= 2550 and not finished then
+        assert(status.verified < 3100, "Carried Tainted Forgotten stalled the floor transition")
+        if not native.rooms_ready() or Game():GetLevel():GetStage() ~= LevelStage.STAGE1_2 then
+            return status
+        end
         assert(
             resourceChecks >= 6 and orderChecks >= 5 and heldChecks >= 4 and blueChecks == 3,
             "Missing item observations"
@@ -196,7 +200,7 @@ function _IsaacLanFrame()
         assert(host or snapshots > 500, "Missing replica observations")
         finished = true
         report(
-            "PASS soul resources, selected/replaced passive, Blue Key exits and split-room holding"
+            "PASS soul resources, selected/replaced passive, Blue Key exits, split-room holding and carried trapdoor entry"
         )
     end
     return status
@@ -369,6 +373,21 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 assert(native.rooms_move(1, target, 0, -1))
             elseif t == 2390 then
                 assert(native.rooms_move(0, native.rooms_positions()["1"].index, 0, -1))
+            elseif t == 2460 then
+                actor(1, function(_, room)
+                    assert(Game():GetLevel():GetStage() == LevelStage.STAGE1_1)
+                    local index = room:GetGridIndex(
+                        room:FindFreeTilePosition(room:GetCenterPos() + Vector(80, 0), 0)
+                    )
+                    assert(room:SpawnGridEntity(index, GridEntityType.GRID_TRAPDOOR, 0, 123, 0))
+                    trapdoor = assert(room:GetGridEntity(index)).Position
+                end)
+            elseif t == 2520 then
+                checkHeld(true)
+                actor(1, function(p)
+                    local soul = assert(p:GetOtherTwin())
+                    soul.Position, soul.Velocity = trapdoor, Vector.Zero
+                end)
             end
             if t > 720 and t < 790 then
                 actor(1, function(p, room)
