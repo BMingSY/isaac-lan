@@ -522,6 +522,10 @@ function _IsaacLanMenuRender(
             assets.characterSwap:RenderLayer(CHARACTER_SWAP_ICON_LAYER, hint)
             assets.characterSwap:RenderLayer(CHARACTER_SWAP_KEY_LAYER, hint)
         end
+        -- On J835 the last row's text must separate its cursor sprite from the heading.
+        if i == ui.selection then
+            pointer(37 + shift, y + 5)
+        end
         local color = item.color or (item.enabled and ink or faded)
         if item.roomSummary then
             local summaryWidth = smallTextWidth(item.roomSummary)
@@ -531,9 +535,6 @@ function _IsaacLanMenuRender(
         else
             local size = assets[12]:GetStringWidthUTF8(label) > maxWidth and 10 or 12
             text(label, labelX, y, size, color, maxWidth)
-        end
-        if i == ui.selection then
-            pointer(37 + shift, y + 5)
         end
     end
     if listPage then

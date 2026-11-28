@@ -7,6 +7,7 @@ local labels, commands = {}, {}
 local renderedPortraits = {}
 local scaledLabels, renderedMarks = {}, {}
 local labelPositions, renderedSwitches = {}, {}
+local drawCount, cursorOrder = 0, nil
 local titleDraws = {}
 local options = { { flag = 1, key = "friendlyFire", name = "队友伤害", shortName = "友伤" } }
 local noop = function() end
@@ -79,6 +80,9 @@ Sprite = function()
         RenderLayer = function(self, _, position)
             if self.path == "gfx/ui/main menu/pageswapwidget.anm2" then
                 renderedSwitches[#renderedSwitches + 1] = position
+            elseif self.path == "gfx/ui/main menu/gamemenu.anm2" then
+                drawCount = drawCount + 1
+                cursorOrder = drawCount
             end
         end,
         SetLayerFrame = function(self, layer, frame)
@@ -86,6 +90,11 @@ Sprite = function()
             self.layers[layer + 1] = frame
         end,
     }
+end
+local function recordLabel(text, x, y, color)
+    drawCount = drawCount + 1
+    labels[text] = color
+    labelPositions[text] = { x = x, y = y, order = drawCount }
 end
 Font = function()
     return {
@@ -107,12 +116,10 @@ Font = function()
             return utf8.len(value) * 8
         end,
         DrawStringUTF8 = function(_, text, x, y, color)
-            labels[text] = color
-            labelPositions[text] = { x = x, y = y }
+            recordLabel(text, x, y, color)
         end,
         DrawStringScaledUTF8 = function(_, text, x, y, scale, _, color)
-            labels[text] = color
-            labelPositions[text] = { x = x, y = y }
+            recordLabel(text, x, y, color)
             scaledLabels[#scaledLabels + 1] = { text = text, x = x, y = y, scale = scale }
         end,
     }
@@ -261,6 +268,7 @@ local function draw(key, visible, mx, my, clicked)
     scaledLabels = {}
     renderedMarks = {}
     labelPositions, renderedSwitches = {}, {}
+    drawCount, cursorOrder = 0, nil
     local result = _IsaacLanMenuRender(
         true,
         visible ~= false,
@@ -883,6 +891,11 @@ if vanilla then
     assert(not draw(27), "Back from Repentance LAN must return to the main menu")
     _IsaacLanMenuOpen(false)
     draw(38) -- Wrap to the visible Back row.
+    local back = labelPositions["返回"].order
+    assert(
+        cursorOrder and cursorOrder < back and back < labelPositions["局域网联机"].order,
+        "Repentance needs the Back label between its cursor and the LAN heading"
+    )
     assert(not draw(13), "The Back row must return directly to the Repentance main menu")
 else
     assert(draw(27), "Back from Plus LAN must keep the mode chooser open")
